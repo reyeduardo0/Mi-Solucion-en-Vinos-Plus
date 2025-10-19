@@ -1,0 +1,5 @@
+{
+  "name": "Mi Solución en Vinos Plus",
+  "description": "An intuitive web application for comprehensive wine inventory management, from truck arrival and incident tracking to pack creation and dispatch. It leverages AI to streamline data entry from delivery notes and pallet labels.",
+  "requestFramePermissions": []
+}
