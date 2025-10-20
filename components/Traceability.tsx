@@ -10,10 +10,19 @@ const PackIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-
 const ExitIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>;
 const EmptyIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" /></svg>;
 
+const formatDateTimeSafe = (dateString?: string): string => {
+    if (!dateString) return 'Fecha inválida';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+        return 'Fecha inválida';
+    }
+    return date.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+};
+
 // --- Helper Types ---
 interface TraceabilityData {
     pack: WinePack;
-    sourcePallet?: Pallet & { albaranId: string; carrier: string };
+    sourcePallet?: Pallet & { albaranId: string; carrier: string; entryDate: string; };
     dispatch?: DispatchNote;
 }
 
@@ -67,13 +76,13 @@ const Traceability: React.FC<TraceabilityProps> = ({ packs, albaranes, salidas }
         }
 
         // Find the source pallet and albaran
-        let sourcePalletData: (Pallet & { albaranId: string, carrier: string }) | undefined = undefined;
+        let sourcePalletData: (Pallet & { albaranId: string, carrier: string, entryDate: string }) | undefined = undefined;
         const packContent = foundPack.contents[0]; // Assuming one main content for simplicity
         if (packContent) {
             for (const albaran of albaranes) {
                 const pallet = albaran.pallets.find(p => p.product.name === packContent.productName && p.product.lot === packContent.lot);
                 if (pallet) {
-                    sourcePalletData = { ...pallet, albaranId: albaran.id, carrier: albaran.carrier };
+                    sourcePalletData = { ...pallet, albaranId: albaran.id, carrier: albaran.carrier, entryDate: albaran.entryDate };
                     break;
                 }
             }
@@ -118,7 +127,7 @@ const Traceability: React.FC<TraceabilityProps> = ({ packs, albaranes, salidas }
                         <ul role="list" className="-mb-8">
                             {traceabilityData.sourcePallet && (
                                 <TimelineStep icon={<EntryIcon />} title="1. Entrada de Materia Prima">
-                                    <InfoPair label="Fecha de Entrada" value={new Date(traceabilityData.sourcePallet.entryDate).toLocaleString('es-ES')} />
+                                    <InfoPair label="Fecha de Entrada" value={formatDateTimeSafe(traceabilityData.sourcePallet.entryDate)} />
                                     <InfoPair label="Producto Origen" value={traceabilityData.sourcePallet.product.name} />
                                     <InfoPair label="Lote Origen" value={traceabilityData.sourcePallet.product.lot} />
                                     <InfoPair label="Nº de Pallet" value={traceabilityData.sourcePallet.palletNumber} />
@@ -128,7 +137,7 @@ const Traceability: React.FC<TraceabilityProps> = ({ packs, albaranes, salidas }
                             )}
 
                              <TimelineStep icon={<PackIcon />} title="2. Ensamblaje del Pack">
-                                <InfoPair label="Fecha de Creación" value={new Date(traceabilityData.pack.creationDate).toLocaleString('es-ES')} />
+                                <InfoPair label="Fecha de Creación" value={formatDateTimeSafe(traceabilityData.pack.creationDate)} />
                                 <InfoPair label="Modelo de Pack" value={traceabilityData.pack.modelName} />
                                 <InfoPair label="Orden de Pedido" value={traceabilityData.pack.orderId} />
                                 <p className="font-medium text-gray-900">Contenido:</p>
@@ -139,7 +148,7 @@ const Traceability: React.FC<TraceabilityProps> = ({ packs, albaranes, salidas }
 
                             {traceabilityData.dispatch && (
                                 <TimelineStep icon={<ExitIcon />} title="3. Nota de Salida" isLast={true}>
-                                    <InfoPair label="Fecha de Despacho" value={new Date(traceabilityData.dispatch.dispatchDate).toLocaleString('es-ES')} />
+                                    <InfoPair label="Fecha de Despacho" value={formatDateTimeSafe(traceabilityData.dispatch.dispatchDate)} />
                                     <InfoPair label="ID de Salida" value={traceabilityData.dispatch.id} />
                                     <InfoPair label="Cliente" value={traceabilityData.dispatch.customer} />
                                     <InfoPair label="Destino" value={traceabilityData.dispatch.destination} />

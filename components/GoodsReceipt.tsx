@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Albaran, Pallet } from '../types';
 import { extractDataFromImage } from '../services/geminiService';
 import Spinner from './ui/Spinner';
@@ -7,8 +7,32 @@ import Button from './ui/Button';
 import Card from './ui/Card';
 
 interface GoodsReceiptProps {
-  onAddAlbaran: (albaran: Albaran) => void;
+  onAddAlbaran: (albaran: Albaran) => Promise<void>;
+  onUpdateAlbaran?: (albaran: Albaran) => Promise<void>;
+  albaranes?: Albaran[];
 }
+
+const toDateTimeLocalInput = (dateString?: string | null): string => {
+    const date = dateString ? new Date(dateString) : new Date();
+    if (isNaN(date.getTime())) {
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        return now.toISOString().slice(0, 16);
+    }
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+    return date.toISOString().slice(0, 16);
+};
+
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+        const result = reader.result as string;
+        resolve(result.split(',')[1]);
+    };
+    reader.onerror = error => reject(error);
+  });
 
 const capitalizeWords = (str: string): string => {
   if (!str) return '';
@@ -54,6 +78,25 @@ const PalletInput: React.FC<{
                 images: pallet.incident?.images || [] 
             } 
         });
+    };
+    
+    const handlePalletIncidentImagesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            const files = Array.from(e.target.files);
+            try {
+                const imagesBase64 = await Promise.all(files.map(fileToBase64));
+                updatePallet(index, {
+                    ...pallet,
+                    incident: {
+                        description: pallet.incident?.description || '',
+                        images: imagesBase64,
+                    }
+                });
+            } catch (err) {
+                console.error("Error processing pallet incident images:", err);
+                setError("Failed to process incident images.");
+            }
+        }
     };
 
     const CheckCircleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
@@ -205,7 +248,7 @@ const PalletInput: React.FC<{
                      {isIncident && (
                          <div className="p-4 border-l-4 border-yellow-400 bg-yellow-50">
                              <textarea placeholder="Describe la incidencia del pallet..." value={incidentDescription} onChange={handleIncidentDescriptionChange} className="w-full border-gray-300 rounded-md p-2 mb-2"/>
-                             <input type="file" multiple className="block w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-700 hover:file:bg-yellow-200" />
+                             <input type="file" multiple onChange={handlePalletIncidentImagesChange} className="block w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-700 hover:file:bg-yellow-200" />
                          </div>
                      )}
                 </div>
@@ -215,15 +258,18 @@ const PalletInput: React.FC<{
 };
 
 
-const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onAddAlbaran }) => {
+const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onAddAlbaran, onUpdateAlbaran, albaranes }) => {
   const navigate = useNavigate();
+  const { albaranId: paramId } = useParams<{ albaranId: string }>();
+  const isEditMode = !!paramId;
+  
   const [albaranId, setAlbaranId] = useState('');
   const [truckPlate, setTruckPlate] = useState('');
   const [carrier, setCarrier] = useState('');
   const [driver, setDriver] = useState('');
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
-  const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 16));
+  const [entryDate, setEntryDate] = useState(toDateTimeLocalInput());
   const [numberOfPallets, setNumberOfPallets] = useState(0);
   const [status, setStatus] = useState<'Correcto' | 'Incidencia'>('Correcto');
   const [incidentDetails, setIncidentDetails] = useState('');
@@ -234,21 +280,48 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onAddAlbaran }) => {
   const [albaranImageFile, setAlbaranImageFile] = useState<File | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false);
 
   useEffect(() => {
-    const num = numberOfPallets > 0 ? numberOfPallets : 0;
-
-    if (num !== pallets.length) {
-        const newPallets: Partial<Pallet>[] = Array.from({ length: num }, (_, i) => {
-            return pallets[i] || {
-                id: `new-pallet-${Date.now()}-${i}`,
-                product: { name: '', lot: '' },
-            };
-        });
-        setPallets(newPallets);
-        setPalletsCollapsed(Array.from({ length: num }, (_, i) => i > 0));
+    if (isEditMode && albaranes && !initialDataLoaded) {
+      const albaranToEdit = albaranes.find(a => a.id === paramId);
+      if (albaranToEdit) {
+        setAlbaranId(albaranToEdit.id);
+        setTruckPlate(albaranToEdit.truckPlate);
+        setCarrier(albaranToEdit.carrier);
+        setDriver(albaranToEdit.driver || '');
+        setOrigin(albaranToEdit.origin || '');
+        setDestination(albaranToEdit.destination || '');
+        setEntryDate(toDateTimeLocalInput(albaranToEdit.entryDate));
+        setNumberOfPallets(albaranToEdit.pallets.length);
+        setPallets(albaranToEdit.pallets);
+        setStatus(albaranToEdit.status === 'incident' ? 'Incidencia' : 'Correcto');
+        setIncidentDetails(albaranToEdit.incidentDetails || '');
+        setPalletsCollapsed(Array(albaranToEdit.pallets.length).fill(true).map((_, i) => i === 0 ? false : true));
+        setInitialDataLoaded(true);
+      } else {
+        console.error(`Albaran with ID ${paramId} not found.`);
+        navigate('/entradas');
+      }
     }
-  }, [numberOfPallets, pallets]);
+  }, [isEditMode, albaranes, paramId, initialDataLoaded, navigate]);
+  
+  const handleNumberOfPalletsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const num = parseInt(e.target.value, 10) || 0;
+    setNumberOfPallets(num);
+    
+    setPallets(currentPallets => {
+      if (num === currentPallets.length) return currentPallets;
+
+      const newPallets = Array.from({ length: num }, (_, i) => 
+        currentPallets[i] || { id: `new-pallet-${Date.now()}-${i}`, product: { name: '', lot: '' } }
+      );
+      
+      setPalletsCollapsed(Array.from({ length: num }, (_, i) => i === 0 ? false : true));
+      return newPallets;
+    });
+  };
 
   const handleAlbaranImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -294,23 +367,73 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onAddAlbaran }) => {
     setPallets(updatedPallets);
   };
   
-  const handleRegister = () => {
-    const hasPalletIncident = pallets.some(p => p.incident);
-    
-    const finalAlbaran: Albaran = {
-      id: albaranId,
-      entryDate: new Date(entryDate).toISOString(),
-      truckPlate,
-      carrier,
-      driver,
-      origin: origin || undefined,
-      destination: destination || undefined,
-      status: status === 'Incidencia' || hasPalletIncident ? 'incident' : 'verified',
-      pallets: pallets as Pallet[], // This type assertion assumes all data is complete
-      incidentDetails: status === 'Incidencia' ? incidentDetails : undefined,
+    const handleIncidentImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setIncidentImages(Array.from(e.target.files));
+        }
     };
-    onAddAlbaran(finalAlbaran);
-    navigate('/entradas');
+
+  const handleRegister = async () => {
+    setIsSubmitting(true);
+    try {
+        // --- Data Validation ---
+        const firstInvalidPalletIndex = pallets.findIndex(p => !p.product?.name?.trim() || !p.product?.lot?.trim());
+        if (firstInvalidPalletIndex !== -1) {
+            // Set state to expand the invalid pallet before throwing.
+            setPalletsCollapsed(current => {
+                const newCollapsed = [...current];
+                if (newCollapsed[firstInvalidPalletIndex]) { // Only change state if needed
+                    newCollapsed[firstInvalidPalletIndex] = false;
+                    return newCollapsed;
+                }
+                return current;
+            });
+            throw new Error(`Por favor, complete el nombre del Producto y el Lote para el Pallet ${firstInvalidPalletIndex + 1}.`);
+        }
+        
+        // --- Data Preparation & API Call ---
+        const hasPalletIncident = pallets.some(p => p.incident);
+        let incidentImagesBase64: string[] | undefined = undefined;
+        if (status === 'Incidencia' && incidentImages.length > 0) {
+            incidentImagesBase64 = await Promise.all(incidentImages.map(fileToBase64));
+        }
+
+        const finalAlbaran: Albaran = {
+          id: albaranId,
+          entryDate: new Date(entryDate).toISOString(),
+          truckPlate,
+          carrier,
+          driver,
+          origin: origin || undefined,
+          destination: destination || undefined,
+          status: status === 'Incidencia' || hasPalletIncident ? 'incident' : 'verified',
+          pallets: pallets as Pallet[],
+          incidentDetails: status === 'Incidencia' ? incidentDetails : undefined,
+          incidentImages: incidentImagesBase64,
+        };
+
+        if (isEditMode && onUpdateAlbaran) {
+            await onUpdateAlbaran(finalAlbaran);
+        } else {
+            await onAddAlbaran(finalAlbaran);
+        }
+    } catch (error) {
+        console.error("Fallo al registrar la entrada:", error);
+
+        let errorMessage = "Ocurrió un error inesperado.";
+        if (error instanceof Error) {
+            errorMessage = error.message;
+        } else if (error && typeof error === 'object' && 'message' in error) {
+            const msg = (error as { message: unknown }).message;
+            errorMessage = typeof msg === 'string' ? msg : JSON.stringify(msg);
+        } else {
+            errorMessage = String(error);
+        }
+        
+        alert(`Ocurrió un error al guardar la entrada. Por favor, inténtelo de nuevo.\n\nError: ${errorMessage}`);
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
   const togglePalletCollapse = (index: number) => {
@@ -355,10 +478,18 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onAddAlbaran }) => {
   const palletNumbers = pallets.map(p => p.palletNumber).filter(Boolean);
   const duplicatePalletNumbers = new Set(palletNumbers.filter((num, index) => String(num).trim() !== '' && palletNumbers.indexOf(num) !== index));
 
+  if (isEditMode && !initialDataLoaded) {
+    return (
+      <div className="p-8 flex justify-center items-center">
+        <Spinner />
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 sm:p-6 lg:p-8">
         <div className="flex justify-between items-center mb-6">
-            <h1 className="text-3xl font-bold text-gray-800">Registrar Nueva Entrada</h1>
+            <h1 className="text-3xl font-bold text-gray-800">{isEditMode ? 'Editar Entrada' : 'Registrar Nueva Entrada'}</h1>
             <Button onClick={() => navigate('/entradas')} variant="secondary">
                 Volver a la Lista
             </Button>
@@ -384,14 +515,14 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onAddAlbaran }) => {
                 </Card>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
-                    <div><label className="block text-sm font-medium">Nº Albarán</label><input type="text" value={albaranId} onChange={e => setAlbaranId(e.target.value.toUpperCase())} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                    <div><label className="block text-sm font-medium">Nº Albarán</label><input type="text" value={albaranId} onChange={e => setAlbaranId(e.target.value.toUpperCase())} required disabled={isEditMode} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 disabled:bg-gray-100 disabled:cursor-not-allowed" /></div>
                     <div><label className="block text-sm font-medium">Matrícula Camión</label><input type="text" value={truckPlate} onChange={e => setTruckPlate(e.target.value.toUpperCase())} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
-                    <div><label className="block text-sm font-medium">Transportista</label><input type="text" value={carrier} onChange={e => setCarrier(capitalizeWords(e.target.value))} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                    <div><label className="block text-sm font-medium">Transportista</label><input type="text" value={carrier} onChange={e => setCarrier(capitalizeWords(e.target.value))} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
                     <div><label className="block text-sm font-medium">Conductor</label><input type="text" value={driver} onChange={e => setDriver(capitalizeWords(e.target.value))} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
                     <div><label className="block text-sm font-medium">Origen (Opcional)</label><input type="text" value={origin} onChange={e => setOrigin(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
                     <div><label className="block text-sm font-medium">Destino (Opcional)</label><input type="text" value={destination} onChange={e => setDestination(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
                     <div className="md:col-span-1 lg:col-span-1"><label className="block text-sm font-medium">Fecha y Hora</label><input type="datetime-local" value={entryDate} onChange={e => setEntryDate(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
-                    <div className="md:col-span-1 lg:col-span-1"><label className="block text-sm font-medium">Número de Palets</label><input type="number" min="0" value={numberOfPallets} onChange={e => setNumberOfPallets(parseInt(e.target.value, 10) || 0)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                    <div className="md:col-span-1 lg:col-span-1"><label className="block text-sm font-medium">Número de Palets</label><input type="number" min="0" value={numberOfPallets} onChange={handleNumberOfPalletsChange} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
                     <div className="md:col-span-1 lg:col-span-1"><label className="block text-sm font-medium">Estado de la Entrada</label>
                         <select value={status} onChange={e => setStatus(e.target.value as any)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2">
                             <option value="Correcto">Correcto</option>
@@ -404,7 +535,7 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onAddAlbaran }) => {
                     <div className="mt-6 p-4 border-l-4 border-yellow-400 bg-yellow-50">
                         <h3 className="text-lg font-semibold text-yellow-800 mb-2">Detalles de la Incidencia General</h3>
                         <div><label className="block text-sm font-medium text-gray-700">Describa el problema...</label><textarea value={incidentDetails} onChange={e => setIncidentDetails(e.target.value)} rows={3} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"></textarea></div>
-                        <div className="mt-2"><label className="block text-sm font-medium text-gray-700">Adjuntar Imágenes</label><input type="file" multiple className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-800 hover:file:bg-yellow-200" /></div>
+                        <div className="mt-2"><label className="block text-sm font-medium text-gray-700">Adjuntar Imágenes</label><input type="file" multiple onChange={handleIncidentImagesChange} className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-800 hover:file:bg-yellow-200" /></div>
                     </div>
                 )}
                 
@@ -439,7 +570,9 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onAddAlbaran }) => {
 
                 <div className="mt-8 flex justify-end space-x-3">
                     <Button type="button" variant="secondary" onClick={() => navigate('/entradas')}>Cancelar</Button>
-                    <Button type="submit">Registrar Entrada</Button>
+                    <Button type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? <Spinner /> : (isEditMode ? 'Actualizar Entrada' : 'Registrar Entrada')}
+                    </Button>
                 </div>
             </form>
         </Card>

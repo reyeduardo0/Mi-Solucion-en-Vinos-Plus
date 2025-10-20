@@ -13,6 +13,24 @@ const PackIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-
 const CsvIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>;
 const PdfIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
 
+const formatDateTimeSafe = (dateString?: string): string => {
+    if (!dateString) return 'Fecha inválida';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+        return 'Fecha inválida';
+    }
+    return date.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+};
+
+const formatDateSafe = (dateString?: string): string => {
+    if (!dateString) return 'Fecha inválida';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+        return 'Fecha inválida';
+    }
+    return date.toLocaleDateString('es-ES');
+};
+
 // --- Helper Components ---
 const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; }> = ({ title, value, icon }) => (
     <Card className="flex items-center p-4">
@@ -77,6 +95,7 @@ const Reports: React.FC<ReportsProps> = ({ albaranes, incidents, packs, salidas,
         const dateFilter = (dateStr: string) => {
             if (!startDate && !endDate) return true;
             const itemDate = new Date(dateStr);
+            if (isNaN(itemDate.getTime())) return false; // Exclude invalid dates
             return (!startDate || itemDate >= startDate) && (!endDate || itemDate <= endDate);
         }
 
@@ -87,7 +106,7 @@ const Reports: React.FC<ReportsProps> = ({ albaranes, incidents, packs, salidas,
                     .filter(a => dateFilter(a.entryDate))
                     .filter(a => !reportFilters.carrier || a.carrier === reportFilters.carrier)
                     .filter(a => reportFilters.status === 'all' || a.status === reportFilters.status)
-                    .map(a => [a.id, new Date(a.entryDate).toLocaleDateString(), a.carrier, a.driver || 'N/A', a.pallets.length, a.status]);
+                    .map(a => [a.id, formatDateSafe(a.entryDate), a.carrier, a.driver || 'N/A', a.pallets.length, a.status]);
                 break;
             case 'dispatches':
                 headers = ['ID Salida', 'Fecha', 'Cliente', 'Destino', 'Transportista', '# Packs'];
@@ -95,14 +114,14 @@ const Reports: React.FC<ReportsProps> = ({ albaranes, incidents, packs, salidas,
                     .filter(s => dateFilter(s.dispatchDate))
                     .filter(s => !reportFilters.customer || s.customer === reportFilters.customer)
                     .filter(s => !reportFilters.carrier || s.carrier === reportFilters.carrier)
-                    .map(s => [s.id, new Date(s.dispatchDate).toLocaleDateString(), s.customer, s.destination, s.carrier, s.packIds.length]);
+                    .map(s => [s.id, formatDateSafe(s.dispatchDate), s.customer, s.destination, s.carrier, s.packIds.length]);
                 break;
             case 'incidents':
                 headers = ['ID Incidencia', 'Fecha', 'Tipo', 'ID Relacionado', 'Estado', 'Descripción'];
                  data = incidents
                     .filter(i => dateFilter(i.date))
                     .filter(i => reportFilters.status === 'all' || (reportFilters.status === 'resolved' ? i.resolved : !i.resolved))
-                    .map(i => [i.id, new Date(i.date).toLocaleString(), i.type, i.relatedId, i.resolved ? 'Resuelta' : 'Pendiente', i.description]);
+                    .map(i => [i.id, formatDateTimeSafe(i.date), i.type, i.relatedId, i.resolved ? 'Resuelta' : 'Pendiente', i.description]);
                 break;
             case 'supplies':
                 headers = ['ID Insumo', 'Nombre', 'Tipo', 'Stock Actual', 'Unidad', 'Stock Mínimo'];
@@ -168,12 +187,12 @@ const Reports: React.FC<ReportsProps> = ({ albaranes, incidents, packs, salidas,
         if (!modalData || !modalData.data) return null;
         if (modalData.type === 'packs') {
             return (
-                <table className="min-w-full divide-y divide-gray-200"><thead className="bg-gray-50"><tr><th>ID Pack</th><th>Modelo</th><th>Orden Pedido</th><th>Fecha Creación</th></tr></thead><tbody className="bg-white divide-y divide-gray-200">{(modalData.data as WinePack[]).map(p => <tr key={p.id}><td>{p.id}</td><td>{p.modelName}</td><td>{p.orderId}</td><td>{new Date(p.creationDate).toLocaleDateString()}</td></tr>)}</tbody></table>
+                <table className="min-w-full divide-y divide-gray-200"><thead className="bg-gray-50"><tr><th>ID Pack</th><th>Modelo</th><th>Orden Pedido</th><th>Fecha Creación</th></tr></thead><tbody className="bg-white divide-y divide-gray-200">{(modalData.data as WinePack[]).map(p => <tr key={p.id}><td>{p.id}</td><td>{p.modelName}</td><td>{p.orderId}</td><td>{formatDateSafe(p.creationDate)}</td></tr>)}</tbody></table>
             );
         }
         if (modalData.type === 'incidents') {
             return (
-                <table className="min-w-full divide-y divide-gray-200"><thead className="bg-gray-50"><tr><th>Fecha</th><th>Descripción</th><th>ID Relacionado</th><th>Estado</th></tr></thead><tbody className="bg-white divide-y divide-gray-200">{(modalData.data as Incident[]).map(i => <tr key={i.id}><td>{new Date(i.date).toLocaleString()}</td><td>{i.description}</td><td>{i.relatedId}</td><td>{i.resolved ? 'Resuelta' : 'Pendiente'}</td></tr>)}</tbody></table>
+                <table className="min-w-full divide-y divide-gray-200"><thead className="bg-gray-50"><tr><th>Fecha</th><th>Descripción</th><th>ID Relacionado</th><th>Estado</th></tr></thead><tbody className="bg-white divide-y divide-gray-200">{(modalData.data as Incident[]).map(i => <tr key={i.id}><td>{formatDateTimeSafe(i.date)}</td><td>{i.description}</td><td>{i.relatedId}</td><td>{i.resolved ? 'Resuelta' : 'Pendiente'}</td></tr>)}</tbody></table>
             )
         }
         return null;

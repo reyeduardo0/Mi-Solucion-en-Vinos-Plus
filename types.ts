@@ -17,6 +17,7 @@ export interface Role {
   id: string;
   name: string;
   permissions: Permission[];
+  created_at?: string;
 }
 
 export interface User {
@@ -48,6 +49,7 @@ export interface Incident {
   date: string;
   resolved: boolean;
   relatedId: string; // ID of the albaran, pack, etc.
+  created_at?: string;
 }
 
 export interface Product {
@@ -85,6 +87,7 @@ export interface Pallet {
     description: string;
     images: string[]; // array of base64
   }
+  created_at?: string;
 }
 
 export interface Albaran {
@@ -99,6 +102,7 @@ export interface Albaran {
   status: 'pending' | 'verified' | 'incident';
   incidentDetails?: string;
   incidentImages?: string[]; // Array of base64 image strings
+  created_at?: string;
 }
 
 export interface Supply {
@@ -108,6 +112,7 @@ export interface Supply {
   unit: 'unidades' | 'cajas' | 'rollos' | 'metros';
   quantity: number;
   minStock?: number;
+  created_at?: string;
 }
 
 export interface PackModel {
@@ -123,6 +128,7 @@ export interface PackModel {
         name: string;
         quantity: number;
     }[];
+    created_at?: string;
 }
 
 export interface WinePack {
@@ -146,6 +152,7 @@ export interface WinePack {
     additionalComponents?: string; // For non-contable notes
     packImage?: string; // base64
     status: 'Ensamblado' | 'Despachado';
+    created_at?: string;
 }
 
 export interface DispatchNote {
@@ -158,4 +165,5 @@ export interface DispatchNote {
     driver?: string;
     packIds: string[]; // Array of IDs of the WinePacks included
     status: 'Pendiente' | 'Despachado';
+    created_at?: string;
 }

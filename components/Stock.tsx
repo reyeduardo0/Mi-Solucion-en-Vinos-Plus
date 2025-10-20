@@ -9,6 +9,15 @@ interface FlattenedPallet extends Pallet {
   albaranId: string;
 }
 
+const formatDateSafe = (dateString?: string): string => {
+    if (!dateString) return 'Fecha inválida';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+        return 'Fecha inválida';
+    }
+    return date.toLocaleDateString('es-ES');
+};
+
 const Modal: React.FC<{ children: React.ReactNode; title: string; onClose: () => void; }> = ({ children, title, onClose }) => (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-center" onClick={onClose}>
         <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
@@ -154,7 +163,7 @@ const Stock: React.FC<StockProps> = ({ albaranes, supplies, packs, onAddNewSuppl
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50"><tr><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nº Palet</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Producto</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lote</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Albarán Origen</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha Entrada</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Botellas</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th></tr></thead>
-                    <tbody className="bg-white divide-y divide-gray-200">{palletInventory.length > 0 ? (palletInventory.map(pallet => (<tr key={pallet.id}><td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{pallet.palletNumber}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pallet.product.name}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pallet.product.lot}</td><td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500">{pallet.albaranId}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(pallet.entryDate).toLocaleDateString('es-ES')}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{pallet.totalBottles}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><StatusBadge status={pallet.incident ? 'Incidencia' : 'Correcto'} /></td></tr>))) : (<tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-500">No hay pallets en el inventario.</td></tr>)}</tbody>
+                    <tbody className="bg-white divide-y divide-gray-200">{palletInventory.length > 0 ? (palletInventory.map(pallet => (<tr key={pallet.id}><td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{pallet.palletNumber}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pallet.product.name}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pallet.product.lot}</td><td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500">{pallet.albaranId}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateSafe(pallet.entryDate)}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{pallet.totalBottles}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><StatusBadge status={pallet.incident ? 'Incidencia' : 'Correcto'} /></td></tr>))) : (<tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-500">No hay pallets en el inventario.</td></tr>)}</tbody>
                     </table>
                 </div>
             )}
@@ -162,7 +171,7 @@ const Stock: React.FC<StockProps> = ({ albaranes, supplies, packs, onAddNewSuppl
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50"><tr><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Pack</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modelo</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Orden Pedido</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha Creación</th><th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th></tr></thead>
-                    <tbody className="bg-white divide-y divide-gray-200">{packs.map(pack => (<tr key={pack.id}><td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{pack.id}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pack.modelName}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pack.orderId}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(pack.creationDate).toLocaleDateString('es-ES')}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><StatusBadge status={pack.status} /></td></tr>))}</tbody>
+                    <tbody className="bg-white divide-y divide-gray-200">{packs.map(pack => (<tr key={pack.id}><td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{pack.id}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pack.modelName}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pack.orderId}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateSafe(pack.creationDate)}</td><td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><StatusBadge status={pack.status} /></td></tr>))}</tbody>
                     </table>
                 </div>
             )}

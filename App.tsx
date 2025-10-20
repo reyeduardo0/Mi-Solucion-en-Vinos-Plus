@@ -1,287 +1,496 @@
-import React, { useState } from 'react';
-import { HashRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { HashRouter, Routes, Route, useNavigate, Navigate, Outlet } from 'react-router-dom';
+import { Session } from '@supabase/supabase-js';
+import { supabase, isSupabaseConfigured } from './services/supabaseClient';
+
+// --- Types ---
+import { Albaran, AuditLog, DispatchNote, Incident, PackModel, Role, Supply, User, WinePack } from './types';
+
+// --- Components ---
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/layout/Header';
 import Dashboard from './components/Dashboard';
-import GoodsReceipt from './components/GoodsReceipt';
 import GoodsReceiptList from './components/GoodsReceiptList';
+import GoodsReceipt from './components/GoodsReceipt';
+import GoodsReceiptDetail from './components/GoodsReceiptDetail';
 import Stock from './components/Stock';
 import CreatePack from './components/CreatePack';
-import PackModels from './components/PackModels'; 
-import Dispatch from './components/Dispatch'; 
-import GenerateLabels from './components/GenerateLabels'; 
+import PackModels from './components/PackModels';
+import Dispatch from './components/Dispatch';
+import GenerateLabels from './components/GenerateLabels';
 import Incidents from './components/Incidents';
 import Reports from './components/Reports';
 import Users from './components/Users';
 import Audit from './components/Audit';
-import Traceability from './components/Traceability'; // New Component
-import { Albaran, Incident, WinePack, User, Supply, PackModel, DispatchNote, IncidentType, Role, AuditLog } from './types';
-import Card from './components/ui/Card';
-import { WifiIcon, LogoutIcon } from './constants';
+import Traceability from './components/Traceability';
+import Login from './components/Login';
+import SupabaseConfigNotice from './components/SupabaseConfigNotice';
+import Spinner from './components/ui/Spinner';
 
-const mockAlbaranes: Albaran[] = [
-    { id: 'alb-001', entryDate: '2023-10-26T10:00:00Z', truckPlate: '1234ABC', origin: 'Bodega Central', destination: 'Almacén Principal', carrier: 'Transportes Rápidos', driver: 'Juan Pérez', status: 'verified', pallets: [
-        { id: 'p-001', palletNumber: 'PN-101', product: { name: 'Vino Tinto Reserva', lot: 'LOTE-A1' }, boxesPerPallet: 95, bottlesPerBox: 6, totalBottles: 570, incident: { description: 'Etiqueta rota', images: [] } },
-        { id: 'p-002', palletNumber: 'PN-102', product: { name: 'Vino Tinto Reserva', lot: 'LOTE-A1' }, boxesPerPallet: 95, bottlesPerBox: 6, totalBottles: 570 },
-    ] },
-    { id: 'alb-002', entryDate: '2023-10-27T11:00:00Z', truckPlate: '5678DEF', origin: 'Bodega Norte', destination: 'Almacén Principal', carrier: 'Logística Segura', driver: 'Ana Gómez', status: 'verified', pallets: [
-        { id: 'p-003', palletNumber: 'PN-103', product: { name: 'Vino Blanco', lot: 'LOTE-B2' }, boxesPerPallet: 95, bottlesPerBox: 6, totalBottles: 570 },
-    ] },
-     { id: 'alb-003', entryDate: '2023-10-28T09:00:00Z', truckPlate: '9012GHI', origin: 'Bodega Central', destination: 'Almacén Principal', carrier: 'Transportes Rápidos', driver: 'Luis Martín', status: 'incident', incidentDetails: "Faltan documentos de transporte", pallets: [
-        { id: 'p-004', palletNumber: 'PN-104', product: { name: 'Vino Rosado', lot: 'LOTE-C3' }, boxesPerPallet: 85, bottlesPerBox: 6, totalBottles: 510 },
-    ] }
-];
-const mockIncidents: Incident[] = [
-    { id: 'inc-001', type: IncidentType.Receiving, description: 'Caja dañada en pallet PN-101. El cartón presenta humedad y una esquina está aplastada, afectando a 2 botellas.', images: [], date: '2023-10-26T10:05:00Z', resolved: false, relatedId: 'alb-001' },
-    { id: 'inc-002', type: IncidentType.Packing, description: 'Falta de insumos: no quedan etiquetas para el Pack Mixto.', images: [], date: '2023-10-27T15:30:00Z', resolved: true, relatedId: 'pack-001' },
-    { id: 'inc-003', type: IncidentType.Receiving, description: 'El precinto del camión no coincide con el del albarán.', images: [], date: '2023-10-27T11:02:00Z', resolved: false, relatedId: 'alb-002' },
-];
-const mockPacks: WinePack[] = [
-    { id: 'pack-001', modelId: 'pm-001', modelName: 'Pack 2 Tintos', orderId: 'PED-C-088', creationDate: '2023-10-27T15:00:00Z', status: 'Despachado', contents: [{ productName: 'Vino Tinto Reserva', lot: 'LOTE-A1', quantity: 2 }], additionalComponents: 'Caja especial de Navidad' }
-];
-const mockSalidas: DispatchNote[] = [{ id: 'sal-001', dispatchDate: '2023-10-28T10:00:00Z', customer: 'Cliente Principal', destination: 'Madrid', carrier: 'Distribución Express', truckPlate: 'XYZ789', driver: 'Carlos Ruiz', packIds: ['pack-001'], status: 'Despachado' }];
-const mockSupplies: Supply[] = [
-    { id: 'sup-001', name: 'Caja Cartón Modelo A', type: 'Contable', unit: 'unidades', quantity: 500, minStock: 50 },
-    { id: 'sup-002', name: 'Etiqueta Adhesiva Pack', type: 'Contable', unit: 'unidades', quantity: 2000, minStock: 200 },
-    { id: 'sup-003', name: 'Film extensible', type: 'No Contable', unit: 'rollos', quantity: 10 },
-    { id: 'sup-004', name: 'Pallet Plástico', type: 'Contable', unit: 'unidades', quantity: 40, minStock: 10 },
-];
-const mockPackModels: PackModel[] = [
-    { id: 'pm-001', name: 'Pack 2 Tintos', description: 'Caja con 2 botellas de Vino Tinto Reserva.',
-        productRequirements: [{ productName: 'Vino Tinto Reserva', quantity: 2 }],
-        supplyRequirements: [
-            { supplyId: 'sup-001', name: 'Caja Cartón Modelo A', quantity: 1 },
-            { supplyId: 'sup-002', name: 'Etiqueta Adhesiva Pack', quantity: 1 }
-        ]
-    },
-    { id: 'pm-002', name: 'Pack Mixto', description: 'Caja con 1 Tinto y 1 Blanco.',
-        productRequirements: [
-            { productName: 'Vino Tinto Reserva', quantity: 1 },
-            { productName: 'Vino Blanco', quantity: 1 }
-        ],
-        supplyRequirements: [
-            { supplyId: 'sup-001', name: 'Caja Cartón Modelo A', quantity: 1 },
-            { supplyId: 'sup-002', name: 'Etiqueta Adhesiva Pack', quantity: 2 }
-        ]
+// --- Hooks and Context ---
+import { PermissionsProvider } from './hooks/usePermissions';
+
+
+const App: React.FC = () => {
+    if (!isSupabaseConfigured) {
+        return <SupabaseConfigNotice />;
     }
-];
-const mockRoles: Role[] = [
-    { id: 'role-admin', name: 'Super Administrador', permissions: ['users:manage', 'entries:create', 'entries:view', 'entries:edit', 'entries:delete', 'stock:view', 'packs:create', 'packs:manage_models', 'labels:generate', 'dispatch:create', 'incidents:manage', 'reports:view']},
-    { id: 'role-operator', name: 'Operario de Bodega', permissions: ['entries:create', 'entries:view', 'stock:view', 'packs:create', 'labels:generate', 'incidents:manage']},
-    { id: 'role-viewer', name: 'Logística', permissions: ['stock:view', 'dispatch:create', 'reports:view']},
-];
-
-const mockUsers: User[] = [
-    { id: 'user-admin-01', name: 'Admin User', email: 'admin@misolucionvinos.com', roleId: 'role-admin' },
-    { id: 'user-staff-01', name: 'Eduardo Rey', email: 'eduardo.rey@misolucionvinos.com', roleId: 'role-operator' },
-    { id: 'user-staff-02', name: 'Jane Doe', email: 'jane.doe@misolucionvinos.com', roleId: 'role-viewer' },
-];
-
-const mockAuditLogs: AuditLog[] = [
-  { id: 'log-1', timestamp: '2023-11-01T10:05:00Z', userId: 'user-admin-01', userName: 'Admin User', action: "Inició sesión en el sistema." },
-  { id: 'log-2', timestamp: '2023-11-01T10:15:22Z', userId: 'user-staff-01', userName: 'Eduardo Rey', action: "Registró la nueva entrada de albarán 'alb-003'." },
-  { id: 'log-3', timestamp: '2023-11-01T11:30:00Z', userId: 'user-admin-01', userName: 'Admin User', action: "Actualizó los permisos del rol 'Logística'." },
-  { id: 'log-4', timestamp: '2023-11-01T14:02:15Z', userId: 'user-staff-02', userName: 'Jane Doe', action: "Creó la nota de salida 'sal-001'." },
-  { id: 'log-5', timestamp: '2023-11-02T09:00:45Z', userId: 'user-admin-01', userName: 'Admin User', action: "Eliminó el usuario 'temp.user@misolucionvinos.com'." },
-  { id: 'log-6', timestamp: '2023-11-02T09:10:00Z', userId: 'user-staff-01', userName: 'Eduardo Rey', action: "Resolvió la incidencia 'inc-002'." },
-];
-
-
-const AppContent: React.FC = () => {
-    const navigate = useNavigate();
-    const [albaranes, setAlbaranes] = useState<Albaran[]>(mockAlbaranes);
-    const [incidents, setIncidents] = useState<Incident[]>(mockIncidents);
-    const [packs, setPacks] = useState<WinePack[]>(mockPacks);
-    const [salidas, setSalidas] = useState<DispatchNote[]>(mockSalidas);
-    const [supplies, setSupplies] = useState<Supply[]>(mockSupplies);
-    const [packModels, setPackModels] = useState<PackModel[]>(mockPackModels);
-    const [users, setUsers] = useState<User[]>(mockUsers);
-    const [roles, setRoles] = useState<Role[]>(mockRoles);
-    const [auditLogs, setAuditLogs] = useState<AuditLog[]>(mockAuditLogs);
-    const [isSidebarOpen, setSidebarOpen] = useState(false);
-    const [currentUser] = useState<User>(mockUsers[0]);
-
-    const handleAddAlbaran = (newAlbaran: Albaran) => {
-        setAlbaranes(prev => [...prev, newAlbaran]);
-        // In a real app, you would also create an audit log here
-        // e.g., addAuditLog({ userId: currentUser.id, userName: currentUser.name, action: `Registró la nueva entrada ${newAlbaran.id}`})
-        navigate('/entradas');
-    };
-
-    const handleAddPack = (newPack: WinePack) => {
-        setPacks(prev => [...prev, newPack]);
-        navigate('/inventory'); // Navigate to stock to see the result
-    };
-    
-    const handleAddSupplyStock = (supplyId: string, quantityToAdd: number) => {
-        setSupplies(currentSupplies => 
-            currentSupplies.map(s => 
-                s.id === supplyId ? { ...s, quantity: s.quantity + quantityToAdd } : s
-            )
-        );
-    };
-
-    const handleAddNewSupply = (newSupplyData: Omit<Supply, 'id' | 'quantity'>) => {
-        const newSupply: Supply = {
-            id: `sup-${Date.now()}`,
-            quantity: 0,
-            ...newSupplyData,
-        };
-        setSupplies(prev => [...prev, newSupply]);
-    };
-    
-    const handleAddPackModel = (newModel: Omit<PackModel, 'id'>) => {
-        const model: PackModel = { ...newModel, id: `pm-${Date.now()}` };
-        setPackModels(prev => [...prev, model]);
-    };
-    
-    const handleDispatch = (dispatchNote: Omit<DispatchNote, 'id' | 'status'>) => {
-        const newDispatch: DispatchNote = {
-            ...dispatchNote,
-            id: `sal-${Date.now()}`,
-            status: 'Despachado'
-        };
-
-        const packsToDispatch = packs.filter(p => newDispatch.packIds.includes(p.id));
-
-        // 1. Deduct Supplies
-        const supplyDeductions = new Map<string, number>();
-        packsToDispatch.forEach(pack => {
-            const model = packModels.find(m => m.id === pack.modelId);
-            if (model) {
-                model.supplyRequirements.forEach(req => {
-                    supplyDeductions.set(req.supplyId, (supplyDeductions.get(req.supplyId) || 0) + req.quantity);
-                });
-            }
-        });
-
-        setSupplies(current => {
-            const updated = [...current];
-            supplyDeductions.forEach((quantity, supplyId) => {
-                const index = updated.findIndex(s => s.id === supplyId);
-                if (index > -1) {
-                    updated[index].quantity -= quantity;
-                }
-            });
-            return updated;
-        });
-
-        // 2. Deduct Products (for simplicity, we'll remove pallets if they are fully used, a more complex logic would reduce quantity)
-        // This part needs a more robust inventory model in a real app. For now, we'll just mark packs as dispatched.
-        
-        // 3. Update pack status
-        setPacks(current => current.map(p => newDispatch.packIds.includes(p.id) ? { ...p, status: 'Despachado' } : p));
-        
-        // 4. Add dispatch note
-        setSalidas(prev => [...prev, newDispatch]);
-        
-        alert(`Salida ${newDispatch.id} confirmada. El stock ha sido actualizado.`);
-        navigate('/'); // Go to dashboard
-    };
-
-    const handleAddIncident = (newIncidentData: Omit<Incident, 'id' | 'date' | 'resolved'>) => {
-        const newIncident: Incident = {
-            id: `inc-${Date.now()}`,
-            date: new Date().toISOString(),
-            resolved: false,
-            ...newIncidentData
-        };
-        setIncidents(prev => [newIncident, ...prev]);
-    };
-
-    const handleResolveIncident = (incidentId: string) => {
-        setIncidents(current => 
-            current.map(inc => 
-                inc.id === incidentId ? { ...inc, resolved: true } : inc
-            )
-        );
-    };
-    
-    const handleAddUser = (newUserData: Omit<User, 'id'>) => {
-        const newUser: User = {
-            id: `user-${Date.now()}`,
-            ...newUserData
-        };
-        setUsers(prev => [...prev, newUser]);
-    };
-
-    const handleUpdateUser = (updatedUser: User) => {
-        setUsers(prev => prev.map(user => user.id === updatedUser.id ? updatedUser : user));
-    };
-    
-    const handleDeleteUser = (userId: string) => {
-        setUsers(prev => prev.filter(user => user.id !== userId));
-    };
-    
-    const handleAddRole = (newRoleData: Omit<Role, 'id'>) => {
-        const newRole: Role = {
-            id: `role-${Date.now()}`,
-            ...newRoleData
-        };
-        setRoles(prev => [...prev, newRole]);
-    };
-
-    const handleUpdateRole = (updatedRole: Role) => {
-        setRoles(prev => prev.map(role => role.id === updatedRole.id ? updatedRole : role));
-    };
-
-    const handleDeleteRole = (roleId: string) => {
-        setRoles(prev => prev.filter(role => role.id !== roleId));
-    };
-
-
-    const toggleSidebar = () => setSidebarOpen(!isSidebarOpen);
-    
-    const currentUserRole = roles.find(r => r.id === currentUser.roleId);
 
     return (
-        <div className="relative min-h-screen md:flex">
-            <Sidebar isSidebarOpen={isSidebarOpen} />
-            <div className="flex-1 flex flex-col">
-                <Header toggleSidebar={toggleSidebar} />
-                <div className="hidden md:flex bg-white shadow-sm p-4 justify-between items-center">
-                    <div className="flex items-center space-x-2 text-green-600">
-                        <WifiIcon />
-                        <span className="text-sm font-medium">Conectado</span>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                        <div className="text-right">
-                            <p className="text-sm font-semibold text-gray-800">{currentUser.name}</p>
-                            <p className="text-xs text-gray-500 capitalize">{currentUserRole?.name || 'Usuario'}</p>
-                        </div>
-                        <button className="text-gray-500 hover:text-gray-800">
-                            <LogoutIcon />
-                        </button>
-                    </div>
-                </div>
-                <main className="flex-1 overflow-y-auto">
-                    <Routes>
-                        <Route path="/" element={<Dashboard albaranes={albaranes} incidents={incidents} packs={packs} salidas={salidas} navigateTo={navigate} />} />
-                        <Route path="/entradas" element={<GoodsReceiptList albaranes={albaranes} navigateTo={navigate} currentUser={currentUser} />} />
-                        <Route path="/entradas/nueva" element={<GoodsReceipt onAddAlbaran={handleAddAlbaran} />} />
-                        <Route path="/inventory" element={<Stock albaranes={albaranes} supplies={supplies} packs={packs} onAddNewSupply={handleAddNewSupply} onAddSupplyStock={handleAddSupplyStock} />} />
-                        <Route path="/pack-models" element={<PackModels models={packModels} supplies={supplies} onAddModel={handleAddPackModel}/>} />
-                        <Route path="/packing" element={<CreatePack albaranes={albaranes} packModels={packModels} onAddPack={handleAddPack} />} />
-                        <Route path="/labels" element={<GenerateLabels />} />
-                        <Route path="/salidas" element={<Dispatch packs={packs} onDispatch={handleDispatch} />} />
-                        <Route path="/trazabilidad" element={<Traceability packs={packs} albaranes={albaranes} salidas={salidas} />} />
-                        <Route path="/incidents" element={<Incidents incidents={incidents} onAddIncident={handleAddIncident} onResolveIncident={handleResolveIncident} />} />
-                        <Route path="/reportes" element={<Reports albaranes={albaranes} incidents={incidents} packs={packs} salidas={salidas} supplies={supplies} />} />
-                        <Route path="/usuarios" element={<Users users={users} roles={roles} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} onDeleteRole={handleDeleteRole} />} />
-                        <Route path="/auditoria" element={<Audit logs={auditLogs} users={users} />} />
-                    </Routes>
-                </main>
-            </div>
-        </div>
+        <HashRouter>
+            <AppRoutes />
+        </HashRouter>
     );
 };
 
-const App: React.FC = () => {
-  return (
-    <HashRouter>
-        <AppContent />
-    </HashRouter>
-  );
+const AppRoutes: React.FC = () => {
+    const [session, setSession] = useState<Session | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setSession(session);
+            setLoading(false);
+        });
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setSession(session);
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
+
+    if (loading) {
+        return <div className="min-h-screen bg-brand-dark flex justify-center items-center"><Spinner /></div>;
+    }
+
+    return (
+        <Routes>
+            <Route 
+                path="/login" 
+                element={
+                    session ? <Navigate to="/" replace /> : <Login />
+                } 
+            />
+            <Route 
+                path="/*"
+                element={
+                    session ? <AppContent session={session} /> : <Navigate to="/login" replace />
+                }
+            />
+        </Routes>
+    );
+};
+
+
+const AppContent: React.FC<{session: Session}> = ({ session }) => {
+    // --- App State ---
+    const [albaranes, setAlbaranes] = useState<Albaran[]>([]);
+    const [incidents, setIncidents] = useState<Incident[]>([]);
+    const [packs, setPacks] = useState<WinePack[]>([]);
+    const [salidas, setSalidas] = useState<DispatchNote[]>([]);
+    const [supplies, setSupplies] = useState<Supply[]>([]);
+    const [packModels, setPackModels] = useState<PackModel[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
+    const [roles, setRoles] = useState<Role[]>([]);
+    const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [loadingData, setLoadingData] = useState(true);
+    
+    const navigate = useNavigate();
+
+    const fetchData = useCallback(async () => {
+        if (!session) return;
+        setLoadingData(true);
+        try {
+            // Fetch user profile from public.users
+            const { data: userProfile, error: profileError } = await supabase
+                .from('users')
+                .select('*')
+                .eq('id', session.user.id)
+                .single();
+
+            if (profileError) throw new Error(`Error fetching user profile: ${profileError.message}`);
+            if (!userProfile) throw new Error("User profile not found. Please ensure the setup script has run correctly.");
+            
+            const combinedUser: User = {
+                id: userProfile.id,
+                name: userProfile.full_name || userProfile.email,
+                email: userProfile.email,
+                roleId: userProfile.role_id,
+            };
+            setCurrentUser(combinedUser);
+            
+            // Fetch all other data in parallel
+            const [
+                rolesRes, albaranesRes, incidentsRes, packsRes, 
+                dispatchNotesRes, suppliesRes, packModelsRes, 
+                usersRes, auditLogsRes
+            ] = await Promise.all([
+                supabase.from('roles').select('*'),
+                supabase.from('albaranes').select('*, pallets(*)'),
+                supabase.from('incidents').select('*'),
+                supabase.from('wine_packs').select('*'),
+                supabase.from('dispatch_notes').select('*'),
+                supabase.from('supplies').select('*'),
+                supabase.from('pack_models').select('*'),
+                supabase.from('users').select('*'),
+                supabase.from('audit_logs').select('*')
+            ]);
+            
+            if (rolesRes.error) throw rolesRes.error;
+            setRoles(rolesRes.data || []);
+            
+            if (albaranesRes.error) throw albaranesRes.error;
+            const fetchedAlbaranes = albaranesRes.data || [];
+            // Map DB columns to camelCase for the app
+            const mappedAlbaranes = fetchedAlbaranes.map((dbAlbaran: any) => ({
+                id: dbAlbaran.id,
+                entryDate: dbAlbaran.entrydate,
+                truckPlate: dbAlbaran.truckplate,
+                carrier: dbAlbaran.carrier,
+                driver: dbAlbaran.driver,
+                origin: dbAlbaran.origin,
+                destination: dbAlbaran.destination,
+                status: dbAlbaran.status,
+                incidentDetails: dbAlbaran.incidentdetails,
+                incidentImages: dbAlbaran.incidentimages,
+                created_at: dbAlbaran.created_at,
+                pallets: (dbAlbaran.pallets || []).map((dbPallet: any) => ({
+                    id: dbPallet.id,
+                    palletNumber: dbPallet.palletnumber,
+                    sscc: dbPallet.sscc,
+                    product: {
+                        name: dbPallet.product_name,
+                        lot: dbPallet.product_lot,
+                    },
+                    boxesPerPallet: dbPallet.boxesperpallet,
+                    bottlesPerBox: dbPallet.bottlesperbox,
+                    totalBottles: dbPallet.totalbottles,
+                    eanBottle: dbPallet.eanbottle,
+                    eanBox: dbPallet.eanbox,
+                    labelImage: dbPallet.labelimage,
+                    incident: dbPallet.incident_description ? {
+                        description: dbPallet.incident_description,
+                        images: dbPallet.incident_images || [],
+                    } : undefined,
+                    created_at: dbPallet.created_at,
+                })),
+            }));
+            setAlbaranes(mappedAlbaranes);
+
+            if (incidentsRes.error) throw incidentsRes.error;
+            setIncidents(incidentsRes.data || []);
+
+            if (packsRes.error) throw packsRes.error;
+            setPacks(packsRes.data || []);
+
+            if (dispatchNotesRes.error) throw dispatchNotesRes.error;
+            setSalidas(dispatchNotesRes.data || []);
+
+            if (suppliesRes.error) throw suppliesRes.error;
+            setSupplies(suppliesRes.data || []);
+
+            if (packModelsRes.error) throw packModelsRes.error;
+            setPackModels(packModelsRes.data || []);
+
+            // Map fetched users to the User type
+            if (usersRes.error) throw usersRes.error;
+             const allUsers = (usersRes.data || []).map(u => ({ 
+                 id: u.id, 
+                 name: u.full_name || u.email,
+                 email: u.email, 
+                 roleId: u.role_id 
+            }));
+            setUsers(allUsers);
+
+            if (auditLogsRes.error) throw auditLogsRes.error;
+            setAuditLogs(auditLogsRes.data || []);
+
+        } catch (error) {
+            console.error("Failed to fetch application data:", error);
+            // Optionally, set an error state to show a message to the user
+        } finally {
+            setLoadingData(false);
+        }
+    }, [session]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
+
+    const addAlbaran = async (albaran: Albaran) => {
+        const { pallets, ...albaranData } = albaran;
+    
+        const albaranToInsert = {
+            id: albaranData.id,
+            entrydate: albaranData.entryDate,
+            truckplate: albaranData.truckPlate,
+            carrier: albaranData.carrier,
+            driver: albaranData.driver,
+            origin: albaranData.origin,
+            destination: albaranData.destination,
+            status: albaranData.status,
+            incidentdetails: albaranData.incidentDetails,
+            incidentimages: albaranData.incidentImages,
+        };
+
+        const { data: insertedAlbaran, error: albaranError } = await supabase
+            .from('albaranes')
+            .insert([albaranToInsert])
+            .select('id')
+            .single();
+    
+        if (albaranError || !insertedAlbaran) {
+            console.error('Error adding albaran:', albaranError);
+            throw new Error(albaranError?.message || "No se pudo crear la entrada del albarán.");
+        }
+        
+        if (pallets && pallets.length > 0) {
+            const palletsToInsert = pallets.map(p => ({
+                albaran_id: insertedAlbaran.id,
+                palletnumber: p.palletNumber || null,
+                sscc: p.sscc || null,
+                product_name: p.product.name,
+                product_lot: p.product.lot,
+                boxesperpallet: p.boxesPerPallet || 0,
+                bottlesperbox: p.bottlesPerBox || 0,
+                totalbottles: (p.boxesPerPallet || 0) * (p.bottlesPerBox || 0),
+                eanbottle: p.eanBottle || null,
+                eanbox: p.eanBox || null,
+                labelimage: p.labelImage || null,
+                incident_description: p.incident?.description || null,
+                incident_images: p.incident?.images || null
+            }));
+            
+            const { error: palletsError } = await supabase.from('pallets').insert(palletsToInsert);
+    
+            if (palletsError) {
+                console.error('Error adding pallets:', palletsError);
+                // In a real app, you'd implement a transaction or delete the albaran here for consistency
+                throw new Error(palletsError.message || "No se pudieron añadir los pallets.");
+            }
+        }
+        
+        await fetchData();
+        navigate('/entradas');
+    };
+    
+    const handleUpdateAlbaran = async (albaran: Albaran) => {
+        const { pallets, ...albaranData } = albaran;
+
+        const albaranToUpdate = {
+            entrydate: albaranData.entryDate,
+            truckplate: albaranData.truckPlate,
+            carrier: albaranData.carrier,
+            driver: albaranData.driver,
+            origin: albaranData.origin,
+            destination: albaranData.destination,
+            status: albaranData.status,
+            incidentdetails: albaranData.incidentDetails,
+            incidentimages: albaranData.incidentImages,
+        };
+
+        const { error: albaranError } = await supabase
+            .from('albaranes')
+            .update(albaranToUpdate)
+            .eq('id', albaranData.id);
+
+        if (albaranError) {
+            console.error('Error updating albaran:', albaranError);
+            throw new Error(albaranError.message || "Error al actualizar la cabecera del albarán.");
+        }
+
+        const { error: deleteError } = await supabase
+            .from('pallets')
+            .delete()
+            .eq('albaran_id', albaranData.id);
+
+        if (deleteError) {
+            console.error('Error deleting old pallets:', deleteError);
+            throw new Error(deleteError.message || "Error al eliminar los pallets antiguos para la actualización.");
+        }
+
+        if (pallets && pallets.length > 0) {
+            const palletsToInsert = pallets.map(p => ({
+                albaran_id: albaranData.id,
+                palletnumber: p.palletNumber || null,
+                sscc: p.sscc || null,
+                product_name: p.product.name,
+                product_lot: p.product.lot,
+                boxesperpallet: p.boxesPerPallet || 0,
+                bottlesperbox: p.bottlesPerBox || 0,
+                totalbottles: (p.boxesPerPallet || 0) * (p.bottlesPerBox || 0),
+                eanbottle: p.eanBottle || null,
+                eanbox: p.eanBox || null,
+                labelimage: p.labelImage || null,
+                incident_description: p.incident?.description || null,
+                incident_images: p.incident?.images || null
+            }));
+            
+            const { error: insertError } = await supabase.from('pallets').insert(palletsToInsert);
+
+            if (insertError) {
+                console.error('Error inserting new pallets:', insertError);
+                throw new Error(insertError.message || "Error al insertar los nuevos pallets durante la actualización.");
+            }
+        }
+        
+        await fetchData();
+        navigate('/entradas');
+    };
+
+    const handleDeleteAlbaran = async (albaranId: string) => {
+        // Due to foreign key constraints, pallets must be deleted first.
+        const { error: palletsError } = await supabase
+            .from('pallets')
+            .delete()
+            .eq('albaran_id', albaranId);
+    
+        if (palletsError) {
+            console.error('Error deleting associated pallets:', palletsError);
+            throw new Error(palletsError.message || "Error al eliminar los pallets asociados.");
+        }
+    
+        const { error: albaranError } = await supabase
+            .from('albaranes')
+            .delete()
+            .eq('id', albaranId);
+    
+        if (albaranError) {
+            console.error('Error deleting albaran:', albaranError);
+            throw new Error(albaranError.message || "Error al eliminar la entrada del albarán.");
+        }
+    
+        await fetchData(); // Refresh data after deletion
+    };
+
+    const addPack = async (pack: WinePack) => {
+        const { error } = await supabase.from('wine_packs').insert([pack]);
+        if (error) console.error('Error adding pack:', error);
+        else await fetchData();
+        navigate('/stock');
+    };
+
+    const addPackModel = async (model: Omit<PackModel, 'id' | 'created_at'>) => {
+         const { error } = await supabase.from('pack_models').insert([model]);
+        if (error) console.error('Error adding pack model:', error);
+        else await fetchData();
+    };
+
+    const addNewSupply = async (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>) => {
+        const { error } = await supabase.from('supplies').insert([{ ...supplyData, quantity: 0 }]);
+        if (error) console.error('Error adding supply:', error);
+        else await fetchData();
+    };
+    
+    const addSupplyStock = async (supplyId: string, quantity: number) => {
+        // This should be an RPC function for safety (e.g., increment_stock)
+        const currentSupply = supplies.find(s => s.id === supplyId);
+        if(!currentSupply) return;
+        const newQuantity = currentSupply.quantity + quantity;
+        const { error } = await supabase.from('supplies').update({ quantity: newQuantity }).eq('id', supplyId);
+        if (error) console.error('Error updating supply stock:', error);
+        else await fetchData();
+    };
+
+    const addIncident = async (incident: Omit<Incident, 'id' | 'date' | 'resolved' | 'created_at'>) => {
+        const newIncident = { ...incident, date: new Date().toISOString(), resolved: false };
+        const { error } = await supabase.from('incidents').insert([newIncident]);
+        if (error) console.error('Error adding incident:', error);
+        else await fetchData();
+    };
+    
+    const resolveIncident = async (incidentId: string) => {
+         const { error } = await supabase.from('incidents').update({ resolved: true }).eq('id', incidentId);
+        if (error) console.error('Error resolving incident:', error);
+        else await fetchData();
+    };
+
+    const handleDispatch = async (dispatchNote: Omit<DispatchNote, 'id' | 'status' | 'created_at'>) => {
+        const newNote: Omit<DispatchNote, 'created_at'> = { ...dispatchNote, id: `disp-${Date.now()}`, status: 'Despachado' };
+        // This should be a transaction in a real DB
+        const { error: dispatchError } = await supabase.from('dispatch_notes').insert([newNote]);
+        if (dispatchError) { console.error('Error creating dispatch note:', dispatchError); return; }
+
+        const { error: packUpdateError } = await supabase.from('wine_packs').update({ status: 'Despachado' }).in('id', dispatchNote.packIds);
+         if (packUpdateError) { console.error('Error updating packs status:', packUpdateError); return; }
+        
+        await fetchData();
+        navigate('/stock');
+    };
+    
+    // User and Role management needs to be carefully implemented
+    const handleAddUser = async (user: Omit<User, 'id'>) => { console.log("Add user not implemented", user); await fetchData(); };
+    const handleUpdateUser = async (user: User) => { console.log("Update user not implemented", user); await fetchData(); };
+    const handleDeleteUser = async (userId: string) => { console.log("Delete user not implemented", userId); await fetchData(); };
+    const handleAddRole = async (role: Omit<Role, 'id' | 'created_at'>) => {
+        const { error } = await supabase.from('roles').insert([role]);
+        if(error) console.error("Error adding role:", error);
+        else await fetchData();
+    };
+    const handleUpdateRole = async (role: Role) => {
+        const { error } = await supabase.from('roles').update(role).eq('id', role.id);
+        if(error) console.error("Error updating role:", error);
+        else await fetchData();
+    };
+    const handleDeleteRole = async (roleId: string) => {
+        const { error } = await supabase.from('roles').delete().eq('id', roleId);
+        if(error) console.error("Error deleting role:", error);
+        else await fetchData();
+    };
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        navigate('/login');
+    };
+
+    if (loadingData || !currentUser) {
+        return <div className="min-h-screen bg-brand-light flex justify-center items-center"><Spinner /></div>;
+    }
+
+    const roleName = roles.find(r => r.id === currentUser.roleId)?.name || 'Sin Rol';
+
+    return (
+        <PermissionsProvider user={currentUser} roles={roles}>
+            <div className="flex h-screen bg-gray-100">
+                <div className="hidden md:flex flex-shrink-0">
+                    <Sidebar />
+                </div>
+                
+                <div className="flex-1 flex flex-col overflow-hidden">
+                    <Header 
+                        user={currentUser} 
+                        roleName={roleName} 
+                        onLogout={handleLogout} 
+                        toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} 
+                    />
+                    <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
+                        <Routes>
+                            <Route index element={<Dashboard albaranes={albaranes} incidents={incidents} packs={packs} salidas={salidas} navigateTo={navigate} />} />
+                            <Route path="entradas" element={<GoodsReceiptList albaranes={albaranes} onDeleteAlbaran={handleDeleteAlbaran} />} />
+                            <Route path="entradas/nueva" element={<GoodsReceipt onAddAlbaran={addAlbaran} />} />
+                            <Route path="entradas/editar/:albaranId" element={<GoodsReceipt onAddAlbaran={addAlbaran} onUpdateAlbaran={handleUpdateAlbaran} albaranes={albaranes} />} />
+                            <Route path="entradas/:albaranId" element={<GoodsReceiptDetail albaranes={albaranes} />} />
+                            <Route path="stock" element={<Stock albaranes={albaranes} supplies={supplies} packs={packs} onAddNewSupply={addNewSupply} onAddSupplyStock={addSupplyStock} />} />
+                            <Route path="packing" element={<CreatePack albaranes={albaranes} packModels={packModels} onAddPack={addPack}/>} />
+                            <Route path="modelos-pack" element={<PackModels models={packModels} supplies={supplies} onAddModel={addPackModel} />} />
+                            <Route path="salidas" element={<Dispatch packs={packs} onDispatch={handleDispatch} />} />
+                            <Route path="etiquetas" element={<GenerateLabels />} />
+                            <Route path="incidencias" element={<Incidents incidents={incidents} onAddIncident={addIncident} onResolveIncident={resolveIncident} />} />
+                            <Route path="reportes" element={<Reports albaranes={albaranes} incidents={incidents} packs={packs} salidas={salidas} supplies={supplies} />} />
+                            <Route path="trazabilidad" element={<Traceability packs={packs} albaranes={albaranes} salidas={salidas} />} />
+                            <Route path="usuarios" element={<Users users={users} roles={roles} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} onDeleteRole={handleDeleteRole} />} />
+                            <Route path="auditoria" element={<Audit logs={auditLogs} users={users} />} />
+                            <Route path="*" element={<Navigate to="/" replace />} />
+                        </Routes>
+                    </main>
+                </div>
+            </div>
+        </PermissionsProvider>
+    );
 };
 
 export default App;

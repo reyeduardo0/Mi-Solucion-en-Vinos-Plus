@@ -18,6 +18,15 @@ const fileToBase64 = (file: File): Promise<string> => {
     });
 };
 
+const formatDateTimeSafe = (dateString?: string): string => {
+    if (!dateString) return 'Fecha inválida';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+        return 'Fecha inválida';
+    }
+    return date.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+};
+
 // --- Child Components ---
 
 const StatusBadge: React.FC<{ resolved: boolean }> = ({ resolved }) => {
@@ -164,7 +173,7 @@ const Incidents: React.FC<IncidentsProps> = ({ incidents, onAddIncident, onResol
                             {filteredIncidents.length > 0 ? filteredIncidents.map(inc => (
                                 <tr key={inc.id}>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm">{inc.type}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(inc.date).toLocaleString('es-ES')}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTimeSafe(inc.date)}</td>
                                     <td className="px-4 py-4 text-sm text-gray-600 max-w-sm truncate" title={inc.description}>{inc.description}</td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm font-mono text-gray-500">{inc.relatedId}</td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm"><StatusBadge resolved={inc.resolved} /></td>

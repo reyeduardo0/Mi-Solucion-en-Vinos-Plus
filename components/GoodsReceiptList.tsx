@@ -1,170 +1,178 @@
 import React, { useState, useMemo } from 'react';
-import { Albaran, User } from '../types';
+import { useNavigate } from 'react-router-dom';
+import { Albaran } from '../types';
 import Card from './ui/Card';
 import Button from './ui/Button';
+import { usePermissions } from '../hooks/usePermissions';
+
+const PlusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>;
+
+const StatusBadge: React.FC<{ status: 'pending' | 'verified' | 'incident' }> = ({ status }) => {
+    const statusMap = {
+        pending: { text: 'Pendiente', color: 'bg-gray-100 text-gray-800' },
+        verified: { text: 'Verificado', color: 'bg-green-100 text-green-800' },
+        incident: { text: 'Incidencia', color: 'bg-yellow-100 text-yellow-800' },
+    };
+    const { text, color } = statusMap[status];
+
+    return (
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}>
+            {text}
+        </span>
+    );
+};
+
+const Modal: React.FC<{ children: React.ReactNode; title: string; onClose: () => void; maxWidth?: string }> = ({ children, title, onClose, maxWidth = 'max-w-md' }) => (
+    <div className="fixed inset-0 bg-black bg-opacity-60 z-40 flex justify-center items-center p-4" onClick={onClose}>
+        <div className={`bg-white rounded-lg shadow-xl w-full ${maxWidth}`} onClick={e => e.stopPropagation()}>
+             <div className="flex justify-between items-center p-6 border-b">
+                <h3 className="text-xl font-bold">{title}</h3>
+                <button onClick={onClose} className="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+            </div>
+            <div className="p-6">{children}</div>
+        </div>
+    </div>
+);
+
+const ConfirmationModal: React.FC<{ title: string, message: string; onConfirm: () => void; onCancel: () => void; }> = ({ title, message, onConfirm, onCancel }) => (
+    <Modal title={title} onClose={onCancel}>
+        <p className="text-gray-600">{message}</p>
+        <div className="flex justify-end space-x-3 mt-6">
+            <Button variant="secondary" onClick={onCancel}>Cancelar</Button>
+            <Button variant="danger" onClick={onConfirm}>Sí, eliminar</Button>
+        </div>
+    </Modal>
+);
 
 interface GoodsReceiptListProps {
   albaranes: Albaran[];
-  navigateTo: (path: string) => void;
-  currentUser: User;
+  onDeleteAlbaran: (albaranId: string) => Promise<void>;
 }
 
-const getDisplayStatus = (albaran: Albaran): 'Correcto' | 'Incidencia' => {
-  if (albaran.status === 'incident') {
-      return 'Incidencia';
-  }
-  const hasPalletIncident = albaran.pallets.some(p => p.incident);
-  if (hasPalletIncident) {
-      return 'Incidencia';
-  }
-  return 'Correcto';
+const formatDateTimeSafe = (dateString?: string): string => {
+    if (!dateString) return 'Fecha inválida';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+        return 'Fecha inválida';
+    }
+    return date.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
 };
 
-const StatusBadge: React.FC<{ status: 'Correcto' | 'Incidencia' }> = ({ status }) => {
-  const isIncident = status === 'Incidencia';
-  const bgColor = isIncident ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800';
-  const dotColor = isIncident ? 'bg-yellow-500' : 'bg-green-500';
-  
-  return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${bgColor}`}>
-          <svg className={`-ml-0.5 mr-1.5 h-2 w-2 ${dotColor}`} fill="currentColor" viewBox="0 0 8 8">
-              <circle cx={4} cy={4} r={3} />
-          </svg>
-          {status}
-      </span>
-  );
-};
+const GoodsReceiptList: React.FC<GoodsReceiptListProps> = ({ albaranes, onDeleteAlbaran }) => {
+    const navigate = useNavigate();
+    const [searchTerm, setSearchTerm] = useState('');
+    const { can } = usePermissions();
+    const [albaranToDelete, setAlbaranToDelete] = useState<Albaran | null>(null);
+
+    const filteredAlbaranes = useMemo(() => {
+        return [...albaranes].filter(albaran => 
+            albaran.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            albaran.truckPlate.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            albaran.carrier.toLowerCase().includes(searchTerm.toLowerCase())
+        ).sort((a, b) => {
+            const dateA = new Date(a.entryDate);
+            const dateB = new Date(b.entryDate);
+            if (isNaN(dateA.getTime())) return 1;
+            if (isNaN(dateB.getTime())) return -1;
+            return dateB.getTime() - dateA.getTime();
+        });
+    }, [albaranes, searchTerm]);
+    
+    const handleConfirmDelete = async () => {
+        if (albaranToDelete) {
+            try {
+                await onDeleteAlbaran(albaranToDelete.id);
+            } catch (error) {
+                console.error("Error deleting albaran:", error);
+                const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido.";
+                alert(`No se pudo eliminar la entrada:\n${errorMessage}`);
+            } finally {
+                setAlbaranToDelete(null);
+            }
+        }
+    };
 
 
-const GoodsReceiptList: React.FC<GoodsReceiptListProps> = ({ albaranes, navigateTo, currentUser }) => {
-  const [filters, setFilters] = useState({
-    albaranId: '',
-    status: 'Todos',
-    startDate: '',
-    endDate: '',
-  });
-
-  const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFilters(prev => ({ ...prev, [name]: value }));
-  };
-  
-  const clearDateFilters = () => {
-    setFilters(prev => ({ ...prev, startDate: '', endDate: ''}));
-  }
-
-  const filteredAlbaranes = useMemo(() => {
-    return albaranes.filter(albaran => {
-      const albaranDate = new Date(albaran.entryDate);
-      const startDate = filters.startDate ? new Date(filters.startDate) : null;
-      const endDate = filters.endDate ? new Date(filters.endDate) : null;
-      
-      if (startDate) startDate.setHours(0, 0, 0, 0);
-      if (endDate) endDate.setHours(23, 59, 59, 999);
-
-      const idMatch = albaran.id.toLowerCase().includes(filters.albaranId.toLowerCase());
-      const displayStatus = getDisplayStatus(albaran);
-      const statusMatch = filters.status === 'Todos' || displayStatus === filters.status;
-      const startDateMatch = !startDate || albaranDate >= startDate;
-      const endDateMatch = !endDate || albaranDate <= endDate;
-
-      return idMatch && statusMatch && startDateMatch && endDateMatch;
-    });
-  }, [albaranes, filters]);
-
-  return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Historial de Entradas</h1>
-        <Button onClick={() => navigateTo('/entradas/nueva')}>
-          Nueva Entrada
-        </Button>
-      </div>
-
-      <Card title="Filtros de Búsqueda" className="mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4 items-end">
-          <div className="lg:col-span-1 xl:col-span-1">
-            <label htmlFor="albaranId" className="block text-sm font-medium text-gray-700 mb-1">Filtrar por Albarán</label>
-            <input type="text" name="albaranId" id="albaranId" placeholder="Ej: ALB-E-2025..." value={filters.albaranId} onChange={handleFilterChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500 sm:text-sm"/>
-          </div>
-          <div>
-            <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">Filtrar por Estado</label>
-            <select name="status" id="status" value={filters.status} onChange={handleFilterChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500 sm:text-sm">
-              <option>Todos</option>
-              <option value="Correcto">Correcto</option>
-              <option value="Incidencia">Incidencia</option>
-            </select>
-          </div>
-          <div>
-            <label htmlFor="startDate" className="block text-sm font-medium text-gray-700 mb-1">Fecha Desde</label>
-            <input type="date" name="startDate" id="startDate" value={filters.startDate} onChange={handleFilterChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500 sm:text-sm"/>
-          </div>
-          <div className="flex items-end space-x-2">
-            <div className="flex-grow">
-              <label htmlFor="endDate" className="block text-sm font-medium text-gray-700 mb-1">Fecha Hasta</label>
-              <input type="date" name="endDate" id="endDate" value={filters.endDate} onChange={handleFilterChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-yellow-500 focus:border-yellow-500 sm:text-sm"/>
+    return (
+        <div className="p-4 sm:p-6 lg:p-8">
+             {albaranToDelete && (
+              <ConfirmationModal
+                title="Confirmar Eliminación"
+                message={`¿Estás seguro de que quieres eliminar la entrada "${albaranToDelete.id}"? Esta acción eliminará todos sus pallets asociados y no se puede deshacer.`}
+                onConfirm={handleConfirmDelete}
+                onCancel={() => setAlbaranToDelete(null)}
+              />
+            )}
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold text-gray-800">Historial de Entradas</h1>
+                {can('entries:create') && (
+                    <Button onClick={() => navigate('/entradas/nueva')}>
+                        <PlusIcon /> <span className="ml-2 hidden sm:inline">Nueva Entrada</span>
+                    </Button>
+                )}
             </div>
-            <button onClick={clearDateFilters} className="h-10 w-10 flex-shrink-0 bg-gray-700 text-white rounded-md flex items-center justify-center hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
-               <span className="sr-only">Clear date</span>
-               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-          </div>
+            
+            <Card>
+                <div className="mb-4">
+                    <input
+                        type="text"
+                        placeholder="Buscar por Nº Albarán, Matrícula o Transportista..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                    />
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nº Albarán</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha Entrada</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Matrícula</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transportista</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pallets</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {filteredAlbaranes.length > 0 ? (
+                                filteredAlbaranes.map((albaran) => (
+                                    <tr key={albaran.id}>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{albaran.id}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTimeSafe(albaran.entryDate)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{albaran.truckPlate}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{albaran.carrier}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{albaran.pallets.length}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><StatusBadge status={albaran.status} /></td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <div className="flex items-center justify-end space-x-4">
+                                                {can('entries:view') && (
+                                                    <button onClick={() => navigate(`/entradas/${albaran.id}`)} className="text-yellow-600 hover:text-yellow-900">Ver</button>
+                                                )}
+                                                {can('entries:edit') && (
+                                                    <button onClick={() => navigate(`/entradas/editar/${albaran.id}`)} className="text-blue-600 hover:text-blue-900">Editar</button>
+                                                )}
+                                                {can('entries:delete') && (
+                                                    <button onClick={() => setAlbaranToDelete(albaran)} className="text-red-600 hover:text-red-900">Eliminar</button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-500">
+                                        No se encontraron entradas que coincidan con la búsqueda.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </Card>
         </div>
-      </Card>
-
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Albarán</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transportista</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Conductor</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"># Palets</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredAlbaranes.length > 0 ? (
-                filteredAlbaranes.map(albaran => {
-                  const displayStatus = getDisplayStatus(albaran);
-                  return (
-                    <tr key={albaran.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{albaran.id.toUpperCase()}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(albaran.entryDate).toLocaleDateString('es-ES')}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{albaran.carrier}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{albaran.driver || 'N/A'}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{albaran.pallets.length}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <StatusBadge status={displayStatus} />
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-4">
-                        <a href="#" className="text-gray-600 hover:text-gray-900">Ver</a>
-                        {currentUser.roleId === 'role-admin' && (
-                          <>
-                            <a href="#" className="text-yellow-600 hover:text-yellow-900">Editar</a>
-                            <a href="#" className="text-red-600 hover:text-red-900">Eliminar</a>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })
-              ) : (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-500">
-                    No se encontraron entradas que coincidan con los filtros aplicados.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
+    );
 };
 
 export default GoodsReceiptList;

@@ -10,6 +10,14 @@ const LoginIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w
 const GenericIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
 const EmptyIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
 
+const formatDateTimeSafe = (dateString?: string): string => {
+    if (!dateString) return 'Fecha inválida';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) {
+        return 'Fecha inválida';
+    }
+    return date.toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' });
+};
 
 // --- Helper Components ---
 const ActionIcon: React.FC<{ action: string }> = ({ action }) => {
@@ -63,6 +71,8 @@ const Audit: React.FC<AuditProps> = ({ logs, users }) => {
             const endDate = filters.endDate ? new Date(filters.endDate) : null;
             if (startDate) startDate.setHours(0, 0, 0, 0);
             if (endDate) endDate.setHours(23, 59, 59, 999);
+            
+            if (isNaN(logDate.getTime())) return false; // Exclude invalid log dates
 
             const userMatch = !filters.userId || log.userId === filters.userId;
             const actionMatch = !filters.actionQuery || log.action.toLowerCase().includes(filters.actionQuery.toLowerCase());
@@ -118,7 +128,7 @@ const Audit: React.FC<AuditProps> = ({ logs, users }) => {
                                                         <span className="font-semibold text-gray-900">{log.userName}</span>
                                                     </div>
                                                     <p className="mt-0.5 text-sm text-gray-500">
-                                                        {new Date(log.timestamp).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' })}
+                                                        {formatDateTimeSafe(log.timestamp)}
                                                     </p>
                                                 </div>
                                                 <div className="mt-2 text-sm text-gray-700">
