@@ -46,11 +46,9 @@
 </script>
     <script>
       // Define the environment variable for the application at runtime
-      window.process = {
-        env: {
-          API_KEY: 'AIzaSyBtqshzmelmk3uFlejvnA9EE4m3mRynn3c'
-        }
-      };
+      window.process = window.process || {};
+      window.process.env = window.process.env || {};
+      window.process.env.API_KEY = 'AIzaSyBtqshzmelmk3uFlejvnA9EE4m3mRynn3c';
     </script>
 </head>
   <body class="bg-brand-light">
