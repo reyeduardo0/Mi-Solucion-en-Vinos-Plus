@@ -1,44 +1,70 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { User, Role } from '../../types';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
+import Spinner from '../ui/Spinner';
 
 interface UserModalProps {
     user: User | null;
     roles: Role[];
-    onSave: (user: Omit<User, 'id'> | User) => void;
+    onSave: (user: (Omit<User, 'id'> & { password?: string }) | User) => Promise<void>;
     onClose: () => void;
 }
 
 const UserModal: React.FC<UserModalProps> = ({ user, roles, onSave, onClose }) => {
-    const [formData, setFormData] = useState({ name: '', email: '', roleId: '', password: '' });
+    const [name, setName] = useState(user?.name || '');
+    const [email, setEmail] = useState(user?.email || '');
+    const [roleId, setRoleId] = useState(user?.roleId || '');
+    const [password, setPassword] = useState('');
+    
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (user) {
-            setFormData({ name: user.name, email: user.email, roleId: user.roleId, password: '' });
-        } else {
-            setFormData({ name: '', email: '', roleId: roles[0]?.id || '', password: '' });
-        }
-    }, [user, roles]);
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(user ? { ...user, ...formData } : formData);
-        onClose();
-    };
+        if (!roleId) {
+            setError("Por favor, seleccione un rol.");
+            return;
+        }
+        if (!user && !password) {
+            setError("La contraseña es obligatoria para nuevos usuarios.");
+            return;
+        }
 
-    const isEditing = user !== null;
+        setIsLoading(true);
+        setError(null);
+        
+        try {
+            const userData = { name, email, roleId };
+            if (user) {
+                await onSave({ ...user, ...userData });
+            } else {
+                await onSave({ ...userData, password });
+            }
+            onClose();
+        } catch (e: any) {
+             setError(e.message || 'Ocurrió un error inesperado.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
     return (
-        <Modal title={isEditing ? `Editando a ${user.name}` : 'Añadir Nuevo Usuario'} onClose={onClose}>
+        <Modal title={user ? `Editando Usuario: ${user.name}` : 'Crear Nuevo Usuario'} onClose={onClose}>
             <form onSubmit={handleSubmit} className="space-y-4">
-                <div><label className="block text-sm font-medium">Nombre Completo</label><input type="text" name="name" value={formData.name} onChange={handleChange} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
-                <div><label className="block text-sm font-medium">Correo Electrónico</label><input type="email" name="email" value={formData.email} onChange={handleChange} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
-                <div><label className="block text-sm font-medium">Rol</label><select name="roleId" value={formData.roleId} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2">{roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></div>
-                <div><label className="block text-sm font-medium">Contraseña</label><input type="password" name="password" value={formData.password} onChange={handleChange} required={!isEditing} placeholder={isEditing ? 'Dejar en blanco para no cambiar' : ''} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
-                <div className="flex justify-end space-x-3 pt-4 border-t"><Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button><Button type="submit">Guardar Cambios</Button></div>
+                <div><label className="block text-sm font-medium">Nombre Completo</label><input type="text" value={name} onChange={e => setName(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                <div><label className="block text-sm font-medium">Correo Electrónico</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={!!user} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 disabled:bg-gray-100" /></div>
+                {!user && (<div><label className="block text-sm font-medium">Contraseña</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} required={!user} placeholder="Mínimo 6 caracteres" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>)}
+                <div><label className="block text-sm font-medium">Rol</label><select value={roleId} onChange={e => setRoleId(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"><option value="">Seleccionar un rol...</option>{roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></div>
+                
+                {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">{error}</div>}
+
+                <div className="flex justify-end space-x-3 pt-4 border-t">
+                    <Button type="button" variant="secondary" onClick={onClose} disabled={isLoading}>Cancelar</Button>
+                    <Button type="submit" disabled={isLoading}>
+                        {isLoading ? <Spinner/> : (user ? 'Guardar Cambios' : 'Crear Usuario')}
+                    </Button>
+                </div>
             </form>
         </Modal>
     );

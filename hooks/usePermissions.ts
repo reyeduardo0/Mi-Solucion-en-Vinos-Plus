@@ -37,5 +37,5 @@ export const PermissionsProvider: React.FC<PermissionsProviderProps> = ({ childr
   const value = { can };
 
   // FIX: Replaced JSX with React.createElement to resolve parsing errors in a .ts file.
-  return React.createElement(PermissionsContext.Provider, { value }, children);
+  return React.createElement(PermissionsContext.Provider, { value: value }, children);
 };

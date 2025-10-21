@@ -39,6 +39,7 @@ const IncidentModal: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
             // FIX: Explicitly type 'file' as File to resolve type inference issue.
             const previews = await Promise.all(files.map(async (file: File) => {
                 const base64 = await fileToBase64(file);
+                // The fileToBase64 helper now returns only the base64 part.
                 return `data:${file.type};base64,${base64}`;
             }));
             setImagePreviews(previews);

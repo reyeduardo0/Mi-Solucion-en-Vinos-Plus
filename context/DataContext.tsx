@@ -1,90 +1,51 @@
-
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../services/supabaseClient';
-import { Albaran, AuditLog, DispatchNote, Incident, PackModel, Role, Supply, User, WinePack, Pallet } from '../types';
-import Spinner from '../components/ui/Spinner';
+import { Albaran, User, Role, AuditLog, Incident, Supply, PackModel, WinePack, DispatchNote } from '../types';
 
-// --- TYPE DEFINITIONS ---
+// Define the shape of the context data
 interface DataContextType {
     currentUser: User | null;
-    albaranes: Albaran[];
-    incidents: Incident[];
-    packs: WinePack[];
-    salidas: DispatchNote[];
-    supplies: Supply[];
-    packModels: PackModel[];
     users: User[];
     roles: Role[];
+    albaranes: Albaran[];
+    incidents: Incident[];
+    supplies: Supply[];
+    packs: WinePack[];
+    packModels: PackModel[];
+    salidas: DispatchNote[];
     auditLogs: AuditLog[];
     loadingData: boolean;
+    // Functions to modify data
     addAlbaran: (albaran: Albaran) => Promise<void>;
     updateAlbaran: (albaran: Albaran) => Promise<void>;
     deleteAlbaran: (albaranId: string) => Promise<void>;
-    addPack: (pack: WinePack) => Promise<void>;
-    addPackModel: (model: Omit<PackModel, 'id' | 'created_at'>) => Promise<void>;
-    addNewSupply: (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>) => Promise<void>;
-    addSupplyStock: (supplyId: string, quantity: number) => Promise<void>;
     addIncident: (incident: Omit<Incident, 'id' | 'date' | 'resolved' | 'created_at'>) => Promise<void>;
     resolveIncident: (incidentId: string) => Promise<void>;
-    handleDispatch: (dispatchNote: Omit<DispatchNote, 'id' | 'status' | 'created_at'>) => Promise<void>;
-    handleAddUser: (user: Omit<User, 'id'>) => Promise<void>;
-    handleUpdateUser: (user: User) => Promise<void>;
-    handleDeleteUser: (userId: string) => Promise<void>;
-    handleAddRole: (role: Omit<Role, 'id' | 'created_at'>) => Promise<void>;
-    handleUpdateRole: (role: Role) => Promise<void>;
-    handleDeleteRole: (roleId: string) => Promise<void>;
+    addNewSupply: (supply: Omit<Supply, 'id' | 'created_at' | 'quantity'>) => Promise<void>;
+    addSupplyStock: (supplyId: string, quantity: number) => Promise<void>;
+    addPackModel: (model: Omit<PackModel, 'id' | 'created_at'>) => Promise<void>;
+    addPack: (pack: WinePack) => Promise<void>;
+    handleDispatch: (dispatchData: Omit<DispatchNote, 'id' | 'status' | 'created_at'>) => Promise<void>;
+    addUser: (user: Omit<User, 'id'> & { password?: string }) => Promise<void>;
+    updateUser: (user: User) => Promise<void>;
+    deleteUser: (userId: string) => Promise<void>;
+    addRole: (role: Omit<Role, 'id' | 'created_at'>) => Promise<void>;
+    updateRole: (role: Role) => Promise<void>;
+    deleteRole: (roleId: string) => Promise<void>;
+    addAuditLog: (action: string, userId: string, userName: string) => Promise<void>;
 }
 
-// --- DATA MAPPING HELPERS ---
-const mapPalletFromDb = (dbPallet: any): Pallet => ({
-    id: dbPallet.id,
-    palletNumber: dbPallet.palletnumber,
-    sscc: dbPallet.sscc,
-    product: { name: dbPallet.product_name, lot: dbPallet.product_lot },
-    boxesPerPallet: dbPallet.boxesperpallet,
-    bottlesPerBox: dbPallet.bottlesperbox,
-    totalBottles: dbPallet.totalbottles,
-    eanBottle: dbPallet.eanbottle,
-    eanBox: dbPallet.eanbox,
-    labelImage: dbPallet.labelimage,
-    incident: dbPallet.incident_description ? { description: dbPallet.incident_description, images: dbPallet.incident_images || [] } : undefined,
-    created_at: dbPallet.created_at,
-});
-
-const mapAlbaranFromDb = (dbAlbaran: any): Albaran => ({
-    id: dbAlbaran.id,
-    entryDate: dbAlbaran.entrydate,
-    truckPlate: dbAlbaran.truckplate,
-    carrier: dbAlbaran.carrier,
-    driver: dbAlbaran.driver,
-    origin: dbAlbaran.origin,
-    destination: dbAlbaran.destination,
-    status: dbAlbaran.status,
-    incidentDetails: dbAlbaran.incidentdetails,
-    incidentImages: dbAlbaran.incidentimages,
-    created_at: dbAlbaran.created_at,
-    pallets: (dbAlbaran.pallets || []).map(mapPalletFromDb),
-});
-
-const mapUserFromDb = (dbUser: any): User => ({
-    id: dbUser.id,
-    name: dbUser.full_name || dbUser.email,
-    email: dbUser.email,
-    roleId: dbUser.role_id,
-});
-
-
-// --- CONTEXT & HOOK ---
 const DataContext = createContext<DataContextType | undefined>(undefined);
+
 export const useData = () => {
     const context = useContext(DataContext);
-    if (!context) throw new Error("useData must be used within a DataProvider");
+    if (!context) {
+        throw new Error('useData must be used within a DataProvider');
+    }
     return context;
 };
 
-
-// --- PROVIDER COMPONENT ---
 interface DataProviderProps {
     children: ReactNode;
     session: Session;
@@ -93,139 +54,304 @@ interface DataProviderProps {
 export const DataProvider: React.FC<DataProviderProps> = ({ children, session }) => {
     const [loadingData, setLoadingData] = useState(true);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
-    const [albaranes, setAlbaranes] = useState<Albaran[]>([]);
-    const [incidents, setIncidents] = useState<Incident[]>([]);
-    const [packs, setPacks] = useState<WinePack[]>([]);
-    const [salidas, setSalidas] = useState<DispatchNote[]>([]);
-    const [supplies, setSupplies] = useState<Supply[]>([]);
-    const [packModels, setPackModels] = useState<PackModel[]>([]);
     const [users, setUsers] = useState<User[]>([]);
     const [roles, setRoles] = useState<Role[]>([]);
+    const [albaranes, setAlbaranes] = useState<Albaran[]>([]);
+    const [incidents, setIncidents] = useState<Incident[]>([]);
+    const [supplies, setSupplies] = useState<Supply[]>([]);
+    const [packs, setPacks] = useState<WinePack[]>([]);
+    const [packModels, setPackModels] = useState<PackModel[]>([]);
+    const [salidas, setSalidas] = useState<DispatchNote[]>([]);
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
+    const addAuditLog = useCallback(async (action: string, userId: string, userName: string) => {
+        if (!supabase) return;
+        const newLog = { userid: userId, username: userName, action };
+        const { error } = await supabase.from('audit_logs').insert(newLog);
+        if (error) {
+            console.error('Error adding audit log:', JSON.stringify(error, null, 2));
+        }
+    }, []);
+
     const fetchData = useCallback(async () => {
-        if (!session || !supabase) return;
+        if (!supabase || !session.user) return;
         setLoadingData(true);
         try {
-            const { data: userProfile, error: profileError } = await supabase.from('users').select('*').eq('id', session.user.id).single();
-            if (profileError) throw new Error(`Error fetching user profile: ${profileError.message}`);
-            if (!userProfile) throw new Error("User profile not found.");
-            
-            setCurrentUser(mapUserFromDb(userProfile));
-            
-            const [ rolesRes, albaranesRes, incidentsRes, packsRes, dispatchNotesRes, suppliesRes, packModelsRes, usersRes, auditLogsRes ] = await Promise.all([
-                supabase.from('roles').select('*'),
-                supabase.from('albaranes').select('*, pallets(*)'),
-                supabase.from('incidents').select('*'),
-                supabase.from('wine_packs').select('*'),
-                supabase.from('dispatch_notes').select('*'),
-                supabase.from('supplies').select('*'),
-                supabase.from('pack_models').select('*'),
+            const [
+                usersRes, rolesRes, albaranesRes, incidentsRes, suppliesRes, packsRes, packModelsRes, salidasRes, auditLogsRes
+            ] = await Promise.all([
                 supabase.from('users').select('*'),
-                supabase.from('audit_logs').select('*')
+                supabase.from('roles').select('*'),
+                supabase.from('albaranes').select('*, pallets:pallets(*)'),
+                supabase.from('incidents').select('*').order('created_at', { ascending: false }),
+                supabase.from('supplies').select('*'),
+                supabase.from('wine_packs').select('*'),
+                supabase.from('pack_models').select('*'),
+                supabase.from('dispatch_notes').select('*'),
+                supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }),
             ]);
+
+            if (rolesRes.error) throw rolesRes.error;
+            const fetchedRoles = rolesRes.data as Role[];
+            setRoles(fetchedRoles);
             
-            if (rolesRes.error) throw rolesRes.error; setRoles(rolesRes.data || []);
-            if (albaranesRes.error) throw albaranesRes.error; setAlbaranes((albaranesRes.data || []).map(mapAlbaranFromDb));
-            if (incidentsRes.error) throw incidentsRes.error; setIncidents(incidentsRes.data || []);
-            if (packsRes.error) throw packsRes.error; setPacks(packsRes.data || []);
-            if (dispatchNotesRes.error) throw dispatchNotesRes.error; setSalidas(dispatchNotesRes.data || []);
-            if (suppliesRes.error) throw suppliesRes.error; setSupplies(suppliesRes.data || []);
-            if (packModelsRes.error) throw packModelsRes.error; setPackModels(packModelsRes.data || []);
-            if (usersRes.error) throw usersRes.error; setUsers((usersRes.data || []).map(mapUserFromDb));
-            if (auditLogsRes.error) throw auditLogsRes.error; setAuditLogs(auditLogsRes.data || []);
+            if (usersRes.error) throw usersRes.error;
+            let fetchedUsers: User[] = (usersRes.data || []).map((u: any) => ({
+                id: u.id,
+                name: u.full_name,
+                email: u.email,
+                roleId: u.role_id,
+            }));
+
+            let currentUserData = fetchedUsers.find(u => u.id === session.user.id);
+
+            if (!currentUserData && session.user && fetchedRoles.length > 0) {
+                console.warn(`User profile for ${session.user.email} not found. Creating a default profile.`);
+                
+                const defaultRole = fetchedRoles.find(r => r.name.toLowerCase() !== 'admin') || fetchedRoles[0];
+                if (defaultRole) {
+                    const newUserProfileData = {
+                        id: session.user.id,
+                        email: session.user.email!,
+                        full_name: session.user.email!,
+                        role_id: defaultRole.id,
+                    };
+
+                    const { data: createdProfile, error: insertError } = await supabase
+                        .from('users')
+                        .insert(newUserProfileData)
+                        .select()
+                        .single();
+
+                    if (insertError) {
+                        console.error("Error creating missing user profile:", insertError.message);
+                    } else {
+                        currentUserData = {
+                            id: createdProfile.id,
+                            name: createdProfile.full_name,
+                            email: createdProfile.email,
+                            roleId: createdProfile.role_id,
+                        };
+                        fetchedUsers.push(currentUserData);
+                        console.log(`Default profile created for ${session.user.email} with role '${defaultRole.name}'`);
+                    }
+                } else {
+                     console.error("Cannot create default user profile: No roles found in the database.");
+                }
+            }
+
+            setUsers(fetchedUsers);
+            setCurrentUser(currentUserData || null);
+
+            if (albaranesRes.error) throw albaranesRes.error;
+            setAlbaranes(albaranesRes.data as Albaran[]);
+            
+            if (incidentsRes.error) throw incidentsRes.error;
+            setIncidents(incidentsRes.data as Incident[]);
+            
+            if (suppliesRes.error) throw suppliesRes.error;
+            setSupplies(suppliesRes.data as Supply[]);
+            
+            if (packsRes.error) throw packsRes.error;
+            setPacks(packsRes.data as WinePack[]);
+            
+            if (packModelsRes.error) throw packModelsRes.error;
+            setPackModels(packModelsRes.data as PackModel[]);
+            
+            if (salidasRes.error) throw salidasRes.error;
+            setSalidas(salidasRes.data as DispatchNote[]);
+
+            if (auditLogsRes.error) throw auditLogsRes.error;
+            const fetchedAuditLogs = (auditLogsRes.data || []).map((log: any) => ({
+                id: log.id,
+                timestamp: log.timestamp,
+                userId: log.userid,
+                userName: log.username,
+                action: log.action,
+            }));
+            setAuditLogs(fetchedAuditLogs as AuditLog[]);
 
         } catch (error) {
-            console.error("Failed to fetch application data:", error);
+            console.error("Error fetching data:", error);
         } finally {
             setLoadingData(false);
         }
     }, [session]);
 
-    useEffect(() => { fetchData(); }, [fetchData]);
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
 
-    const wrapApiCall = async (apiCall: () => Promise<any>) => {
-        try {
-            await apiCall();
-            await fetchData();
-        } catch (error: any) {
-            console.error("API call failed:", error);
-            // Re-throw to be caught by UI component
-            throw error;
+     const logAndRefetch = useCallback(async (action: string, operation: () => Promise<any>) => {
+        await operation();
+        if (currentUser) {
+            await addAuditLog(action, currentUser.id, currentUser.name);
         }
+        await fetchData();
+    }, [currentUser, addAuditLog, fetchData]);
+
+    // Data modification functions
+    const addAlbaran = async (albaran: Albaran) => logAndRefetch(`Creó el albarán ${albaran.id}`, async () => {
+        if (!supabase) return;
+        const { pallets, ...albaranData } = albaran;
+        const { data, error } = await supabase.from('albaranes').insert(albaranData).select().single();
+        if (error) throw error;
+        if (pallets && pallets.length > 0) {
+            const palletsToInsert = pallets.map(p => ({ ...p, albaran_id: data.id }));
+            const { error: palletError } = await supabase.from('pallets').insert(palletsToInsert);
+            if (palletError) throw palletError;
+        }
+    });
+
+    const updateAlbaran = async (albaran: Albaran) => logAndRefetch(`Actualizó el albarán ${albaran.id}`, async () => {
+        if (!supabase) return;
+        const { pallets, ...albaranData } = albaran;
+        const { error } = await supabase.from('albaranes').update(albaranData).eq('id', albaran.id);
+        if (error) throw error;
+        if (pallets) {
+             const { error: deleteError } = await supabase.from('pallets').delete().eq('albaran_id', albaran.id);
+             if (deleteError) throw deleteError;
+             const palletsToInsert = pallets.map(p => ({ ...p, id: undefined, albaran_id: albaran.id }));
+             const { error: insertError } = await supabase.from('pallets').insert(palletsToInsert);
+             if (insertError) throw insertError;
+        }
+    });
+
+    const deleteAlbaran = async (albaranId: string) => logAndRefetch(`Eliminó el albarán ${albaranId}`, async () => {
+        if (!supabase) return;
+        const { error } = await supabase.from('albaranes').delete().eq('id', albaranId);
+        if (error) throw error;
+    });
+    
+    const addIncident = async (incident: Omit<Incident, 'id' | 'date' | 'resolved' | 'created_at'>) => logAndRefetch(`Registró una incidencia para ${incident.relatedId}`, async () => {
+        if (!supabase) return;
+        const newIncident = { ...incident, date: new Date().toISOString(), resolved: false };
+        const { error } = await supabase.from('incidents').insert(newIncident);
+        if (error) throw error;
+    });
+    
+    const resolveIncident = async (incidentId: string) => logAndRefetch(`Resolvió la incidencia ${incidentId}`, async () => {
+        if (!supabase) return;
+        const { error } = await supabase.from('incidents').update({ resolved: true }).eq('id', incidentId);
+        if (error) throw error;
+    });
+
+    const addNewSupply = async (supply: Omit<Supply, 'id' | 'created_at' | 'quantity'>) => logAndRefetch(`Creó el insumo ${supply.name}`, async () => {
+        if (!supabase) return;
+        const { error } = await supabase.from('supplies').insert({ ...supply, quantity: 0 });
+        if (error) throw error;
+    });
+
+    const addSupplyStock = async (supplyId: string, quantity: number) => logAndRefetch(`Añadió ${quantity} de stock al insumo ${supplyId}`, async () => {
+        if (!supabase) return;
+        const { error } = await supabase.rpc('add_supply_stock', { p_supply_id: supplyId, p_quantity: quantity });
+        if (error) throw error;
+    });
+
+    const addPackModel = async (model: Omit<PackModel, 'id' | 'created_at'>) => logAndRefetch(`Creó el modelo de pack ${model.name}`, async () => {
+        if (!supabase) return;
+        const { error } = await supabase.from('pack_models').insert(model);
+        if (error) throw error;
+    });
+
+    const addPack = async (pack: WinePack) => logAndRefetch(`Creó el pack ${pack.id}`, async () => {
+        if (!supabase) return;
+        const { error } = await supabase.from('wine_packs').insert(pack);
+        if (error) throw error;
+    });
+
+    const handleDispatch = async (dispatchData: Omit<DispatchNote, 'id' | 'status' | 'created_at'>) => logAndRefetch(`Creó la nota de salida para ${dispatchData.customer}`, async () => {
+        if (!supabase) return;
+        const newDispatch = { ...dispatchData, id: `SAL-${Date.now()}`, status: 'Despachado' as const };
+        const { error } = await supabase.from('dispatch_notes').insert(newDispatch);
+        if (error) throw error;
+        const { error: packError } = await supabase.from('wine_packs').update({ status: 'Despachado' }).in('id', dispatchData.packIds);
+        if (packError) throw packError;
+    });
+
+    const addUser = async (userData: Omit<User, 'id'> & { password?: string }) => {
+        if (!supabase) throw new Error("Cliente Supabase no inicializado.");
+        if (!userData.password) throw new Error("La contraseña es requerida para nuevos usuarios.");
+
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: userData.email,
+            password: userData.password,
+        });
+
+        if (authError) {
+            console.error("Error en el registro de Auth:", JSON.stringify(authError, null, 2));
+            throw authError;
+        }
+        if (!authData.user) throw new Error("El registro falló, no se devolvió ningún usuario.");
+
+        const profileData = { full_name: userData.name, role_id: userData.roleId };
+        const { error: profileError } = await supabase.from('users').update(profileData).eq('id', authData.user.id);
+        
+        if (profileError) {
+             console.error("Usuario de Auth creado pero la actualización del perfil falló:", JSON.stringify(profileError, null, 2));
+             const detailedMessage = profileError.message || JSON.stringify(profileError);
+             throw new Error(`Usuario de Auth creado pero la actualización del perfil falló: ${detailedMessage}. Asegúrese de que la tabla 'users' tiene una política de UPDATE para usuarios autenticados.`);
+        }
+
+        if (currentUser) await addAuditLog(`Creó el usuario ${userData.name}`, currentUser.id, currentUser.name);
+        await fetchData();
+    };
+
+    const updateUser = async (user: User) => {
+        if (!supabase) return;
+        const { error } = await supabase.from('users').update({ full_name: user.name, role_id: user.roleId }).eq('id', user.id);
+        if (error) throw error;
+        if (currentUser) await addAuditLog(`Actualizó el usuario ${user.name}`, currentUser.id, currentUser.name);
+        await fetchData();
+    };
+
+    const deleteUser = async (userId: string) => {
+        if (!supabase) return;
+        const userToDelete = users.find(u => u.id === userId);
+        const { error } = await supabase.from('users').delete().eq('id', userId);
+        if (error) throw error;
+        // Note: This only deletes the user profile. Deleting the auth user requires admin privileges
+        // and should be done in a server-side environment for security. The user will be orphaned in auth.
+        if (currentUser && userToDelete) await addAuditLog(`Eliminó el usuario ${userToDelete.name}`, currentUser.id, currentUser.name);
+        await fetchData();
     };
     
-    // --- MUTATION FUNCTIONS ---
-    const addAlbaran = async (albaran: Albaran) => wrapApiCall(async () => {
-        const { pallets, ...albaranData } = albaran;
-        const albaranToInsert = { id: albaranData.id, entrydate: albaranData.entryDate, truckplate: albaranData.truckPlate, carrier: albaranData.carrier, driver: albaranData.driver, origin: albaranData.origin, destination: albaranData.destination, status: albaranData.status, incidentdetails: albaranData.incidentDetails, incidentimages: albaranData.incidentImages, };
-        const { data, error } = await supabase!.from('albaranes').insert(albaranToInsert).select('id').single();
-        if (error || !data) throw error || new Error("Failed to create albaran entry.");
-
-        if (pallets?.length) {
-            const palletsToInsert = pallets.map(p => ({ albaran_id: data.id, palletnumber: p.palletNumber, product_name: p.product.name, product_lot: p.product.lot, boxesperpallet: p.boxesPerPallet, bottlesperbox: p.bottlesPerBox, totalbottles: (p.boxesPerPallet || 0) * (p.bottlesPerBox || 0), sscc: p.sscc, eanbottle: p.eanBottle, eanbox: p.eanBox, labelimage: p.labelImage, incident_description: p.incident?.description, incident_images: p.incident?.images }));
-            const { error: palletsError } = await supabase!.from('pallets').insert(palletsToInsert);
-            if (palletsError) throw palletsError;
-        }
-    });
-
-    const updateAlbaran = async (albaran: Albaran) => wrapApiCall(async () => {
-        const { pallets, ...albaranData } = albaran;
-        const albaranToUpdate = { entrydate: albaranData.entryDate, truckplate: albaranData.truckPlate, carrier: albaranData.carrier, driver: albaranData.driver, origin: albaranData.origin, destination: albaranData.destination, status: albaranData.status, incidentdetails: albaranData.incidentDetails, incidentimages: albaranData.incidentImages };
-        const { error: albaranError } = await supabase!.from('albaranes').update(albaranToUpdate).eq('id', albaranData.id);
-        if (albaranError) throw albaranError;
-
-        const { error: deleteError } = await supabase!.from('pallets').delete().eq('albaran_id', albaranData.id);
-        if (deleteError) throw deleteError;
-
-        if (pallets?.length) {
-            const palletsToInsert = pallets.map(p => ({ albaran_id: albaranData.id, palletnumber: p.palletNumber, product_name: p.product.name, product_lot: p.product.lot, boxesperpallet: p.boxesPerPallet, bottlesperbox: p.bottlesPerBox, totalbottles: (p.boxesPerPallet || 0) * (p.bottlesPerBox || 0), sscc: p.sscc, eanbottle: p.eanBottle, eanbox: p.eanBox, labelimage: p.labelImage, incident_description: p.incident?.description, incident_images: p.incident?.images }));
-            const { error: insertError } = await supabase!.from('pallets').insert(palletsToInsert);
-            if (insertError) throw insertError;
-        }
-    });
-    
-    const deleteAlbaran = async (albaranId: string) => wrapApiCall(async () => {
-        const { error: palletsError } = await supabase!.from('pallets').delete().eq('albaran_id', albaranId);
-        if (palletsError) throw palletsError;
-        const { error: albaranError } = await supabase!.from('albaranes').delete().eq('id', albaranId);
-        if (albaranError) throw albaranError;
-    });
-
-    const addPack = (pack: WinePack) => wrapApiCall(() => supabase!.from('wine_packs').insert([pack]));
-    const addPackModel = (model: Omit<PackModel, 'id' | 'created_at'>) => wrapApiCall(() => supabase!.from('pack_models').insert([model]));
-    const addNewSupply = (supply: Omit<Supply, 'id'|'created_at'|'quantity'>) => wrapApiCall(() => supabase!.from('supplies').insert([{ ...supply, quantity: 0 }]));
-    const addSupplyStock = (supplyId: string, quantity: number) => wrapApiCall(async () => {
-        const current = supplies.find(s => s.id === supplyId);
-        if (!current) throw new Error("Supply not found");
-        return supabase!.from('supplies').update({ quantity: current.quantity + quantity }).eq('id', supplyId);
-    });
-    const addIncident = (incident: Omit<Incident, 'id'|'date'|'resolved'|'created_at'>) => wrapApiCall(() => supabase!.from('incidents').insert([{ ...incident, date: new Date().toISOString(), resolved: false }]));
-    const resolveIncident = (incidentId: string) => wrapApiCall(() => supabase!.from('incidents').update({ resolved: true }).eq('id', incidentId));
-    const handleDispatch = (note: Omit<DispatchNote, 'id'|'status'|'created_at'>) => wrapApiCall(async () => {
-        const newNote = { ...note, id: `disp-${Date.now()}`, status: 'Despachado' };
-        await supabase!.from('dispatch_notes').insert([newNote]);
-        await supabase!.from('wine_packs').update({ status: 'Despachado' }).in('id', note.packIds);
-    });
-    // FIX: Changed arrow functions to async to match the expected Promise return type of wrapApiCall.
-    const handleAddUser = (user: Omit<User, 'id'>) => wrapApiCall(async () => { console.log("Add user not implemented", user) });
-    const handleUpdateUser = (user: User) => wrapApiCall(async () => { console.log("Update user not implemented", user) });
-    const handleDeleteUser = (userId: string) => wrapApiCall(async () => { console.log("Delete user not implemented", userId) });
-    const handleAddRole = (role: Omit<Role, 'id'|'created_at'>) => wrapApiCall(() => supabase!.from('roles').insert([role]));
-    const handleUpdateRole = (role: Role) => wrapApiCall(() => supabase!.from('roles').update(role).eq('id', role.id));
-    const handleDeleteRole = (roleId: string) => wrapApiCall(() => supabase!.from('roles').delete().eq('id', roleId));
-
-
-    const value: DataContextType = {
-        currentUser, albaranes, incidents, packs, salidas, supplies, packModels, users, roles, auditLogs, loadingData,
-        addAlbaran, updateAlbaran, deleteAlbaran, addPack, addPackModel, addNewSupply, addSupplyStock, addIncident,
-        resolveIncident, handleDispatch, handleAddUser, handleUpdateUser, handleDeleteUser, handleAddRole,
-        handleUpdateRole, handleDeleteRole,
+    const addRole = async (role: Omit<Role, 'id' | 'created_at'>) => {
+        if (!supabase) return;
+        const { error } = await supabase.from('roles').insert(role);
+        if (error) throw error;
+        if (currentUser) await addAuditLog(`Creó el rol ${role.name}`, currentUser.id, currentUser.name);
+        await fetchData();
     };
 
-    if (loadingData || !currentUser) {
-        return <div className="min-h-screen bg-brand-light flex justify-center items-center"><Spinner /></div>;
-    }
+    const updateRole = async (role: Role) => {
+        if (!supabase) return;
+        const { error } = await supabase.from('roles').update({ name: role.name, permissions: role.permissions }).eq('id', role.id);
+        if (error) throw error;
+        if (currentUser) await addAuditLog(`Actualizó el rol ${role.name}`, currentUser.id, currentUser.name);
+        await fetchData();
+    };
+
+    const deleteRole = async (roleId: string) => {
+        if (!supabase) return;
+        const roleToDelete = roles.find(r => r.id === roleId);
+        const { error } = await supabase.from('roles').delete().eq('id', roleId);
+        if (error) throw error;
+        if (currentUser && roleToDelete) await addAuditLog(`Eliminó el rol ${roleToDelete.name}`, currentUser.id, currentUser.name);
+        await fetchData();
+    };
+
+    const value = {
+        currentUser, users, roles, albaranes, incidents, supplies, packs, packModels, salidas, auditLogs, loadingData,
+        addAlbaran, updateAlbaran, deleteAlbaran,
+        addIncident, resolveIncident,
+        addNewSupply, addSupplyStock,
+        addPackModel, addPack,
+        handleDispatch,
+        addUser, updateUser, deleteUser,
+        addRole, updateRole, deleteRole,
+        addAuditLog
+    };
 
     return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };

@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Role, Permission } from '../../types';
 import { PERMISSIONS_LIST } from '../../constants';
 import Modal from '../ui/Modal';
@@ -21,6 +20,16 @@ const RoleModal: React.FC<RoleModalProps> = ({ role, onSave, onClose }) => {
         else newPermissions.delete(permission);
         setPermissions(newPermissions);
     };
+    
+    const handleCategoryChange = (categoryPermissions: Permission[], checked: boolean) => {
+        const newPermissions = new Set(permissions);
+        if (checked) {
+            categoryPermissions.forEach(p => newPermissions.add(p));
+        } else {
+            categoryPermissions.forEach(p => newPermissions.delete(p));
+        }
+        setPermissions(newPermissions);
+    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -35,6 +44,52 @@ const RoleModal: React.FC<RoleModalProps> = ({ role, onSave, onClose }) => {
         return acc;
     }, {} as Record<string, typeof PERMISSIONS_LIST>);
 
+    const CategoryPermissions: React.FC<{ category: string; perms: typeof PERMISSIONS_LIST }> = ({ category, perms }) => {
+        const categoryPermissionIds = perms.map(p => p.id);
+        const selectedCount = categoryPermissionIds.filter(pId => permissions.has(pId)).length;
+        const allSelected = selectedCount === categoryPermissionIds.length;
+        const someSelected = selectedCount > 0 && !allSelected;
+        
+        const categoryCheckboxRef = useRef<HTMLInputElement>(null);
+
+        useEffect(() => {
+            if (categoryCheckboxRef.current) {
+                categoryCheckboxRef.current.indeterminate = someSelected;
+            }
+        }, [someSelected]);
+
+        return (
+            <fieldset className="border rounded-md p-4">
+                <div className="flex justify-between items-center mb-2 -mt-1">
+                    <legend className="font-semibold text-sm px-2">{category}</legend>
+                    <label className="flex items-center space-x-2 text-sm text-gray-600 pr-2 cursor-pointer">
+                        <input 
+                            type="checkbox"
+                            ref={categoryCheckboxRef}
+                            checked={allSelected}
+                            onChange={e => handleCategoryChange(categoryPermissionIds, e.target.checked)}
+                            className="h-4 w-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"
+                        />
+                        <span>Seleccionar Todos</span>
+                    </label>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 mt-2">
+                    {perms.map(p => (
+                        <label key={p.id} className="flex items-center space-x-2 cursor-pointer">
+                            <input 
+                                type="checkbox" 
+                                checked={permissions.has(p.id)} 
+                                onChange={e => handlePermissionChange(p.id, e.target.checked)} 
+                                className="h-4 w-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500" 
+                            />
+                            <span className="text-gray-700">{p.label}</span>
+                        </label>
+                    ))}
+                </div>
+            </fieldset>
+        );
+    };
+
     return (
         <Modal title={role ? `Editando Rol: ${role.name}` : 'Crear Nuevo Rol'} onClose={onClose} maxWidth="max-w-3xl">
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -43,18 +98,14 @@ const RoleModal: React.FC<RoleModalProps> = ({ role, onSave, onClose }) => {
                     <h4 className="text-sm font-medium mb-3">Permisos</h4>
                     <div className="space-y-4">
                         {Object.entries(permissionsByCategory).map(([category, perms]) => (
-                            <fieldset key={category} className="border rounded-md p-4">
-                                <legend className="font-semibold text-sm px-2">{category}</legend>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 mt-2">
-                                    {perms.map(p => (
-                                        <label key={p.id} className="flex items-center space-x-2"><input type="checkbox" checked={permissions.has(p.id)} onChange={e => handlePermissionChange(p.id, e.target.checked)} className="h-4 w-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500" /><span>{p.label}</span></label>
-                                    ))}
-                                </div>
-                            </fieldset>
+                            <CategoryPermissions key={category} category={category} perms={perms} />
                         ))}
                     </div>
                 </div>
-                <div className="flex justify-end space-x-3 pt-4 border-t"><Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button><Button type="submit">Guardar Rol</Button></div>
+                <div className="flex justify-end space-x-3 pt-4 border-t">
+                    <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+                    <Button type="submit">{role ? 'Guardar Cambios' : 'Crear Rol'}</Button>
+                </div>
             </form>
         </Modal>
     );

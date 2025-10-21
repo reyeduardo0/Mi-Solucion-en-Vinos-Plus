@@ -80,6 +80,9 @@ const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, 
     
     const removeImage = () => {
         setPalletImageFile(null);
+        if (imagePreview) {
+            URL.revokeObjectURL(imagePreview);
+        }
         setImagePreview(null);
         const input = document.getElementById(`pallet-image-input-${index}`) as HTMLInputElement;
         if (input) input.value = '';
@@ -92,14 +95,16 @@ const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, 
             const prompt = `From this pallet label, extract: SSCC, Product name ('Descripción'), Lot number ('Lote fabricación'), Bottles per box ('Botellas/caja'), Boxes per pallet ('Cajas/palet'), Total bottles per pallet ('Botellas/palet'), Bottle EAN ('EANBotella'), Box EAN ('EANCaja'), Pallet Number ('Nº Palet'). Return JSON with keys: sscc, productName, lot, bottlesPerBox, boxesPerPallet, totalBottles, eanBottle, eanBox, palletNumber. Ensure numeric values are numbers.`;
             const extractedData = await extractDataFromImage(palletImageFile, prompt);
             
+            const totalBottles = (extractedData.boxesPerPallet || pallet.boxesPerPallet || 0) * (extractedData.bottlesPerBox || pallet.bottlesPerBox || 0);
+
             updatePallet(index, {
                 ...pallet,
                 palletNumber: extractedData.palletNumber != null ? String(extractedData.palletNumber) : pallet.palletNumber,
                 sscc: extractedData.sscc || pallet.sscc,
-                product: { name: extractedData.productName || pallet.product?.name || '', lot: extractedData.lot || pallet.product?.lot || '' },
+                product: { name: capitalizeWords(extractedData.productName || pallet.product?.name || ''), lot: extractedData.lot || pallet.product?.lot || '' },
                 bottlesPerBox: extractedData.bottlesPerBox || pallet.bottlesPerBox,
                 boxesPerPallet: extractedData.boxesPerPallet || pallet.boxesPerPallet,
-                totalBottles: extractedData.totalBottles || pallet.totalBottles,
+                totalBottles: extractedData.totalBottles || totalBottles,
                 eanBottle: extractedData.eanBottle || pallet.eanBottle,
                 eanBox: extractedData.eanBox || pallet.eanBox,
             });

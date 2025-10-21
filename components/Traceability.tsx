@@ -16,8 +16,9 @@ const EmptyIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-12 
 
 interface TraceabilityData { pack: WinePack; sourcePallet?: Pallet & { albaranId: string; carrier: string; entryDate: string; }; dispatch?: DispatchNote; }
 
-const TimelineStep: React.FC<{ icon: React.ReactNode; title: string; children: React.ReactNode; isLast?: boolean }> = ({ icon, title, children, isLast = false }) => (
-    <li><div className="relative pb-8">{!isLast && <span className="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200" />}<div className="relative flex items-start space-x-3"><div className="z-10 flex items-center justify-center w-8 h-8 bg-brand-yellow rounded-full ring-4 ring-white">{React.cloneElement(icon as React.ReactElement, { className: "h-5 w-5 text-brand-dark"})}</div><div className="min-w-0 flex-1"><h3 className="text-lg font-semibold text-gray-800">{title}</h3><div className="mt-2 text-sm text-gray-600 space-y-2">{children}</div></div></div></div></li>
+// FIX: Changed icon prop type to be more specific for cloneElement.
+const TimelineStep: React.FC<{ icon: React.ReactElement<{ className?: string }>; title: string; children: React.ReactNode; isLast?: boolean }> = ({ icon, title, children, isLast = false }) => (
+    <li><div className="relative pb-8">{!isLast && <span className="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200" />}<div className="relative flex items-start space-x-3"><div className="z-10 flex items-center justify-center w-8 h-8 bg-brand-yellow rounded-full ring-4 ring-white">{React.cloneElement(icon, { className: "h-5 w-5 text-brand-dark"})}</div><div className="min-w-0 flex-1"><h3 className="text-lg font-semibold text-gray-800">{title}</h3><div className="mt-2 text-sm text-gray-600 space-y-2">{children}</div></div></div></div></li>
 );
 
 const InfoPair: React.FC<{ label: string; value?: string | number }> = ({ label, value }) => (<p><strong className="font-medium text-gray-900">{label}:</strong> {value || 'N/A'}</p>);

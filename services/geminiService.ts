@@ -22,7 +22,8 @@ export const extractDataFromImage = async (imageFile: File, prompt: string): Pro
     const imagePart = await fileToGenerativePart(imageFile);
     
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      // FIX: Use a recommended model.
+      model: 'gemini-2.5-flash-image',
       contents: {
         parts: [
           { text: prompt },
