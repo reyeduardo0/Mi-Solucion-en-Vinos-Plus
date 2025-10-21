@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Albaran, Pallet } from '../types';
 import { extractDataFromImage } from '../services/geminiService';
@@ -57,6 +57,8 @@ const PalletInput: React.FC<{
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    
+    const isAIAvailable = useMemo(() => !!process.env.API_KEY, []);
 
     const isIncident = pallet.incident !== undefined;
     const incidentDescription = pallet.incident?.description || '';
@@ -186,19 +188,24 @@ const PalletInput: React.FC<{
                      {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">{error}</div>}
                      <div className="p-4 bg-gray-50 rounded-lg border">
                          <h4 className="font-semibold text-sm mb-2 text-gray-600">Extracción Automática por IA</h4>
-                         <p className="text-xs text-gray-500 mb-2">Sube una foto de la etiqueta del pallet para rellenar los datos.</p>
-                         
-                         {imagePreview && (
+                         {!isAIAvailable && (
+                            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-3 text-sm rounded-md mb-3">
+                                <p><strong>Función no disponible:</strong> La clave API de IA no está configurada.</p>
+                            </div>
+                         )}
+                        <p className="text-xs text-gray-500 mb-2">Sube una foto de la etiqueta del pallet para rellenar los datos.</p>
+                        
+                        {imagePreview && (
                             <div className="my-2 relative w-32 h-32">
                                 <img src={imagePreview} alt={`Previsualización Pallet ${index + 1}`} className="rounded-md object-cover w-full h-full" />
                                 <button type="button" onClick={removeImage} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs font-bold hover:bg-red-700 transition-colors" aria-label="Eliminar imagen">&times;</button>
                             </div>
-                         )}
+                        )}
 
-                         <input type="file" id={`pallet-image-input-${index}`} accept="image/*" onChange={handlePalletImageChange} className="mb-2 block w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-700 hover:file:bg-yellow-200"/>
-                         <Button type="button" onClick={processPalletImage} disabled={!palletImageFile || isLoading}>
-                             {isLoading ? <Spinner /> : 'Extraer datos de etiqueta'}
-                         </Button>
+                        <input type="file" id={`pallet-image-input-${index}`} accept="image/*" onChange={handlePalletImageChange} className="mb-2 block w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-700 hover:file:bg-yellow-200 disabled:opacity-50" disabled={!isAIAvailable} />
+                        <Button type="button" onClick={processPalletImage} disabled={!palletImageFile || isLoading || !isAIAvailable}>
+                            {isLoading ? <Spinner /> : 'Extraer datos de etiqueta'}
+                        </Button>
                      </div>
 
                     <div className="relative my-4">
@@ -263,6 +270,8 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onAddAlbaran, onUpdateAlbar
   const { albaranId: paramId } = useParams<{ albaranId: string }>();
   const isEditMode = !!paramId;
   
+  const isAIAvailable = useMemo(() => !!process.env.API_KEY, []);
+
   const [albaranId, setAlbaranId] = useState('');
   const [truckPlate, setTruckPlate] = useState('');
   const [carrier, setCarrier] = useState('');
@@ -500,15 +509,23 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onAddAlbaran, onUpdateAlbar
                 <Card className="mb-6 border-brand-yellow border-2 bg-yellow-50">
                     <h3 className="text-lg font-semibold text-gray-800 mb-2">Extracción Automática por IA</h3>
                     <p className="text-sm text-gray-600 mb-4">Sube una foto del albarán para que la IA extraiga los datos principales.</p>
+                    
+                    {!isAIAvailable && (
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                           La variable de entorno API_KEY no está configurada. Las funciones de IA están desactivadas.
+                        </div>
+                    )}
                     {extractionError && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">{extractionError}</div>}
+                    
                     <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-2 sm:space-y-0">
                         <input 
                             type="file" 
                             accept="image/*" 
                             onChange={handleAlbaranImageChange}
-                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-200 file:text-gray-700 hover:file:bg-gray-300"
+                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-200 file:text-gray-700 hover:file:bg-gray-300 disabled:opacity-50"
+                            disabled={!isAIAvailable}
                         />
-                        <Button type="button" className="w-full sm:w-auto" onClick={handleAlbaranImageExtraction} disabled={!albaranImageFile || isExtracting}>
+                        <Button type="button" className="w-full sm:w-auto" onClick={handleAlbaranImageExtraction} disabled={!albaranImageFile || isExtracting || !isAIAvailable}>
                             {isExtracting ? <Spinner /> : 'Procesar Albarán'}
                         </Button>
                     </div>

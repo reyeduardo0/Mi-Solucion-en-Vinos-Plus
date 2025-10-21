@@ -1,5 +1,4 @@
 
-
 import { GoogleGenAI } from "@google/genai";
 
 const fileToGenerativePart = async (file: File) => {
@@ -15,7 +14,7 @@ const fileToGenerativePart = async (file: File) => {
 
 export const extractDataFromImage = async (imageFile: File, prompt: string): Promise<any> => {
   if (!process.env.API_KEY) {
-    throw new Error("API_KEY environment variable is not set.");
+    throw new Error("Falta la clave API de IA. Por favor, configure la variable de entorno API_KEY.");
   }
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -41,7 +40,11 @@ export const extractDataFromImage = async (imageFile: File, prompt: string): Pro
     return JSON.parse(cleanedText);
 
   } catch (error) {
+    // FIX: Added opening brace for the catch block to fix syntax error.
     console.error("Error calling Gemini API:", error);
-    throw new Error("Failed to extract data from image. Please check the console for details.");
+    if (error instanceof Error && error.message.includes("API key not valid")) {
+        throw new Error("La clave API proporcionada no es válida. Por favor, verifique su configuración.");
+    }
+    throw new Error("Fallo al extraer datos de la imagen. Por favor, revise la consola para más detalles.");
   }
 };
