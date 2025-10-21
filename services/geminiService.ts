@@ -1,6 +1,3 @@
-
-
-
 import { GoogleGenAI } from "@google/genai";
 
 const fileToGenerativePart = async (file: File) => {
@@ -24,8 +21,8 @@ export const extractDataFromImage = async (imageFile: File, prompt: string): Pro
     const imagePart = await fileToGenerativePart(imageFile);
     
     const response = await ai.models.generateContent({
-      // FIX: Use a recommended model.
-      model: 'gemini-2.5-flash-image',
+      // Use gemini-2.5-flash as it is a multimodal model suitable for text extraction from images.
+      model: 'gemini-2.5-flash',
       contents: {
         parts: [
           { text: prompt },
