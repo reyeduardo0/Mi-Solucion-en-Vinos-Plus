@@ -1,32 +1,12 @@
+
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Albaran, Pallet } from '../types';
+import { Pallet } from '../types';
 import Card from './ui/Card';
 import Button from './ui/Button';
-
-const formatDateTimeSafe = (dateString?: string): string => {
-    if (!dateString) return 'Fecha inválida';
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-        return 'Fecha inválida';
-    }
-    return date.toLocaleString('es-ES', { dateStyle: 'long', timeStyle: 'short' });
-};
-
-const StatusBadge: React.FC<{ status: 'pending' | 'verified' | 'incident' }> = ({ status }) => {
-    const statusMap = {
-        pending: { text: 'Pendiente', color: 'bg-gray-100 text-gray-800' },
-        verified: { text: 'Verificado', color: 'bg-green-100 text-green-800' },
-        incident: { text: 'Incidencia', color: 'bg-yellow-100 text-yellow-800' },
-    };
-    const { text, color } = statusMap[status];
-
-    return (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}>
-            {text}
-        </span>
-    );
-};
+import { useData } from '../context/DataContext';
+import { formatDateTimeLong } from '../utils/helpers';
+import StatusBadge from './ui/StatusBadge';
 
 const InfoPair: React.FC<{ label: string; value?: React.ReactNode }> = ({ label, value }) => (
     <div>
@@ -59,13 +39,10 @@ const PalletDetailCard: React.FC<{ pallet: Pallet, index: number }> = ({ pallet,
 };
 
 
-interface GoodsReceiptDetailProps {
-  albaranes: Albaran[];
-}
-
-const GoodsReceiptDetail: React.FC<GoodsReceiptDetailProps> = ({ albaranes }) => {
+const GoodsReceiptDetail: React.FC = () => {
     const { albaranId } = useParams<{ albaranId: string }>();
     const navigate = useNavigate();
+    const { albaranes } = useData();
     const albaran = albaranes.find(a => a.id === albaranId);
 
     if (!albaran) {
@@ -85,16 +62,14 @@ const GoodsReceiptDetail: React.FC<GoodsReceiptDetailProps> = ({ albaranes }) =>
                     <h1 className="text-3xl font-bold text-gray-800">Detalle de Entrada</h1>
                     <p className="text-gray-500 font-mono">ID Albarán: {albaran.id}</p>
                 </div>
-                <Button onClick={() => navigate('/entradas')} variant="secondary">
-                    &larr; Volver a la Lista
-                </Button>
+                <Button onClick={() => navigate('/entradas')} variant="secondary">&larr; Volver a la Lista</Button>
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-1 space-y-6">
                     <Card title="Información General">
                         <dl className="space-y-4">
-                            <InfoPair label="Fecha y Hora de Entrada" value={formatDateTimeSafe(albaran.entryDate)} />
+                            <InfoPair label="Fecha y Hora de Entrada" value={formatDateTimeLong(albaran.entryDate)} />
                             <InfoPair label="Estado" value={<StatusBadge status={albaran.status} />} />
                             <InfoPair label="Número de Pallets" value={albaran.pallets.length} />
                         </dl>

@@ -1,67 +1,23 @@
+
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Albaran } from '../types';
 import Card from './ui/Card';
 import Button from './ui/Button';
 import { usePermissions } from '../hooks/usePermissions';
+import { useData } from '../context/DataContext';
+import { formatDateTimeSafe } from '../utils/helpers';
+import ConfirmationModal from './ui/ConfirmationModal';
+import StatusBadge from './ui/StatusBadge';
 
 const PlusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>;
 
-const StatusBadge: React.FC<{ status: 'pending' | 'verified' | 'incident' }> = ({ status }) => {
-    const statusMap = {
-        pending: { text: 'Pendiente', color: 'bg-gray-100 text-gray-800' },
-        verified: { text: 'Verificado', color: 'bg-green-100 text-green-800' },
-        incident: { text: 'Incidencia', color: 'bg-yellow-100 text-yellow-800' },
-    };
-    const { text, color } = statusMap[status];
-
-    return (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}>
-            {text}
-        </span>
-    );
-};
-
-const Modal: React.FC<{ children: React.ReactNode; title: string; onClose: () => void; maxWidth?: string }> = ({ children, title, onClose, maxWidth = 'max-w-md' }) => (
-    <div className="fixed inset-0 bg-black bg-opacity-60 z-40 flex justify-center items-center p-4" onClick={onClose}>
-        <div className={`bg-white rounded-lg shadow-xl w-full ${maxWidth}`} onClick={e => e.stopPropagation()}>
-             <div className="flex justify-between items-center p-6 border-b">
-                <h3 className="text-xl font-bold">{title}</h3>
-                <button onClick={onClose} className="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
-            </div>
-            <div className="p-6">{children}</div>
-        </div>
-    </div>
-);
-
-const ConfirmationModal: React.FC<{ title: string, message: string; onConfirm: () => void; onCancel: () => void; }> = ({ title, message, onConfirm, onCancel }) => (
-    <Modal title={title} onClose={onCancel}>
-        <p className="text-gray-600">{message}</p>
-        <div className="flex justify-end space-x-3 mt-6">
-            <Button variant="secondary" onClick={onCancel}>Cancelar</Button>
-            <Button variant="danger" onClick={onConfirm}>Sí, eliminar</Button>
-        </div>
-    </Modal>
-);
-
-interface GoodsReceiptListProps {
-  albaranes: Albaran[];
-  onDeleteAlbaran: (albaranId: string) => Promise<void>;
-}
-
-const formatDateTimeSafe = (dateString?: string): string => {
-    if (!dateString) return 'Fecha inválida';
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) {
-        return 'Fecha inválida';
-    }
-    return date.toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
-};
-
-const GoodsReceiptList: React.FC<GoodsReceiptListProps> = ({ albaranes, onDeleteAlbaran }) => {
+const GoodsReceiptList: React.FC = () => {
     const navigate = useNavigate();
-    const [searchTerm, setSearchTerm] = useState('');
+    const { albaranes, deleteAlbaran } = useData();
     const { can } = usePermissions();
+
+    const [searchTerm, setSearchTerm] = useState('');
     const [albaranToDelete, setAlbaranToDelete] = useState<Albaran | null>(null);
 
     const filteredAlbaranes = useMemo(() => {
@@ -81,17 +37,14 @@ const GoodsReceiptList: React.FC<GoodsReceiptListProps> = ({ albaranes, onDelete
     const handleConfirmDelete = async () => {
         if (albaranToDelete) {
             try {
-                await onDeleteAlbaran(albaranToDelete.id);
-            } catch (error) {
-                console.error("Error deleting albaran:", error);
-                const errorMessage = error instanceof Error ? error.message : "Ocurrió un error desconocido.";
-                alert(`No se pudo eliminar la entrada:\n${errorMessage}`);
+                await deleteAlbaran(albaranToDelete.id);
+            } catch (error: any) {
+                alert(`No se pudo eliminar la entrada:\n${error.message}`);
             } finally {
                 setAlbaranToDelete(null);
             }
         }
     };
-
 
     return (
         <div className="p-4 sm:p-6 lg:p-8">

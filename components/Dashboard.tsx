@@ -1,17 +1,10 @@
+
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import Card from './ui/Card';
 import { NewEntryIcon, NewPackIcon, NewExitIcon } from '../constants';
-// FIX: Added CartesianGrid to recharts import.
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
-import { Albaran, Incident, WinePack } from '../types';
-
-interface DashboardProps {
-  albaranes: Albaran[];
-  incidents: Incident[];
-  packs: WinePack[];
-  salidas: any[]; // Assuming simple array for now
-  navigateTo: (path: string) => void;
-}
+import { useData } from '../context/DataContext';
 
 const QuickAccessButton: React.FC<{ icon: React.ReactNode; text: string; onClick: () => void; }> = ({ icon, text, onClick }) => (
     <button onClick={onClick} className="w-full flex items-center justify-center p-3 bg-yellow-400 text-black font-semibold rounded-lg hover:bg-yellow-500 transition-colors duration-200">
@@ -27,7 +20,10 @@ const StatCard: React.FC<{ title: string; value: string | number; colorClass: st
     </div>
 );
 
-const Dashboard: React.FC<DashboardProps> = ({ albaranes, incidents, packs, salidas, navigateTo }) => {
+const Dashboard: React.FC = () => {
+  const navigateTo = useNavigate();
+  const { albaranes, incidents, packs, salidas } = useData();
+
   const totalPallets = albaranes.reduce((sum, a) => sum + a.pallets.length, 0);
   const totalBottles = albaranes.reduce((sum, a) => sum + a.pallets.reduce((pSum, p) => pSum + p.totalBottles, 0), 0);
   const openIncidents = incidents.filter(i => !i.resolved).length;
@@ -55,7 +51,6 @@ const Dashboard: React.FC<DashboardProps> = ({ albaranes, incidents, packs, sali
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <QuickAccessButton icon={<NewEntryIcon/>} text="Nueva Entrada" onClick={() => navigateTo('/entradas/nueva')} />
             <QuickAccessButton icon={<NewPackIcon/>} text="Crear Pack" onClick={() => navigateTo('/packing')} />
-            {/* FIX: Corrected typo from QuickAccessAccessButton to QuickAccessButton. */}
             <QuickAccessButton icon={<NewExitIcon/>} text="Nueva Salida" onClick={() => navigateTo('/salidas')} />
         </div>
       </section>

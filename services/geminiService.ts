@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI } from "@google/genai";
 
 const fileToGenerativePart = async (file: File) => {
@@ -36,7 +37,7 @@ export const extractDataFromImage = async (imageFile: File, prompt: string): Pro
     const text = response.text.trim();
     // Clean potential markdown code block fences
     // FIX: Replaced original regex to avoid a browser-specific parsing error.
-    const cleanedText = text.replace(/^[\`]{3}json\s*|[\`]{3}\s*$/g, '');
+    const cleanedText = text.replace(/^```json\s*|```\s*$/g, '');
     return JSON.parse(cleanedText);
 
   } catch (error) {
