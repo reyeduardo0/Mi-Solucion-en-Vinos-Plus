@@ -1,5 +1,6 @@
 
 
+
 import { GoogleGenAI } from "@google/genai";
 
 const fileToGenerativePart = async (file: File) => {
@@ -14,11 +15,12 @@ const fileToGenerativePart = async (file: File) => {
 };
 
 export const extractDataFromImage = async (imageFile: File, prompt: string): Promise<any> => {
-  if (!process.env.API_KEY) {
-    throw new Error("Falta la clave API de IA. Por favor, configure la variable de entorno API_KEY.");
+  const apiKey = (window as any).process?.env?.API_KEY;
+  if (!apiKey) {
+    throw new Error("La variable de entorno API_KEY no está configurada. Las funciones de IA están desactivadas.");
   }
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey });
     const imagePart = await fileToGenerativePart(imageFile);
     
     const response = await ai.models.generateContent({

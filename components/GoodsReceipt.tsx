@@ -18,7 +18,7 @@ const GoodsReceipt: React.FC = () => {
 
   const { albaranes, addAlbaran, updateAlbaran, loadingData } = useData();
   
-  const isAIAvailable = useMemo(() => !!process.env.API_KEY, []);
+  const isAIAvailable = useMemo(() => !!(window as any).process?.env?.API_KEY, []);
 
   const [albaranId, setAlbaranId] = useState('');
   const [truckPlate, setTruckPlate] = useState('');

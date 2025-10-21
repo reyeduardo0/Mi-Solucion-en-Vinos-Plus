@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useMemo } from 'react';
 import { Pallet } from '../../types';
 import { fileToBase64, capitalizeWords } from '../../utils/helpers';
@@ -41,7 +42,7 @@ const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
-    const isAIAvailable = useMemo(() => !!process.env.API_KEY, []);
+    const isAIAvailable = useMemo(() => !!(window as any).process?.env?.API_KEY, []);
 
     const isIncident = pallet.incident !== undefined;
     const incidentDescription = pallet.incident?.description || '';
