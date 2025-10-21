@@ -47,6 +47,14 @@
 </head>
   <body class="bg-brand-light">
     <div id="root"></div>
+    <script>
+      // Define the environment variable for the application at runtime
+      window.process = {
+        env: {
+          API_KEY: 'AIzaSyBtqshzmelmk3uFlejvnA9EE4m3mRynn3c'
+        }
+      };
+    </script>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>
