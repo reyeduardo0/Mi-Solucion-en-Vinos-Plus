@@ -16,7 +16,11 @@ import {
 } from '../../constants';
 import { usePermissions } from '../../hooks/usePermissions';
 
-const Sidebar: React.FC = () => {
+interface SidebarProps {
+  onLinkClick?: () => void;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ onLinkClick }) => {
     const { can } = usePermissions();
 
     const navLinks = [
@@ -49,6 +53,7 @@ const Sidebar: React.FC = () => {
                     key={link.path}
                     to={link.path}
                     end={link.path === '/'}
+                    onClick={onLinkClick}
                     className={({ isActive }) =>
                       `flex items-center space-x-3 p-2 rounded-md font-medium text-sm transition-colors duration-200 ${
                         isActive
@@ -69,6 +74,7 @@ const Sidebar: React.FC = () => {
                     <NavLink
                         key={link.path}
                         to={link.path}
+                        onClick={onLinkClick}
                         className={({ isActive }) =>
                         `flex items-center space-x-3 p-2 rounded-md font-medium text-sm transition-colors duration-200 ${
                             isActive

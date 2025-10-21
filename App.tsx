@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { Session } from '@supabase/supabase-js';
@@ -108,11 +107,24 @@ const AppLayout: React.FC = () => {
 
     return (
         <PermissionsProvider user={currentUser} roles={roles}>
-            <div className="flex h-screen bg-gray-100">
+            <div className="relative flex h-screen bg-gray-100">
+                {/* Desktop Sidebar */}
                 <div className="hidden md:flex flex-shrink-0">
                     <Sidebar />
                 </div>
                 
+                {/* Mobile Sidebar & Overlay */}
+                <div 
+                    className={`fixed inset-0 z-20 bg-black bg-opacity-50 transition-opacity md:hidden ${isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                    onClick={() => setIsSidebarOpen(false)}
+                    aria-hidden="true"
+                ></div>
+                <div 
+                    className={`fixed inset-y-0 left-0 z-30 w-64 transform transition-transform duration-300 ease-in-out md:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+                >
+                    <Sidebar onLinkClick={() => setIsSidebarOpen(false)} />
+                </div>
+
                 <div className="flex-1 flex flex-col overflow-hidden">
                     <Header 
                         user={currentUser} 
