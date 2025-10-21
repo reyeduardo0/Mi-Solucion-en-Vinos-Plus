@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo } from 'react';
 import { Pallet } from '../../types';
 import { fileToBase64, capitalizeWords } from '../../utils/helpers';
@@ -18,12 +19,20 @@ interface PalletInputProps {
     isDuplicate: boolean;
 }
 
-const CheckCircleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" {...props}><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+// FIX: Modify icon component to accept a `title` prop and render it as a <title> element for accessibility and to fix the type error.
+const CheckCircleIcon: React.FC<React.SVGProps<SVGSVGElement> & { title?: string }> = ({ title, ...props }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" {...props}>
+        {title && <title>{title}</title>}
+        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+    </svg>
 );
 
-const ExclamationIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" {...props}><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-1-5a1 1 0 102 0v-4a1 1 0 10-2 0v4zm1-8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>
+// FIX: Modify icon component to accept a `title` prop and render it as a <title> element for accessibility and to fix the type error.
+const ExclamationIcon: React.FC<React.SVGProps<SVGSVGElement> & { title?: string }> = ({ title, ...props }) => (
+     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" {...props}>
+        {title && <title>{title}</title>}
+        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-1-5a1 1 0 102 0v-4a1 1 0 10-2 0v4zm1-8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+    </svg>
 );
 
 const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, isCollapsed, updatePallet, onToggleCollapse, onCopyToOthers, isDuplicate }) => {
