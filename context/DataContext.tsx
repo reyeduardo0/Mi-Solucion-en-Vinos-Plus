@@ -3,6 +3,19 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from '../services/supabaseClient';
 import { Albaran, User, Role, AuditLog, Incident, Supply, PackModel, WinePack, DispatchNote } from '../types';
 
+const SUPER_USER_EMAIL = 'reyeduardo0@gmail.com';
+const SUPER_USER_ROLE_NAME = 'Super Usuario';
+
+// Helper to create a stable, URL-friendly ID from a name
+const generateRoleIdFromName = (name: string): string => {
+    return name
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove accents
+        .replace(/\s+/g, '-') // replace spaces with -
+        .replace(/[^\w-]+/g, ''); // remove all non-word chars except -
+};
+
+
 // Define the shape of the context data
 interface DataContextType {
     currentUser: User | null;
@@ -77,12 +90,32 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         if (!supabase || !session.user) return;
         setLoadingData(true);
         try {
+            // First, fetch roles to ensure they are available for user profile creation.
+            const rolesRes = await supabase.from('roles').select('*');
+            if (rolesRes.error) throw rolesRes.error;
+            let fetchedRoles = rolesRes.data as Role[];
+
+            // Ensure Super User role exists
+            let superUserRole = fetchedRoles.find(r => r.name === SUPER_USER_ROLE_NAME);
+            if (!superUserRole) {
+                console.log(`'${SUPER_USER_ROLE_NAME}' role not found. Creating it...`);
+                const superUserRoleId = generateRoleIdFromName(SUPER_USER_ROLE_NAME);
+                const { data: newRole, error: newRoleError } = await supabase.from('roles').insert({
+                    id: superUserRoleId,
+                    name: SUPER_USER_ROLE_NAME,
+                    permissions: ['*'] // Wildcard for all permissions
+                }).select().single();
+                if (newRoleError) throw newRoleError;
+                superUserRole = newRole as Role;
+                fetchedRoles.push(superUserRole);
+            }
+            setRoles(fetchedRoles);
+
             const [
-                usersRes, rolesRes, albaranesRes, incidentsRes, suppliesRes, packsRes, packModelsRes, salidasRes, auditLogsRes
+                usersRes, albaranesRes, incidentsRes, suppliesRes, packsRes, packModelsRes, salidasRes, auditLogsRes
             ] = await Promise.all([
                 supabase.from('users').select('*'),
-                supabase.from('roles').select('*'),
-                supabase.from('albaranes').select('*, pallets:pallets(*)'),
+                supabase.from('albaranes').select('*, pallets(*)'),
                 supabase.from('incidents').select('*').order('created_at', { ascending: false }),
                 supabase.from('supplies').select('*'),
                 supabase.from('wine_packs').select('*'),
@@ -91,10 +124,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }),
             ]);
 
-            if (rolesRes.error) throw rolesRes.error;
-            const fetchedRoles = rolesRes.data as Role[];
-            setRoles(fetchedRoles);
-            
             if (usersRes.error) throw usersRes.error;
             let fetchedUsers: User[] = (usersRes.data || []).map((u: any) => ({
                 id: u.id,
@@ -103,80 +132,48 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 roleId: u.role_id,
             }));
 
+            // Handle the current user's profile
             let currentUserData = fetchedUsers.find(u => u.id === session.user.id);
+            const isSuperUserSession = session.user.email === SUPER_USER_EMAIL;
 
-            if (!currentUserData && session.user && fetchedRoles.length > 0) {
-                console.warn(`User profile for ${session.user.email} not found. Creating a default profile.`);
+            // If the super user profile is missing or incorrect, fix it.
+            if (isSuperUserSession && (!currentUserData || currentUserData.roleId !== superUserRole.id)) {
+                console.log("Ensuring Super User profile integrity...");
+                const { data: upsertedSuperUser, error: upsertError } = await supabase.from('users').upsert({
+                    id: session.user.id,
+                    email: session.user.email,
+                    full_name: 'Rey Eduardo',
+                    role_id: superUserRole.id
+                }).select().single();
+
+                if (upsertError) throw upsertError;
                 
-                const defaultRole = fetchedRoles.find(r => r.name.toLowerCase() !== 'admin') || fetchedRoles[0];
-                if (defaultRole) {
-                    const newUserProfileData = {
-                        id: session.user.id,
-                        email: session.user.email!,
-                        full_name: session.user.email!,
-                        role_id: defaultRole.id,
-                    };
-
-                    const { data: createdProfile, error: insertError } = await supabase
-                        .from('users')
-                        .insert(newUserProfileData)
-                        .select()
-                        .single();
-
-                    if (insertError) {
-                        console.error("Error creating missing user profile:", insertError.message);
-                    } else {
-                        currentUserData = {
-                            id: createdProfile.id,
-                            name: createdProfile.full_name,
-                            email: createdProfile.email,
-                            roleId: createdProfile.role_id,
-                        };
-                        fetchedUsers.push(currentUserData);
-                        console.log(`Default profile created for ${session.user.email} with role '${defaultRole.name}'`);
-                    }
-                } else {
-                     console.error("Cannot create default user profile: No roles found in the database.");
-                }
+                currentUserData = { id: upsertedSuperUser.id, name: upsertedSuperUser.full_name, email: upsertedSuperUser.email, roleId: upsertedSuperUser.role_id };
+                // Update the fetched users list with the corrected super user profile
+                fetchedUsers = fetchedUsers.filter(u => u.id !== session.user.id).concat(currentUserData);
             }
-
+            
             setUsers(fetchedUsers);
             setCurrentUser(currentUserData || null);
 
-            if (albaranesRes.error) throw albaranesRes.error;
-            setAlbaranes(albaranesRes.data as Albaran[]);
-            
-            if (incidentsRes.error) throw incidentsRes.error;
-            setIncidents(incidentsRes.data as Incident[]);
-            
-            if (suppliesRes.error) throw suppliesRes.error;
-            setSupplies(suppliesRes.data as Supply[]);
-            
-            if (packsRes.error) throw packsRes.error;
-            setPacks(packsRes.data as WinePack[]);
-            
-            if (packModelsRes.error) throw packModelsRes.error;
-            setPackModels(packModelsRes.data as PackModel[]);
-            
-            if (salidasRes.error) throw salidasRes.error;
-            setSalidas(salidasRes.data as DispatchNote[]);
-
+            // Set the rest of the data
+            if (albaranesRes.error) throw albaranesRes.error; setAlbaranes(albaranesRes.data as Albaran[]);
+            if (incidentsRes.error) throw incidentsRes.error; setIncidents(incidentsRes.data as Incident[]);
+            if (suppliesRes.error) throw suppliesRes.error; setSupplies(suppliesRes.data as Supply[]);
+            if (packsRes.error) throw packsRes.error; setPacks(packsRes.data as WinePack[]);
+            if (packModelsRes.error) throw packModelsRes.error; setPackModels(packModelsRes.data as PackModel[]);
+            if (salidasRes.error) throw salidasRes.error; setSalidas(salidasRes.data as DispatchNote[]);
             if (auditLogsRes.error) throw auditLogsRes.error;
-            const fetchedAuditLogs = (auditLogsRes.data || []).map((log: any) => ({
-                id: log.id,
-                timestamp: log.timestamp,
-                userId: log.userid,
-                userName: log.username,
-                action: log.action,
-            }));
+            const fetchedAuditLogs = (auditLogsRes.data || []).map((log: any) => ({ id: log.id, timestamp: log.timestamp, userId: log.userid, userName: log.username, action: log.action }));
             setAuditLogs(fetchedAuditLogs as AuditLog[]);
 
         } catch (error) {
-            console.error("Error fetching data:", error);
+            console.error("Error fetching data:", JSON.stringify(error, null, 2));
         } finally {
             setLoadingData(false);
         }
     }, [session]);
+
 
     useEffect(() => {
         fetchData();
@@ -271,33 +268,31 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
     const addUser = async (userData: Omit<User, 'id'> & { password?: string }) => {
         if (!supabase) throw new Error("Cliente Supabase no inicializado.");
+        if (userData.email === SUPER_USER_EMAIL) throw new Error("No se puede crear un usuario con el email del Super Usuario.");
         if (!userData.password) throw new Error("La contraseña es requerida para nuevos usuarios.");
 
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: userData.email,
             password: userData.password,
+            options: { data: { full_name: userData.name, role_id: userData.roleId } }
         });
 
         if (authError) {
-            console.error("Error en el registro de Auth:", JSON.stringify(authError, null, 2));
-            throw authError;
+            console.error("Error creating auth user:", JSON.stringify(authError, null, 2));
+            if (authError.message.includes("User already registered")) throw new Error("Este correo electrónico ya está en uso.");
+            if (authError.message.includes("Password should be at least 6 characters")) throw new Error("La contraseña debe tener al menos 6 caracteres.");
+            throw new Error(`Error al crear usuario: ${authError.message}`);
         }
-        if (!authData.user) throw new Error("El registro falló, no se devolvió ningún usuario.");
-
-        const profileData = { full_name: userData.name, role_id: userData.roleId };
-        const { error: profileError } = await supabase.from('users').update(profileData).eq('id', authData.user.id);
         
-        if (profileError) {
-             console.error("Usuario de Auth creado pero la actualización del perfil falló:", JSON.stringify(profileError, null, 2));
-             const detailedMessage = profileError.message || JSON.stringify(profileError);
-             throw new Error(`Usuario de Auth creado pero la actualización del perfil falló: ${detailedMessage}. Asegúrese de que la tabla 'users' tiene una política de UPDATE para usuarios autenticados.`);
-        }
+        if (!authData.user) throw new Error("El registro falló, el servicio de autenticación no devolvió un usuario.");
 
+        await new Promise(resolve => setTimeout(resolve, 1000)); 
         if (currentUser) await addAuditLog(`Creó el usuario ${userData.name}`, currentUser.id, currentUser.name);
         await fetchData();
     };
 
     const updateUser = async (user: User) => {
+        if (user.email === SUPER_USER_EMAIL) throw new Error("El Super Usuario no puede ser modificado.");
         if (!supabase) return;
         const { error } = await supabase.from('users').update({ full_name: user.name, role_id: user.roleId }).eq('id', user.id);
         if (error) throw error;
@@ -308,23 +303,33 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     const deleteUser = async (userId: string) => {
         if (!supabase) return;
         const userToDelete = users.find(u => u.id === userId);
+        if (userToDelete?.email === SUPER_USER_EMAIL) throw new Error("El Super Usuario no puede ser eliminado.");
         const { error } = await supabase.from('users').delete().eq('id', userId);
         if (error) throw error;
-        // Note: This only deletes the user profile. Deleting the auth user requires admin privileges
-        // and should be done in a server-side environment for security. The user will be orphaned in auth.
         if (currentUser && userToDelete) await addAuditLog(`Eliminó el usuario ${userToDelete.name}`, currentUser.id, currentUser.name);
         await fetchData();
     };
     
     const addRole = async (role: Omit<Role, 'id' | 'created_at'>) => {
+        if (role.name === SUPER_USER_ROLE_NAME) throw new Error("No se puede crear otro rol con el nombre 'Super Usuario'.");
         if (!supabase) return;
-        const { error } = await supabase.from('roles').insert(role);
-        if (error) throw error;
+        
+        const roleId = generateRoleIdFromName(role.name);
+        const { error } = await supabase.from('roles').insert({ ...role, id: roleId });
+
+        if (error) {
+            if (error.code === '23505') { // unique_violation
+               throw new Error(`Ya existe un rol con el nombre "${role.name}" o un ID similar.`);
+           }
+           throw error;
+        }
         if (currentUser) await addAuditLog(`Creó el rol ${role.name}`, currentUser.id, currentUser.name);
         await fetchData();
     };
 
     const updateRole = async (role: Role) => {
+        const originalRole = roles.find(r => r.id === role.id);
+        if (originalRole?.name === SUPER_USER_ROLE_NAME) throw new Error("El rol de Super Usuario no puede ser modificado.");
         if (!supabase) return;
         const { error } = await supabase.from('roles').update({ name: role.name, permissions: role.permissions }).eq('id', role.id);
         if (error) throw error;
@@ -335,6 +340,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     const deleteRole = async (roleId: string) => {
         if (!supabase) return;
         const roleToDelete = roles.find(r => r.id === roleId);
+        if (roleToDelete?.name === SUPER_USER_ROLE_NAME) throw new Error("El rol de Super Usuario no puede ser eliminado.");
         const { error } = await supabase.from('roles').delete().eq('id', roleId);
         if (error) throw error;
         if (currentUser && roleToDelete) await addAuditLog(`Eliminó el rol ${roleToDelete.name}`, currentUser.id, currentUser.name);

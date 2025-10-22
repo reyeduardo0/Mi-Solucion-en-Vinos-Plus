@@ -10,10 +10,14 @@ interface RoleModalProps {
     onClose: () => void;
 }
 
+const SUPER_USER_ROLE_NAME = 'Super Usuario';
+
 const RoleModal: React.FC<RoleModalProps> = ({ role, onSave, onClose }) => {
     const [name, setName] = useState(role?.name || '');
-    const [permissions, setPermissions] = useState<Set<Permission>>(new Set(role?.permissions || []));
+    const [permissions, setPermissions] = useState<Set<Permission | '*'>>(new Set(role?.permissions || []));
     
+    const isEditingSuperUserRole = role?.name === SUPER_USER_ROLE_NAME;
+
     const handlePermissionChange = (permission: Permission, checked: boolean) => {
         const newPermissions = new Set(permissions);
         if (checked) newPermissions.add(permission);
@@ -33,7 +37,9 @@ const RoleModal: React.FC<RoleModalProps> = ({ role, onSave, onClose }) => {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const roleData = { name, permissions: Array.from(permissions) };
+        if (isEditingSuperUserRole) return;
+        const finalPermissions = Array.from(permissions) as Permission[];
+        const roleData = { name, permissions: finalPermissions };
         onSave(role ? { ...role, ...roleData } : roleData);
         onClose();
     };
@@ -59,7 +65,7 @@ const RoleModal: React.FC<RoleModalProps> = ({ role, onSave, onClose }) => {
         }, [someSelected]);
 
         return (
-            <fieldset className="border rounded-md p-4">
+            <fieldset className="border rounded-md p-4" disabled={isEditingSuperUserRole}>
                 <div className="flex justify-between items-center mb-2 -mt-1">
                     <legend className="font-semibold text-sm px-2">{category}</legend>
                     <label className="flex items-center space-x-2 text-sm text-gray-600 pr-2 cursor-pointer">
@@ -93,7 +99,13 @@ const RoleModal: React.FC<RoleModalProps> = ({ role, onSave, onClose }) => {
     return (
         <Modal title={role ? `Editando Rol: ${role.name}` : 'Crear Nuevo Rol'} onClose={onClose} maxWidth="max-w-3xl">
             <form onSubmit={handleSubmit} className="space-y-6">
-                <div><label className="block text-sm font-medium">Nombre del Rol</label><input type="text" value={name} onChange={e => setName(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                {isEditingSuperUserRole && (
+                     <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
+                        <p className="font-bold">Aviso</p>
+                        <p>El rol de Super Usuario tiene todos los permisos por defecto y no puede ser modificado.</p>
+                    </div>
+                )}
+                <div><label className="block text-sm font-medium">Nombre del Rol</label><input type="text" value={name} onChange={e => setName(e.target.value)} required disabled={isEditingSuperUserRole} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 disabled:bg-gray-100" /></div>
                 <div>
                     <h4 className="text-sm font-medium mb-3">Permisos</h4>
                     <div className="space-y-4">
@@ -104,7 +116,7 @@ const RoleModal: React.FC<RoleModalProps> = ({ role, onSave, onClose }) => {
                 </div>
                 <div className="flex justify-end space-x-3 pt-4 border-t">
                     <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
-                    <Button type="submit">{role ? 'Guardar Cambios' : 'Crear Rol'}</Button>
+                    <Button type="submit" disabled={isEditingSuperUserRole}>{role ? 'Guardar Cambios' : 'Crear Rol'}</Button>
                 </div>
             </form>
         </Modal>

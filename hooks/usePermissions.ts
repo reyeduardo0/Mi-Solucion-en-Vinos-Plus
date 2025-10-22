@@ -24,13 +24,16 @@ interface PermissionsProviderProps {
 export const PermissionsProvider: React.FC<PermissionsProviderProps> = ({ children, user, roles }) => {
   const userPermissions = useMemo(() => {
     if (!user || !user.roleId) {
-      return new Set<Permission>();
+      return new Set<Permission | '*'>();
     }
     const userRole = roles.find(role => role.id === user.roleId);
-    return new Set<Permission>(userRole?.permissions || []);
+    return new Set<Permission | '*'>(userRole?.permissions || []);
   }, [user, roles]);
 
   const can = (permission: Permission): boolean => {
+    if (userPermissions.has('*')) {
+      return true;
+    }
     return userPermissions.has(permission);
   };
 
