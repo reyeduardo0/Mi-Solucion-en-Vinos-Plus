@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useMemo } from 'react';
 import { Incident, IncidentType } from '../types';
 import Card from './ui/Card';
@@ -99,7 +100,7 @@ const Incidents: React.FC = () => {
 
     const handleConfirmResolve = () => {
         if (incidentToResolve) {
-            resolveIncident(incidentToResolve.id);
+            resolveIncident(incidentToResolve);
             setIncidentToResolve(null);
         }
     };

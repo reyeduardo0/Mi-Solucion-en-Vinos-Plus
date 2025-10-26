@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Albaran, Pallet } from '../types';
@@ -33,6 +32,7 @@ const GoodsReceipt: React.FC = () => {
   const [incidentImages, setIncidentImages] = useState<File[]>([]);
   const [pallets, setPallets] = useState<Partial<Pallet>[]>([]);
   const [palletsCollapsed, setPalletsCollapsed] = useState<boolean[]>([]);
+  const [validationErrors, setValidationErrors] = useState<Record<number, string[]>>({});
 
   const [albaranImageFile, setAlbaranImageFile] = useState<File | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -119,10 +119,22 @@ const GoodsReceipt: React.FC = () => {
   };
 
 
-  const updatePalletData = (index: number, data: Partial<Pallet>) => {
-    const updatedPallets = [...pallets];
-    updatedPallets[index] = { ...updatedPallets[index], ...data };
-    setPallets(updatedPallets);
+  const updatePalletData = (index: number, updater: (prevPallet: Partial<Pallet>) => Partial<Pallet>) => {
+    if (validationErrors[index]) {
+        setValidationErrors(prevErrors => {
+            const newErrors = { ...prevErrors };
+            delete newErrors[index];
+            return newErrors;
+        });
+    }
+
+    setPallets(currentPallets => {
+        const newPallets = [...currentPallets];
+        const oldPallet = newPallets[index] || { product: { name: '', lot: '' } };
+        const newPartialData = updater(oldPallet);
+        newPallets[index] = { ...oldPallet, ...newPartialData };
+        return newPallets;
+    });
   };
   
     const handleIncidentImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -133,18 +145,56 @@ const GoodsReceipt: React.FC = () => {
 
   const handleRegister = async () => {
     setIsSubmitting(true);
+    setValidationErrors({});
+
     try {
-        const firstInvalidPalletIndex = pallets.findIndex(p => !p.product?.name?.trim() || !p.product?.lot?.trim());
-        if (firstInvalidPalletIndex !== -1) {
+        const errors: Record<number, string[]> = {};
+
+        // Check for empty required fields
+        pallets.forEach((p, index) => {
+            const palletErrors: string[] = [];
+            if (!p.palletNumber?.trim()) palletErrors.push('palletNumber');
+            if (!p.product?.name?.trim()) palletErrors.push('productName');
+            if (!p.product?.lot?.trim()) palletErrors.push('productLot');
+            if (palletErrors.length > 0) {
+                errors[index] = palletErrors;
+            }
+        });
+
+        // Check for duplicate pallet numbers
+        const palletNumbers = pallets.map(p => p.palletNumber?.trim() || '');
+        const seenNumbers = new Set<string>();
+        const duplicateNumbers = new Set<string>();
+        for (const num of palletNumbers) {
+            if (num) {
+                if (seenNumbers.has(num)) {
+                    duplicateNumbers.add(num);
+                } else {
+                    seenNumbers.add(num);
+                }
+            }
+        }
+
+        if (duplicateNumbers.size > 0) {
+            pallets.forEach((p, index) => {
+                if (p.palletNumber && duplicateNumbers.has(p.palletNumber.trim())) {
+                    if (!errors[index]) errors[index] = [];
+                    if (!errors[index].includes('duplicatePalletNumber')) {
+                        errors[index].push('duplicatePalletNumber');
+                    }
+                }
+            });
+        }
+        
+        if (Object.keys(errors).length > 0) {
+            const invalidPalletIndices = Object.keys(errors).map(Number);
+            setValidationErrors(errors);
             setPalletsCollapsed(current => {
                 const newCollapsed = [...current];
-                if (newCollapsed[firstInvalidPalletIndex]) {
-                    newCollapsed[firstInvalidPalletIndex] = false;
-                    return newCollapsed;
-                }
-                return current;
+                invalidPalletIndices.forEach(idx => { newCollapsed[idx] = false; });
+                return newCollapsed;
             });
-            throw new Error(`Por favor, complete el nombre del Producto y el Lote para el Pallet ${firstInvalidPalletIndex + 1}.`);
+            throw new Error(`Por favor, complete o corrija los campos marcados en rojo.`);
         }
         
         const hasPalletIncident = pallets.some(p => p.incident);
@@ -152,6 +202,29 @@ const GoodsReceipt: React.FC = () => {
         if (status === 'Incidencia' && incidentImages.length > 0) {
             incidentImagesBase64 = await Promise.all(incidentImages.map(fileToBase64));
         }
+
+        // Robust data preparation
+        const finalPallets: Pallet[] = pallets.map((p, index) => {
+            const boxes = Number(p.boxesPerPallet) || 0;
+            const bottles = Number(p.bottlesPerBox) || 0;
+            const totalBottles = Number(p.totalBottles) || (boxes * bottles);
+
+            return {
+                id: p.id || `new-pallet-${Date.now()}-${index}`,
+                palletNumber: p.palletNumber!,
+                product: {
+                    name: p.product!.name,
+                    lot: p.product!.lot,
+                },
+                boxesPerPallet: boxes,
+                bottlesPerBox: bottles,
+                totalBottles: totalBottles,
+                sscc: p.sscc || undefined,
+                eanBottle: p.eanBottle || undefined,
+                eanBox: p.eanBox || undefined,
+                incident: p.incident,
+            };
+        });
 
         const finalAlbaran: Albaran = {
           id: albaranId,
@@ -162,7 +235,7 @@ const GoodsReceipt: React.FC = () => {
           origin: origin || undefined,
           destination: destination || undefined,
           status: status === 'Incidencia' || hasPalletIncident ? 'incident' : 'verified',
-          pallets: pallets as Pallet[],
+          pallets: finalPallets,
           incidentDetails: status === 'Incidencia' ? incidentDetails : undefined,
           incidentImages: incidentImagesBase64,
         };
@@ -173,9 +246,31 @@ const GoodsReceipt: React.FC = () => {
             await addAlbaran(finalAlbaran);
         }
         navigate('/entradas');
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("Fallo al registrar la entrada:", error);
-        alert(`Ocurrió un error al guardar la entrada. Por favor, inténtelo de nuevo.\n\nError: ${error.message}`);
+        
+        let message = 'Se produjo un error desconocido. Revise la consola para más detalles.';
+
+        if (error instanceof Error) {
+            message = error.message;
+        } else if (error && typeof error === 'object') {
+            const supabaseError = error as { message?: string; details?: string; hint?: string };
+            if (typeof supabaseError.details === 'string' && supabaseError.details) {
+                message = `Error de base de datos: ${supabaseError.details}`;
+            } else if (typeof supabaseError.message === 'string' && supabaseError.message) {
+                message = supabaseError.message;
+            } else {
+                 try {
+                    message = `Detalles del error: ${JSON.stringify(error, null, 2)}`;
+                } catch {
+                    message = 'No se pudo serializar el objeto de error.';
+                }
+            }
+        } else if (error) {
+            message = String(error);
+        }
+
+        alert(`Fallo al registrar la entrada:\n${message}`);
     } finally {
         setIsSubmitting(false);
     }
@@ -193,27 +288,32 @@ const GoodsReceipt: React.FC = () => {
   const collapseAllPallets = () => setPalletsCollapsed(Array(numberOfPallets).fill(true));
 
   const handleCopyToOthers = (sourceIndex: number) => {
-    const sourcePallet = pallets[sourceIndex];
-    if (!sourcePallet) return;
+    setPallets(currentPallets => {
+        const sourcePallet = currentPallets[sourceIndex];
+        if (!sourcePallet) return currentPallets;
 
-    const dataToCopy = {
-        product: sourcePallet.product ? { ...sourcePallet.product } : { name: '', lot: '' },
-        boxesPerPallet: sourcePallet.boxesPerPallet,
-        bottlesPerBox: sourcePallet.bottlesPerBox,
-    };
-    
-    const totalBottles = (dataToCopy.boxesPerPallet || 0) * (dataToCopy.bottlesPerBox || 0);
+        const dataToCopy = {
+            product: sourcePallet.product ? { ...sourcePallet.product } : { name: '', lot: '' },
+            boxesPerPallet: sourcePallet.boxesPerPallet,
+            bottlesPerBox: sourcePallet.bottlesPerBox,
+        };
+        const totalBottles = (dataToCopy.boxesPerPallet || 0) * (dataToCopy.bottlesPerBox || 0);
 
-    setPallets(currentPallets => 
-        currentPallets.map((pallet, index) => {
-            if (index === sourceIndex) return pallet;
-            return { ...pallet, ...dataToCopy, totalBottles };
-        })
-    );
+        return currentPallets.map((pallet, index) => {
+            const isSource = index === sourceIndex;
+            
+            // The data for the pallet is either its original data (if source) or the copied data (if not source)
+            const baseData = isSource ? pallet : { ...pallet, ...dataToCopy, totalBottles };
+            
+            // Always apply the sequential pallet number
+            return {
+                ...baseData,
+                palletNumber: String(index + 1),
+            };
+        });
+    });
+    setValidationErrors({});
   };
-
-  const palletNumbers = pallets.map(p => p.palletNumber).filter(Boolean);
-  const duplicatePalletNumbers = new Set(palletNumbers.filter((num, index) => String(num).trim() !== '' && palletNumbers.indexOf(num) !== index));
 
   if ((isEditMode && !initialDataLoaded) || loadingData) {
     return (
@@ -274,7 +374,7 @@ const GoodsReceipt: React.FC = () => {
                 {numberOfPallets > 0 && (
                     <div className="mt-8 pt-6 border-t">
                         <div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold text-gray-800">Detalles de los Pallets</h2><div className="space-x-2"><Button type="button" variant="secondary" onClick={expandAllPallets}>Expandir Todos</Button><Button type="button" variant="secondary" onClick={collapseAllPallets}>Contraer Todos</Button></div></div>
-                        {pallets.map((p, i) => <PalletInput key={p.id || `pallet-${i}`} pallet={p} index={i} totalPallets={numberOfPallets} updatePallet={updatePalletData} isCollapsed={palletsCollapsed[i]} onToggleCollapse={() => togglePalletCollapse(i)} onCopyToOthers={() => handleCopyToOthers(i)} isDuplicate={String(p.palletNumber || '').trim() !== '' && duplicatePalletNumbers.has(p.palletNumber!)} />)}
+                        {pallets.map((p, i) => <PalletInput key={p.id || `pallet-${i}`} pallet={p} index={i} totalPallets={numberOfPallets} updatePallet={updatePalletData} isCollapsed={palletsCollapsed[i]} onToggleCollapse={() => togglePalletCollapse(i)} onCopyToOthers={() => handleCopyToOthers(i)} validationErrors={validationErrors[i] || []} />)}
                     </div>
                 )}
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
-import { Session } from '@supabase/supabase-js';
+// FIX: Changed to a type-only import for Session.
+import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 
 // --- Components ---
@@ -10,7 +11,7 @@ import Dashboard from './components/Dashboard';
 import GoodsReceiptList from './components/GoodsReceiptList';
 import GoodsReceipt from './components/GoodsReceipt';
 import GoodsReceiptDetail from './components/GoodsReceiptDetail';
-import Stock from './components/Stock';
+import Inventory from './components/Stock';
 import CreatePack from './components/CreatePack';
 import PackModels from './components/PackModels';
 import Dispatch from './components/Dispatch';
@@ -46,12 +47,15 @@ const AppRoutes: React.FC = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        const fetchSession = async () => {
+            const { data: { session } } = await supabase!.auth.getSession();
             setSession(session);
             setLoading(false);
-        });
+        };
+        
+        fetchSession();
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase!.auth.onAuthStateChange((_event, session) => {
             setSession(session);
         });
 
@@ -96,7 +100,7 @@ const AppLayout: React.FC = () => {
     const { currentUser, roles } = useData();
 
     const handleLogout = async () => {
-        await supabase.auth.signOut();
+        await supabase!.auth.signOut();
         navigate('/login');
     };
 
@@ -105,7 +109,10 @@ const AppLayout: React.FC = () => {
         return <div className="min-h-screen bg-brand-light flex justify-center items-center"><Spinner /></div>;
     }
 
-    const roleName = roles.find(r => r.id === currentUser.roleId)?.name || 'Sin Rol';
+    // DEFINITIVE FIX: This robust check prevents a crash if the user's role is deleted by another admin.
+    // It safely finds the role first, then accesses the name, avoiding `undefined.name`.
+    const userRole = roles.find(r => r.id === currentUser.roleId);
+    const roleName = userRole ? userRole.name : 'Sin Rol Asignado';
 
     return (
         <PermissionsProvider user={currentUser} roles={roles}>
@@ -142,7 +149,7 @@ const AppLayout: React.FC = () => {
                             <Route path="entradas/nueva" element={<GoodsReceipt />} />
                             <Route path="entradas/editar/:albaranId" element={<GoodsReceipt />} />
                             <Route path="entradas/:albaranId" element={<GoodsReceiptDetail />} />
-                            <Route path="stock" element={<Stock />} />
+                            <Route path="inventario" element={<Inventory />} />
                             <Route path="packing" element={<CreatePack />} />
                             <Route path="modelos-pack" element={<PackModels />} />
                             <Route path="salidas" element={<Dispatch />} />

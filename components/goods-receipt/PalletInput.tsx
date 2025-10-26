@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useMemo } from 'react';
 import { Pallet } from '../../types';
 import { fileToBase64, capitalizeWords } from '../../utils/helpers';
@@ -14,10 +11,10 @@ interface PalletInputProps {
     index: number;
     totalPallets: number;
     isCollapsed: boolean;
-    updatePallet: (index: number, data: Partial<Pallet>) => void; 
+    updatePallet: (index: number, updater: (prevPallet: Partial<Pallet>) => Partial<Pallet>) => void; 
     onToggleCollapse: () => void;
     onCopyToOthers: () => void;
-    isDuplicate: boolean;
+    validationErrors: string[];
 }
 
 // FIX: Modify icon component to accept a `title` prop and render it as a <title> element for accessibility and to fix the type error.
@@ -36,7 +33,7 @@ const ExclamationIcon: React.FC<React.SVGProps<SVGSVGElement> & { title?: string
     </svg>
 );
 
-const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, isCollapsed, updatePallet, onToggleCollapse, onCopyToOthers, isDuplicate }) => {
+const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, isCollapsed, updatePallet, onToggleCollapse, onCopyToOthers, validationErrors }) => {
     const [palletImageFile, setPalletImageFile] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -49,22 +46,25 @@ const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, 
 
     const handleIncidentToggle = () => {
         if (isIncident) {
-            const { incident, ...rest } = pallet;
-            updatePallet(index, { ...rest, incident: undefined });
+            updatePallet(index, (prev) => {
+                const { incident, ...rest } = prev;
+                return { ...rest, incident: undefined };
+            });
         } else {
-            updatePallet(index, { ...pallet, incident: { description: '', images: [] } });
+            updatePallet(index, () => ({ incident: { description: '', images: [] } }));
         }
     };
 
     const handleIncidentDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        updatePallet(index, { ...pallet, incident: { description: e.target.value, images: pallet.incident?.images || [] } });
+        const newDescription = e.target.value;
+        updatePallet(index, (prev) => ({ incident: { description: newDescription, images: prev.incident?.images || [] } }));
     };
     
     const handlePalletIncidentImagesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
             try {
                 const imagesBase64 = await Promise.all(Array.from(e.target.files).map(fileToBase64));
-                updatePallet(index, { ...pallet, incident: { description: pallet.incident?.description || '', images: imagesBase64 } });
+                updatePallet(index, (prev) => ({ incident: { description: prev.incident?.description || '', images: imagesBase64 } }));
             } catch (err) {
                 setError("Failed to process incident images.");
             }
@@ -96,18 +96,18 @@ const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, 
             const prompt = `From this pallet label, extract: SSCC, Product name ('Descripción'), Lot number ('Lote fabricación'), Bottles per box ('Botellas/caja'), Boxes per pallet ('Cajas/palet'), Total bottles per pallet ('Botellas/palet'), Bottle EAN ('EANBotella'), Box EAN ('EANCaja'), Pallet Number ('Nº Palet'). Return JSON with keys: sscc, productName, lot, bottlesPerBox, boxesPerPallet, totalBottles, eanBottle, eanBox, palletNumber. Ensure numeric values are numbers.`;
             const extractedData = await extractDataFromImage(palletImageFile, prompt);
             
-            const totalBottles = (extractedData.boxesPerPallet || pallet.boxesPerPallet || 0) * (extractedData.bottlesPerBox || pallet.bottlesPerBox || 0);
-
-            updatePallet(index, {
-                ...pallet,
-                palletNumber: extractedData.palletNumber != null ? String(extractedData.palletNumber) : pallet.palletNumber,
-                sscc: extractedData.sscc || pallet.sscc,
-                product: { name: capitalizeWords(extractedData.productName || pallet.product?.name || ''), lot: extractedData.lot || pallet.product?.lot || '' },
-                bottlesPerBox: extractedData.bottlesPerBox || pallet.bottlesPerBox,
-                boxesPerPallet: extractedData.boxesPerPallet || pallet.boxesPerPallet,
-                totalBottles: extractedData.totalBottles || totalBottles,
-                eanBottle: extractedData.eanBottle || pallet.eanBottle,
-                eanBox: extractedData.eanBox || pallet.eanBox,
+            updatePallet(index, (prev) => {
+                const totalBottles = (extractedData.boxesPerPallet || prev.boxesPerPallet || 0) * (extractedData.bottlesPerBox || prev.bottlesPerBox || 0);
+                return {
+                    palletNumber: extractedData.palletNumber != null ? String(extractedData.palletNumber) : prev.palletNumber,
+                    sscc: extractedData.sscc || prev.sscc,
+                    product: { name: capitalizeWords(extractedData.productName || prev.product?.name || ''), lot: extractedData.lot || prev.product?.lot || '' },
+                    bottlesPerBox: extractedData.bottlesPerBox || prev.bottlesPerBox,
+                    boxesPerPallet: extractedData.boxesPerPallet || prev.boxesPerPallet,
+                    totalBottles: extractedData.totalBottles || totalBottles,
+                    eanBottle: extractedData.eanBottle || prev.eanBottle,
+                    eanBox: extractedData.eanBox || prev.eanBox,
+                };
             });
 
         } catch (e: any) {
@@ -118,15 +118,23 @@ const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, 
     };
     
     const cardTitle = `Datos del Pallet ${index + 1} de ${totalPallets}${pallet.palletNumber ? ` (Nº ${pallet.palletNumber})` : ''}`;
-    const isComplete = pallet.palletNumber && pallet.product?.name;
+    const isComplete = pallet.palletNumber && pallet.product?.name && pallet.product?.lot;
+    const hasErrors = validationErrors.length > 0;
+
+    const getErrorClass = (fields: string[]) => {
+        return fields.some(field => validationErrors.includes(field))
+            ? 'border-red-500 ring-1 ring-red-500 focus:border-red-500 focus:ring-red-500'
+            : 'border-gray-300 focus:ring-yellow-500 focus:border-yellow-500';
+    };
+
 
     return (
         <Card className="mb-4 border border-gray-200">
              <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center">
                     <h3 className="text-base font-semibold text-gray-800">{cardTitle}</h3>
-                    {isComplete && !isDuplicate && <CheckCircleIcon className="ml-2 h-5 w-5 text-green-500" title="Datos completos"/>}
-                    {isDuplicate && <ExclamationIcon className="ml-2 h-5 w-5 text-red-500" title="Número de pallet duplicado"/>}
+                    {isComplete && !hasErrors && <CheckCircleIcon className="ml-2 h-5 w-5 text-green-500" title="Datos completos"/>}
+                    {hasErrors && <ExclamationIcon className="ml-2 h-5 w-5 text-red-500" title="Este pallet tiene errores."/>}
                 </div>
                 <button type="button" onClick={onToggleCollapse} className="text-gray-500 hover:text-gray-800 font-mono text-xl -mt-2">{isCollapsed ? '+' : '−'}</button>
             </div>
@@ -147,12 +155,15 @@ const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, 
                     <div className="relative my-4"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-300" /></div><div className="relative flex justify-center"><span className="bg-white px-3 text-sm font-medium text-gray-500">O introduce los datos manualmente</span></div></div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <input type="text" placeholder="Nº Palet" value={pallet.palletNumber || ''} onChange={e => updatePallet(index, { ...pallet, palletNumber: e.target.value })} className={`block w-full rounded-md p-2 ${isDuplicate ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300'}`} />
-                        <input type="text" placeholder="SSCC" value={pallet.sscc || ''} onChange={e => updatePallet(index, { ...pallet, sscc: e.target.value })} className="block w-full border-gray-300 rounded-md p-2"/>
-                        <input type="text" placeholder="Producto" value={pallet.product?.name || ''} onChange={e => updatePallet(index, { ...pallet, product: { name: capitalizeWords(e.target.value), lot: pallet.product?.lot || '' } })} className="block w-full border-gray-300 rounded-md p-2"/>
-                        <input type="text" placeholder="Lote" value={pallet.product?.lot || ''} onChange={e => updatePallet(index, { ...pallet, product: { name: pallet.product?.name || '', lot: e.target.value } })} className="block w-full border-gray-300 rounded-md p-2"/>
-                        <input type="number" placeholder="Cajas/pallet" value={pallet.boxesPerPallet || ''} onChange={e => updatePallet(index, { ...pallet, boxesPerPallet: parseInt(e.target.value,10) || 0 })} className="block w-full border-gray-300 rounded-md p-2"/>
-                        <input type="number" placeholder="Botellas/caja" value={pallet.bottlesPerBox || ''} onChange={e => updatePallet(index, { ...pallet, bottlesPerBox: parseInt(e.target.value,10) || 0 })} className="block w-full border-gray-300 rounded-md p-2"/>
+                        <div>
+                            <input type="text" placeholder="Nº Palet" value={pallet.palletNumber || ''} onChange={e => updatePallet(index, () => ({ palletNumber: e.target.value }))} className={`block w-full rounded-md p-2 ${getErrorClass(['palletNumber', 'duplicatePalletNumber'])}`} />
+                            {validationErrors.includes('duplicatePalletNumber') && <p className="text-xs text-red-600 mt-1">Este número de pallet está duplicado.</p>}
+                        </div>
+                        <input type="text" placeholder="SSCC" value={pallet.sscc || ''} onChange={e => updatePallet(index, () => ({ sscc: e.target.value }))} className="block w-full border-gray-300 rounded-md p-2"/>
+                        <input type="text" placeholder="Producto" value={pallet.product?.name || ''} onChange={e => updatePallet(index, (prev) => ({ product: { name: capitalizeWords(e.target.value), lot: prev.product?.lot || '' } }))} className={`block w-full border-gray-300 rounded-md p-2 ${getErrorClass(['productName'])}`}/>
+                        <input type="text" placeholder="Lote" value={pallet.product?.lot || ''} onChange={e => updatePallet(index, (prev) => ({ product: { name: prev.product?.name || '', lot: e.target.value } }))} className={`block w-full border-gray-300 rounded-md p-2 ${getErrorClass(['productLot'])}`}/>
+                        <input type="number" placeholder="Cajas/pallet" value={pallet.boxesPerPallet || ''} onChange={e => updatePallet(index, () => ({ boxesPerPallet: parseInt(e.target.value,10) || 0 }))} className="block w-full border-gray-300 rounded-md p-2"/>
+                        <input type="number" placeholder="Botellas/caja" value={pallet.bottlesPerBox || ''} onChange={e => updatePallet(index, () => ({ bottlesPerBox: parseInt(e.target.value,10) || 0 }))} className="block w-full border-gray-300 rounded-md p-2"/>
                     </div>
                      <div className="mt-4 flex justify-end"><Button type="button" variant="secondary" onClick={onCopyToOthers} title="Copia Producto, Lote, Cajas y Botellas a todos los otros pallets.">Copiar a los demás</Button></div>
                      <div className="flex items-center mt-4"><input type="checkbox" id={`incident-check-${index}`} checked={isIncident} onChange={handleIncidentToggle} className="h-4 w-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"/><label htmlFor={`incident-check-${index}`} className="ml-2 block text-sm text-gray-900">Reportar incidencia en este pallet</label></div>

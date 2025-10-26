@@ -26,7 +26,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onLinkClick }) => {
     const navLinks = [
         { path: '/', label: 'Dashboard', icon: <DashboardIcon />, permission: true },
         { path: '/entradas', label: 'Entradas', icon: <EntryIcon />, permission: can('entries:view') },
-        { path: '/stock', label: 'Stock', icon: <StockIcon />, permission: can('stock:view') },
+        { path: '/inventario', label: 'Inventario', icon: <StockIcon />, permission: can('stock:view') },
         { path: '/packing', label: 'Crear Pack', icon: <CreatePackIcon />, permission: can('packs:create') },
         { path: '/modelos-pack', label: 'Modelos de Pack', icon: <PackModelIcon />, permission: can('packs:manage_models') },
         { path: '/etiquetas', label: 'Generar Etiquetas', icon: <GenerateLabelIcon />, permission: can('labels:generate') },

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Albaran } from '../types';
@@ -37,7 +38,7 @@ const GoodsReceiptList: React.FC = () => {
     const handleConfirmDelete = async () => {
         if (albaranToDelete) {
             try {
-                await deleteAlbaran(albaranToDelete.id);
+                await deleteAlbaran(albaranToDelete);
             } catch (error: any) {
                 alert(`No se pudo eliminar la entrada:\n${error.message}`);
             } finally {

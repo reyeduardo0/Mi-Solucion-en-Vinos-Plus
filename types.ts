@@ -1,3 +1,4 @@
+
 export type Permission = 
   | 'users:manage'
   | 'entries:create'
@@ -16,7 +17,8 @@ export type Permission =
 export interface Role {
   id: string;
   name: string;
-  permissions: Permission[];
+  // FIX: Allow '*' for super admin roles to fix type error on includes check.
+  permissions: (Permission | '*')[];
   created_at?: string;
 }
 
@@ -31,7 +33,7 @@ export interface AuditLog {
   id: string;
   timestamp: string;
   userId: string;
-  userName: string;
+  userName:string;
   action: string;
 }
 
@@ -105,6 +107,17 @@ export interface Albaran {
   created_at?: string;
 }
 
+export interface Informacion {
+  id: string;
+  descripcion: string;
+  origen: string;
+  albaran: string;
+  estado: string;
+  incidenciaEtiquetas?: boolean;
+  incidenciaImagenes?: string[];
+  created_at?: string;
+}
+
 export interface Supply {
   id: string;
   name: string;
@@ -166,4 +179,15 @@ export interface DispatchNote {
     packIds: string[]; // Array of IDs of the WinePacks included
     status: 'Pendiente' | 'Despachado';
     created_at?: string;
+}
+
+export interface Merma {
+  id: string;
+  itemId?: string; // ID of the product or supply, primarily for client-side operations
+  itemName: string;
+  itemType: 'product' | 'supply';
+  lot?: string;
+  quantity: number;
+  reason?: string;
+  created_at: string;
 }

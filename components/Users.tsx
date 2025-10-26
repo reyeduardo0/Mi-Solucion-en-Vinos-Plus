@@ -24,7 +24,7 @@ const Users: React.FC = () => {
     const [isRoleModalOpen, setRoleModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState<User | null>(null);
     const [selectedRole, setSelectedRole] = useState<Role | null>(null);
-    const [itemToDelete, setItemToDelete] = useState<{ type: 'user' | 'role', item: User | Role } | null>(null);
+    const [itemToDelete, setItemToDelete] = useState<{ type: 'user' | 'role', id: string, name: string } | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     const showSuccessMessage = (message: string) => {
@@ -44,9 +44,9 @@ const Users: React.FC = () => {
 
     const handleSaveUser = async (data: (Omit<User, 'id'> & { password?: string }) | User, newPassword?: string) => {
         if ('id' in data) { // Editing
-            // The error from updateUserPasswordByAdmin will now propagate up to the modal's catch block.
             await updateUser(data);
             if (newPassword && newPassword.trim() !== '' && currentUser?.email === SUPER_USER_EMAIL && data.id !== currentUser.id) {
+                // The error from updateUserPasswordByAdmin will now propagate up to the modal's catch block.
                 await updateUserPasswordByAdmin(data.id, newPassword);
                 showSuccessMessage(`Usuario "${data.name}" y su contraseña fueron actualizados.`);
             } else {
@@ -72,13 +72,13 @@ const Users: React.FC = () => {
     
     const handleConfirmDelete = async () => {
         if (!itemToDelete) return;
-        const itemName = itemToDelete.item.name;
-        if (itemToDelete.type === 'user') {
-            await deleteUser(itemToDelete.item.id);
-            showSuccessMessage(`Usuario "${itemName}" eliminado.`);
+        const { type, id, name } = itemToDelete;
+        if (type === 'user') {
+            await deleteUser(id, name);
+            showSuccessMessage(`Usuario "${name}" eliminado.`);
         } else {
-            await deleteRole(itemToDelete.item.id);
-            showSuccessMessage(`Rol "${itemName}" eliminado.`);
+            await deleteRole(id, name);
+            showSuccessMessage(`Rol "${name}" eliminado.`);
         }
         setItemToDelete(null);
     };
@@ -91,7 +91,7 @@ const Users: React.FC = () => {
         <div className="p-4 sm:p-6 lg:p-8">
             {isUserModalOpen && <UserModal user={selectedUser} roles={roles} onSave={handleSaveUser} onClose={() => { setUserModalOpen(false); setSelectedUser(null); }} />}
             {isRoleModalOpen && <RoleModal role={selectedRole} onSave={handleSaveRole} onClose={() => { setRoleModalOpen(false); setSelectedRole(null); }} />}
-            {itemToDelete && <ConfirmationModal title={`Confirmar Eliminación de ${itemToDelete.type === 'user' ? 'Usuario' : 'Rol'}`} message={`¿Estás seguro de que quieres eliminar a "${itemToDelete.item.name}"?`} onConfirm={handleConfirmDelete} onCancel={() => setItemToDelete(null)} />}
+            {itemToDelete && <ConfirmationModal title={`Confirmar Eliminación de ${itemToDelete.type === 'user' ? 'Usuario' : 'Rol'}`} message={`¿Estás seguro de que quieres eliminar a "${itemToDelete.name}"?`} onConfirm={handleConfirmDelete} onCancel={() => setItemToDelete(null)} />}
 
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold text-gray-800">Gestión de Usuarios y Roles</h1>
@@ -129,7 +129,7 @@ const Users: React.FC = () => {
                                 <td className="px-6 py-4">{roles.find(r => r.id === user.roleId)?.name || 'N/A'}</td>
                                 <td className="px-6 py-4 text-right space-x-2">
                                     <Button variant="secondary" className="p-2" onClick={() => handleEditUser(user)} disabled={isSuperUser} title={isSuperUser ? "El Super Usuario no puede ser modificado." : "Editar Usuario"}><PencilIcon/></Button>
-                                    <Button variant="danger" className="p-2" onClick={() => setItemToDelete({type: 'user', item: user})} disabled={!canDelete} title={isSuperUser ? "El Super Usuario no puede ser eliminado." : (isCurrentUser ? "No puedes eliminar tu propia cuenta." : "Eliminar Usuario")}><TrashIcon/></Button>
+                                    <Button variant="danger" className="p-2" onClick={() => setItemToDelete({type: 'user', id: user.id, name: user.name})} disabled={!canDelete} title={isSuperUser ? "El Super Usuario no puede ser eliminado." : (isCurrentUser ? "No puedes eliminar tu propia cuenta." : "Eliminar Usuario")}><TrashIcon/></Button>
                                 </td>
                             </tr>
                         )})}</tbody>
@@ -163,7 +163,7 @@ const Users: React.FC = () => {
                                             <Button 
                                                 variant="danger" 
                                                 className="p-2" 
-                                                onClick={() => setItemToDelete({type: 'role', item: role})}
+                                                onClick={() => setItemToDelete({type: 'role', id: role.id, name: role.name})}
                                                 disabled={!isDeletable}
                                                 title={tooltipMessage}
                                             >
