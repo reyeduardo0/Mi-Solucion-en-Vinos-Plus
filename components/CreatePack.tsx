@@ -154,7 +154,7 @@ const CreatePack: React.FC = () => {
                 </Card>
                 <Card>
                     <SectionHeader icon={<WasteIcon />} title="Registrar Mermas (Opcional)" />
-                    <p className="text-sm text-gray-600 mb-4">Si algún producto o insumo se dañó durante el ensamblaje, regístralo aquí para descontarlo del stock.</p>
+                    <p className="text-sm text-gray-600 mb-4">Si algún producto o consumible se dañó durante el ensamblaje, regístralo aquí para descontarlo del stock.</p>
                     <div className="space-y-3">{mermasToRegister.map((merma, index) => (
                         <div key={index} className="grid grid-cols-12 gap-2 items-center p-2 border rounded-md">
                             <div className="col-span-6"><label className="text-xs text-gray-500">Artículo</label>
@@ -171,9 +171,9 @@ const CreatePack: React.FC = () => {
                 </Card>
                 <Card>
                     <SectionHeader icon={<EvidenceIcon />} title="Componentes y Evidencias" />
-                     <div className="mb-4"><h4 className="font-semibold text-gray-700 mb-2">Insumos Requeridos (del modelo)</h4><ul className="list-disc list-inside text-gray-600 bg-gray-50 p-4 rounded-md">{selectedModel.supplyRequirements.map(s => <li key={s.supplyId}>{s.name}: {s.quantity} unidad(es)</li>)}</ul></div>
+                     <div className="mb-4"><h4 className="font-semibold text-gray-700 mb-2">Consumibles Requeridos (del modelo)</h4><ul className="list-disc list-inside text-gray-600 bg-gray-50 p-4 rounded-md">{selectedModel.supplyRequirements.map(s => <li key={s.supplyId}>{s.name}: {s.quantity} unidad(es)</li>)}</ul></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div><label className="block text-sm font-medium text-gray-700">Notas (Insumos no contables)</label><input type="text" placeholder="Ej: Doble capa de film, cinta especial..." value={additionalComponents} onChange={e => setAdditionalComponents(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"/></div>
+                        <div><label className="block text-sm font-medium text-gray-700">Notas (Consumibles no contables)</label><input type="text" placeholder="Ej: Doble capa de film, cinta especial..." value={additionalComponents} onChange={e => setAdditionalComponents(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"/></div>
                         <div><label className="block text-sm font-medium text-gray-700">Cargar Imagen del Pack (Opcional)</label><input type="file" accept="image/*" onChange={handleImageChange} className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"/></div>
                     </div>
                 </Card>

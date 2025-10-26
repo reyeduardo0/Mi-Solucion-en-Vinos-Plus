@@ -23,6 +23,7 @@ interface DataContextType {
     users: User[];
     roles: Role[];
     albaranes: Albaran[];
+    products: { name: string }[];
     incidents: Incident[];
     supplies: Supply[];
     packs: WinePack[];
@@ -75,6 +76,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     const [users, setUsers] = useState<User[]>([]);
     const [roles, setRoles] = useState<Role[]>([]);
     const [albaranes, setAlbaranes] = useState<Albaran[]>([]);
+    const [products, setProducts] = useState<{ name: string }[]>([]);
     const [incidents, setIncidents] = useState<Incident[]>([]);
     const [supplies, setSupplies] = useState<Supply[]>([]);
     const [packs, setPacks] = useState<WinePack[]>([]);
@@ -199,35 +201,66 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 supabase.from('mermas').select('*'),
             ]);
 
-            // ROBUST HYDRATION for Albaranes and Pallets
-            if (albaranesRes.error) throw albaranesRes.error;
-            const fetchedAlbaranes: Albaran[] = (albaranesRes.data || []).map((a: any) => ({
-                id: a.id, entryDate: a.entrydate, truckPlate: a.truckplate, origin: a.origin, destination: a.destination,
-                carrier: a.carrier, driver: a.driver, status: a.status, incidentDetails: a.incidentdetails,
-                incidentImages: a.incidentimages, created_at: a.created_at,
-                pallets: (a.pallets || []).filter((p: any) => {
-                    const isValid = p && p.product_name && p.product_lot;
-                    if (!isValid) console.warn("Filtering malformed pallet from albaran:", a.id, p);
-                    return isValid;
-                }).map((p: any): Pallet => ({
-                    id: p.id, palletNumber: p.palletnumber, sscc: p.sscc,
-                    product: { name: p.product_name, lot: p.product_lot },
-                    boxesPerPallet: p.boxesperpallet, bottlesPerBox: p.bottlesperbox, totalBottles: p.totalbottles,
-                    eanBottle: p.eanbottle, eanBox: p.eanbox, created_at: p.created_at,
-                    incident: p.incident_description ? { description: p.incident_description, images: p.incident_images || [] } : undefined,
-                }))
-            }));
-            setAlbaranes(fetchedAlbaranes);
-
-            if (incidentsRes.error) throw incidentsRes.error; setIncidents(incidentsRes.data as Incident[]);
-            
-            // ROBUST HYDRATION for Supplies
+            // ROBUST HYDRATION for Supplies (must be before Albaranes)
             if (suppliesRes.error) throw suppliesRes.error;
             const fetchedSupplies = (suppliesRes.data || []).filter((s: any): s is Supply => {
                 if (!s || !s.name) { console.warn("Filtering malformed supply:", s); return false; }
                 return true;
             });
             setSupplies(fetchedSupplies);
+            
+            // ROBUST HYDRATION for Albaranes and Pallets
+            if (albaranesRes.error) throw albaranesRes.error;
+            const fetchedAlbaranes: Albaran[] = (albaranesRes.data || []).map((a: any) => ({
+                id: a.id, entryDate: a.entrydate, truckPlate: a.truckplate, origin: a.origin,
+                carrier: a.carrier, driver: a.driver, status: a.status, incidentDetails: a.incidentdetails,
+                incidentImages: a.incidentimages, created_at: a.created_at,
+                pallets: (a.pallets || []).map((p: any): Pallet | null => {
+                    const palletType = p.product_lot ? 'product' : 'consumable';
+                    const isProduct = palletType === 'product';
+            
+                    if (!p.product_name) {
+                        console.warn("Filtering out malformed pallet (missing product_name):", a.id, p);
+                        return null;
+                    }
+
+                    const pallet: Pallet = {
+                        id: p.id,
+                        palletNumber: p.palletnumber,
+                        sscc: p.sscc,
+                        type: palletType,
+                        product: isProduct ? { name: p.product_name, lot: p.product_lot } : undefined,
+                        boxesPerPallet: isProduct ? p.boxesperpallet : undefined,
+                        bottlesPerBox: isProduct ? p.bottlesperbox : undefined,
+                        totalBottles: isProduct ? p.totalbottles : undefined,
+                        eanBottle: isProduct ? p.eanbottle : undefined,
+                        eanBox: isProduct ? p.eanbox : undefined,
+                        supplyName: !isProduct ? p.product_name : undefined,
+                        supplyQuantity: !isProduct ? p.totalbottles : undefined,
+                        incident: p.incident_description ? { description: p.incident_description, images: p.incident_images || [] } : undefined,
+                        created_at: p.created_at,
+                    };
+
+                    if (!isProduct && pallet.supplyName) {
+                        const supply = fetchedSupplies.find(s => s.name === pallet.supplyName);
+                        if (supply) { pallet.supplyId = supply.id; }
+                    }
+                    return pallet;
+                }).filter((p): p is Pallet => p !== null)
+            }));
+            setAlbaranes(fetchedAlbaranes);
+
+            // Extract unique products
+            const productSet = new Set<string>();
+            fetchedAlbaranes.forEach(a => a.pallets.forEach(p => {
+                if (p.type === 'product' && p.product?.name) {
+                    productSet.add(p.product.name);
+                }
+            }));
+            setProducts(Array.from(productSet).map(name => ({ name })));
+
+
+            if (incidentsRes.error) throw incidentsRes.error; setIncidents(incidentsRes.data as Incident[]);
             
             if (packsRes.error) throw packsRes.error; setPacks(packsRes.data as WinePack[]);
             
@@ -300,7 +333,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             entrydate: albaranClientData.entryDate,
             truckplate: albaranClientData.truckPlate,
             origin: albaranClientData.origin,
-            destination: albaranClientData.destination,
             carrier: albaranClientData.carrier,
             driver: albaranClientData.driver,
             status: albaranClientData.status,
@@ -315,19 +347,29 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             const palletsToInsert = pallets.map(p => ({
                 albaran_id: data.id,
                 palletnumber: p.palletNumber,
-                product_name: p.product.name,
-                product_lot: p.product.lot,
-                boxesperpallet: p.boxesPerPallet,
-                bottlesperbox: p.bottlesPerBox,
-                totalbottles: p.totalBottles,
+                product_name: p.type === 'product' ? p.product?.name : p.supplyName,
+                product_lot: p.type === 'product' ? p.product?.lot : null,
+                boxesperpallet: p.type === 'product' ? p.boxesPerPallet : null,
+                bottlesperbox: p.type === 'product' ? p.bottlesPerBox : null,
+                totalbottles: p.type === 'product' ? p.totalBottles : p.supplyQuantity,
+                eanbottle: p.type === 'product' ? p.eanBottle : null,
+                eanbox: p.type === 'product' ? p.eanBox : null,
                 sscc: p.sscc,
-                eanbottle: p.eanBottle,
-                eanbox: p.eanBox,
                 incident_description: p.incident?.description,
                 incident_images: p.incident?.images,
             }));
             const { error: palletError } = await supabase.from('pallets').insert(palletsToInsert);
             if (palletError) throw palletError;
+        }
+
+        // After successfully inserting albaran and pallets, update supply stock
+        const consumablePallets = pallets.filter(p => p.type === 'consumable' && p.supplyId && p.supplyQuantity);
+        for (const p of consumablePallets) {
+             const { error: rpcError } = await supabase.rpc('add_supply_stock', { p_supply_id: p.supplyId!, p_quantity: p.supplyQuantity! });
+             if (rpcError) {
+                console.error(`Failed to update stock for supply ${p.supplyId} on albaran ${albaran.id}:`, rpcError);
+                // Optionally throw error to notify user, though albaran is already created.
+             }
         }
     });
 
@@ -339,7 +381,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             entrydate: albaranClientData.entryDate,
             truckplate: albaranClientData.truckPlate,
             origin: albaranClientData.origin,
-            destination: albaranClientData.destination,
             carrier: albaranClientData.carrier,
             driver: albaranClientData.driver,
             status: albaranClientData.status,
@@ -353,24 +394,27 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         if (pallets) {
              const { error: deleteError } = await supabase.from('pallets').delete().eq('albaran_id', albaran.id);
              if (deleteError) throw deleteError;
+
              const palletsToInsert = pallets.map(p => ({
                 albaran_id: albaran.id,
                 palletnumber: p.palletNumber,
-                product_name: p.product.name,
-                product_lot: p.product.lot,
-                boxesperpallet: p.boxesPerPallet,
-                bottlesperbox: p.bottlesPerBox,
-                totalbottles: p.totalBottles,
+                product_name: p.type === 'product' ? p.product?.name : p.supplyName,
+                product_lot: p.type === 'product' ? p.product?.lot : null,
+                boxesperpallet: p.type === 'product' ? p.boxesPerPallet : null,
+                bottlesperbox: p.type === 'product' ? p.bottlesPerBox : null,
+                totalbottles: p.type === 'product' ? p.totalBottles : p.supplyQuantity,
+                eanbottle: p.type === 'product' ? p.eanBottle : null,
+                eanbox: p.type === 'product' ? p.eanBox : null,
                 sscc: p.sscc,
-                eanbottle: p.eanBottle,
-                eanbox: p.eanBox,
                 incident_description: p.incident?.description,
                 incident_images: p.incident?.images,
              }));
+
              if (palletsToInsert.length > 0) {
                 const { error: insertError } = await supabase.from('pallets').insert(palletsToInsert);
                 if (insertError) throw insertError;
              }
+             // NOTE: Stock adjustments on edit are not handled to avoid complexity.
         }
     });
 
@@ -408,7 +452,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         });
     };
 
-    const addNewSupply = async (supply: Omit<Supply, 'id' | 'created_at' | 'quantity'>) => logAndRefetch(`Creó el insumo ${supply.name}`, async () => {
+    const addNewSupply = async (supply: Omit<Supply, 'id' | 'created_at' | 'quantity'>) => logAndRefetch(`Creó el consumible ${supply.name}`, async () => {
         if (!supabase) return;
         const { error } = await supabase.from('supplies').insert({ ...supply, quantity: 0 });
         if (error) throw error;
@@ -416,12 +460,12 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
     const addSupplyStock = async (supplyId: string, quantity: number) => {
         const supplyInState = supplies.find(s => s.id === supplyId);
-        const action = `Añadió ${quantity} ${supplyInState?.unit || 'unidades'} de stock al insumo "${supplyInState?.name || `ID ${supplyId}`}"`;
+        const action = `Añadió ${quantity} ${supplyInState?.unit || 'unidades'} de stock al consumible "${supplyInState?.name || `ID ${supplyId}`}"`;
         
         await logAndRefetch(action, async () => {
             if (!supabase) return;
             const freshSupply = supplies.find(s => s.id === supplyId);
-            if (!freshSupply) throw new Error(`No se pudo encontrar el insumo con ID ${supplyId}. Puede que haya sido eliminado.`);
+            if (!freshSupply) throw new Error(`No se pudo encontrar el consumible con ID ${supplyId}. Puede que haya sido eliminado.`);
             const { error } = await supabase.rpc('add_supply_stock', { p_supply_id: supplyId, p_quantity: quantity });
             if (error) throw error;
         });
@@ -477,13 +521,13 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
         if (merma.itemType === 'supply') {
             if (!merma.itemId) {
-                 console.warn(`Merma registrada para un insumo sin ID. Realizando búsqueda por nombre como respaldo: ${merma.itemName}`);
+                 console.warn(`Merma registrada para un consumible sin ID. Realizando búsqueda por nombre como respaldo: ${merma.itemName}`);
                  const supplyToUpdate = supplies.find(s => s.name === merma.itemName);
                  if (supplyToUpdate) {
                     const { error: rpcError } = await supabase.rpc('decrement_supply_stock', { p_supply_id: supplyToUpdate.id, p_quantity: merma.quantity });
                     if (rpcError) throw rpcError;
                  } else {
-                    console.error(`No se pudo encontrar el insumo "${merma.itemName}" para registrar la merma.`);
+                    console.error(`No se pudo encontrar el consumible "${merma.itemName}" para registrar la merma.`);
                  }
             } else {
                 const { error: rpcError } = await supabase.rpc('decrement_supply_stock', { p_supply_id: merma.itemId, p_quantity: merma.quantity });
@@ -638,7 +682,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     };
 
     const value = {
-        currentUser, users, roles, albaranes, incidents, supplies, packs, packModels, salidas, auditLogs, mermas, loadingData,
+        currentUser, users, roles, albaranes, products, incidents, supplies, packs, packModels, salidas, auditLogs, mermas, loadingData,
         addAlbaran, updateAlbaran, deleteAlbaran,
         addIncident, resolveIncident,
         addNewSupply, addSupplyStock,

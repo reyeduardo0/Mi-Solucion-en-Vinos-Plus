@@ -19,7 +19,7 @@ const AddSupplyModal: React.FC<{ onSave: (supply: Omit<Supply, 'id' | 'created_a
     };
 
     return (
-        <Modal title="Añadir Nuevo Insumo" onClose={onClose}>
+        <Modal title="Añadir Nuevo Consumible" onClose={onClose}>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div><label className="block text-sm font-medium">Nombre</label><input type="text" value={name} onChange={e => setName(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
                 <div><label className="block text-sm font-medium">Tipo</label><select value={type} onChange={e => setType(e.target.value as any)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"><option value="Contable">Contable</option><option value="No Contable">No Contable</option></select></div>
@@ -42,9 +42,9 @@ const AddSupplyStockModal: React.FC<{ supplies: Supply[]; onSave: (supplyId: str
     };
 
     return (
-        <Modal title="Registrar Entrada de Insumo" onClose={onClose}>
+        <Modal title="Registrar Entrada de Consumible" onClose={onClose}>
             <form onSubmit={handleSubmit} className="space-y-4">
-                <div><label className="block text-sm font-medium">Insumo</label><select value={selectedSupply} onChange={e => setSelectedSupply(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"><option value="">Seleccionar...</option>{supplies.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                <div><label className="block text-sm font-medium">Consumible</label><select value={selectedSupply} onChange={e => setSelectedSupply(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"><option value="">Seleccionar...</option>{supplies.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
                 <div><label className="block text-sm font-medium">Cantidad a Añadir</label><input type="number" value={quantity} onChange={e => setQuantity(e.target.value)} required min="1" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
                 <div className="flex justify-end space-x-2"><Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button><Button type="submit">Añadir Stock</Button></div>
             </form>
@@ -60,7 +60,7 @@ const Inventory: React.FC = () => {
     const inventoryData = useMemo(() => {
         const stockMap = new Map<string, {
             name: string;
-            type: 'Producto' | 'Insumo';
+            type: 'Producto' | 'Consumible';
             lot?: string;
             unit: string;
             total: number;
@@ -91,7 +91,7 @@ const Inventory: React.FC = () => {
             const key = `supply-${s.name}`;
             stockMap.set(key, {
                 name: s.name,
-                type: 'Insumo',
+                type: 'Consumible',
                 unit: s.unit,
                 total: s.quantity, // Initial total is current available, will be adjusted
                 inPacks: 0, inMerma: 0,
@@ -148,8 +148,8 @@ const Inventory: React.FC = () => {
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold text-gray-800">Gestión de Inventario</h1>
                  <div className="flex justify-end space-x-2">
-                    <Button variant="secondary" onClick={() => setShowAddSupplyModal(true)}>Añadir Nuevo Insumo</Button>
-                    <Button onClick={() => setShowSupplyEntryModal(true)}>Registrar Entrada de Insumo</Button>
+                    <Button variant="secondary" onClick={() => setShowAddSupplyModal(true)}>Añadir Nuevo Consumible</Button>
+                    <Button onClick={() => setShowSupplyEntryModal(true)}>Registrar Entrada de Consumible</Button>
                 </div>
             </div>
 
@@ -180,7 +180,7 @@ const Inventory: React.FC = () => {
                                         <td className="px-4 py-4 whitespace-nowrap text-sm text-blue-700 text-right">{item.inPacks.toLocaleString('es-ES')}</td>
                                         <td className="px-4 py-4 whitespace-nowrap text-sm text-red-700 text-right">{item.inMerma.toLocaleString('es-ES')}</td>
                                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {item.type === 'Insumo' && <StatusBadge status={item.minStock != null && item.available < item.minStock ? 'Bajo Stock' : 'Correcto'} />}
+                                            {item.type === 'Consumible' && <StatusBadge status={item.minStock != null && item.available < item.minStock ? 'Bajo Stock' : 'Correcto'} />}
                                         </td>
                                     </tr>
                                 ))

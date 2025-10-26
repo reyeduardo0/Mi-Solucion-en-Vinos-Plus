@@ -74,16 +74,26 @@ export interface InventoryItem {
 export interface Pallet {
   id: string;
   palletNumber: string;
-  sscc?: string;
-  product: {
+  type: 'product' | 'consumable';
+  
+  // Product-specific fields
+  product?: {
     name: string;
     lot: string;
   };
-  boxesPerPallet: number;
-  bottlesPerBox: number;
-  totalBottles: number;
+  boxesPerPallet?: number;
+  bottlesPerBox?: number;
+  totalBottles?: number;
   eanBottle?: string;
   eanBox?: string;
+
+  // Consumable-specific fields
+  supplyId?: string;
+  supplyName?: string; // Denormalized for display and code
+  supplyQuantity?: number;
+
+  // Common fields
+  sscc?: string;
   labelImage?: string; // base64 image string
   incident?: {
     description: string;
@@ -92,12 +102,12 @@ export interface Pallet {
   created_at?: string;
 }
 
+
 export interface Albaran {
   id: string; // User-provided delivery note number
   entryDate: string;
   truckPlate: string;
   origin?: string;
-  destination?: string;
   carrier: string;
   driver?: string;
   pallets: Pallet[];

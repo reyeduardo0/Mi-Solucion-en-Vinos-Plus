@@ -1,5 +1,6 @@
+
 import React, { useState, useMemo } from 'react';
-import { Pallet } from '../../types';
+import { Pallet, Supply } from '../../types';
 import { fileToBase64, capitalizeWords } from '../../utils/helpers';
 import { extractDataFromImage } from '../../services/geminiService';
 import Card from '../ui/Card';
@@ -11,13 +12,13 @@ interface PalletInputProps {
     index: number;
     totalPallets: number;
     isCollapsed: boolean;
+    supplies: Supply[];
     updatePallet: (index: number, updater: (prevPallet: Partial<Pallet>) => Partial<Pallet>) => void; 
     onToggleCollapse: () => void;
-    onCopyToOthers: () => void;
+    onCopyToGroup: () => void;
     validationErrors: string[];
 }
 
-// FIX: Modify icon component to accept a `title` prop and render it as a <title> element for accessibility and to fix the type error.
 const CheckCircleIcon: React.FC<React.SVGProps<SVGSVGElement> & { title?: string }> = ({ title, ...props }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" {...props}>
         {title && <title>{title}</title>}
@@ -25,7 +26,6 @@ const CheckCircleIcon: React.FC<React.SVGProps<SVGSVGElement> & { title?: string
     </svg>
 );
 
-// FIX: Modify icon component to accept a `title` prop and render it as a <title> element for accessibility and to fix the type error.
 const ExclamationIcon: React.FC<React.SVGProps<SVGSVGElement> & { title?: string }> = ({ title, ...props }) => (
      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" {...props}>
         {title && <title>{title}</title>}
@@ -33,7 +33,7 @@ const ExclamationIcon: React.FC<React.SVGProps<SVGSVGElement> & { title?: string
     </svg>
 );
 
-const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, isCollapsed, updatePallet, onToggleCollapse, onCopyToOthers, validationErrors }) => {
+const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, isCollapsed, supplies, updatePallet, onToggleCollapse, onCopyToGroup, validationErrors }) => {
     const [palletImageFile, setPalletImageFile] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -117,8 +117,12 @@ const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, 
         }
     };
     
-    const cardTitle = `Datos del Pallet ${index + 1} de ${totalPallets}${pallet.palletNumber ? ` (Nº ${pallet.palletNumber})` : ''}`;
-    const isComplete = pallet.palletNumber && pallet.product?.name && pallet.product?.lot;
+    const displayName = pallet.type === 'product' ? pallet.product?.name : pallet.supplyName;
+    const cardTitle = `Pallet ${index + 1} de ${totalPallets}: ${displayName || 'Sin definir'}`;
+    const isComplete = pallet.palletNumber && (
+        (pallet.type === 'product' && pallet.product?.name && pallet.product?.lot) ||
+        (pallet.type === 'consumable' && pallet.supplyId && (pallet.supplyQuantity || 0) > 0)
+    );
     const hasErrors = validationErrors.length > 0;
 
     const getErrorClass = (fields: string[]) => {
@@ -141,31 +145,62 @@ const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, 
             {!isCollapsed && (
                  <div className="mt-4 space-y-4">
                      {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">{error}</div>}
-                     <div className="p-4 bg-gray-50 rounded-lg border">
-                         <h4 className="font-semibold text-sm mb-2 text-gray-600">Extracción Automática por IA</h4>
-                         {!isAIAvailable && (<div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-3 text-sm rounded-md mb-3"><p><strong>Función no disponible:</strong> La clave API de IA no está configurada.</p></div>)}
-                        <p className="text-xs text-gray-500 mb-2">Sube una foto de la etiqueta del pallet para rellenar los datos.</p>
-                        
-                        {imagePreview && (<div className="my-2 relative w-32 h-32"><img src={imagePreview} alt={`Previsualización Pallet ${index + 1}`} className="rounded-md object-cover w-full h-full" /><button type="button" onClick={removeImage} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs font-bold hover:bg-red-700" aria-label="Eliminar imagen">&times;</button></div>)}
-
-                        <input type="file" id={`pallet-image-input-${index}`} accept="image/*" onChange={handlePalletImageChange} className="mb-2 block w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-700 hover:file:bg-yellow-200 disabled:opacity-50" disabled={!isAIAvailable} />
-                        <Button type="button" onClick={processPalletImage} disabled={!palletImageFile || isLoading || !isAIAvailable}>{isLoading ? <Spinner /> : 'Extraer datos de etiqueta'}</Button>
-                     </div>
+                    
+                    {pallet.type === 'product' && (
+                         <div className="p-4 bg-gray-50 rounded-lg border">
+                            <h4 className="font-semibold text-sm mb-2 text-gray-600">Extracción Automática por IA</h4>
+                            {!isAIAvailable && (<div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-3 text-sm rounded-md mb-3"><p><strong>Función no disponible:</strong> La clave API de IA no está configurada.</p></div>)}
+                            <p className="text-xs text-gray-500 mb-2">Sube una foto de la etiqueta del pallet para rellenar los datos.</p>
+                            {imagePreview && (<div className="my-2 relative w-32 h-32"><img src={imagePreview} alt={`Previsualización Pallet ${index + 1}`} className="rounded-md object-cover w-full h-full" /><button type="button" onClick={removeImage} className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full h-6 w-6 flex items-center justify-center text-xs font-bold hover:bg-red-700" aria-label="Eliminar imagen">&times;</button></div>)}
+                            <input type="file" id={`pallet-image-input-${index}`} accept="image/*" onChange={handlePalletImageChange} className="mb-2 block w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-700 hover:file:bg-yellow-200 disabled:opacity-50" disabled={!isAIAvailable} />
+                            <Button type="button" onClick={processPalletImage} disabled={!palletImageFile || isLoading || !isAIAvailable}>{isLoading ? <Spinner /> : 'Extraer datos de etiqueta'}</Button>
+                        </div>
+                    )}
 
                     <div className="relative my-4"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-300" /></div><div className="relative flex justify-center"><span className="bg-white px-3 text-sm font-medium text-gray-500">O introduce los datos manualmente</span></div></div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
+                        <div className="md:col-span-1">
+                            <label className="text-xs text-gray-500">Nº Palet*</label>
                             <input type="text" placeholder="Nº Palet" value={pallet.palletNumber || ''} onChange={e => updatePallet(index, () => ({ palletNumber: e.target.value }))} className={`block w-full rounded-md p-2 ${getErrorClass(['palletNumber', 'duplicatePalletNumber'])}`} />
                             {validationErrors.includes('duplicatePalletNumber') && <p className="text-xs text-red-600 mt-1">Este número de pallet está duplicado.</p>}
                         </div>
-                        <input type="text" placeholder="SSCC" value={pallet.sscc || ''} onChange={e => updatePallet(index, () => ({ sscc: e.target.value }))} className="block w-full border-gray-300 rounded-md p-2"/>
-                        <input type="text" placeholder="Producto" value={pallet.product?.name || ''} onChange={e => updatePallet(index, (prev) => ({ product: { name: capitalizeWords(e.target.value), lot: prev.product?.lot || '' } }))} className={`block w-full border-gray-300 rounded-md p-2 ${getErrorClass(['productName'])}`}/>
-                        <input type="text" placeholder="Lote" value={pallet.product?.lot || ''} onChange={e => updatePallet(index, (prev) => ({ product: { name: prev.product?.name || '', lot: e.target.value } }))} className={`block w-full border-gray-300 rounded-md p-2 ${getErrorClass(['productLot'])}`}/>
-                        <input type="number" placeholder="Cajas/pallet" value={pallet.boxesPerPallet || ''} onChange={e => updatePallet(index, () => ({ boxesPerPallet: parseInt(e.target.value,10) || 0 }))} className="block w-full border-gray-300 rounded-md p-2"/>
-                        <input type="number" placeholder="Botellas/caja" value={pallet.bottlesPerBox || ''} onChange={e => updatePallet(index, () => ({ bottlesPerBox: parseInt(e.target.value,10) || 0 }))} className="block w-full border-gray-300 rounded-md p-2"/>
+                         <div className="md:col-span-2">
+                            <label className="text-xs text-gray-500">SSCC (Opcional)</label>
+                            <input type="text" placeholder="SSCC" value={pallet.sscc || ''} onChange={e => updatePallet(index, () => ({ sscc: e.target.value }))} className="block w-full border-gray-300 rounded-md p-2"/>
+                        </div>
+
+                        {pallet.type === 'product' ? (
+                            <>
+                                <input type="text" readOnly disabled value={pallet.product?.name || ''} className="block w-full bg-gray-100 border-gray-300 rounded-md p-2" title="El nombre del producto se define en el grupo."/>
+                                <div>
+                                    <label className="text-xs text-gray-500">Lote*</label>
+                                    <input type="text" placeholder="Lote" value={pallet.product?.lot || ''} onChange={e => updatePallet(index, (prev) => ({ product: { name: prev.product?.name || '', lot: e.target.value } }))} className={`block w-full rounded-md p-2 ${getErrorClass(['productLot'])}`}/>
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-500">Cajas/pallet</label>
+                                    <input type="number" placeholder="Cajas/pallet" value={pallet.boxesPerPallet || ''} onChange={e => updatePallet(index, () => ({ boxesPerPallet: parseInt(e.target.value,10) || 0 }))} className="block w-full border-gray-300 rounded-md p-2"/>
+                                </div>
+                                 <div>
+                                    <label className="text-xs text-gray-500">Botellas/caja</label>
+                                    <input type="number" placeholder="Botellas/caja" value={pallet.bottlesPerBox || ''} onChange={e => updatePallet(index, () => ({ bottlesPerBox: parseInt(e.target.value,10) || 0 }))} className="block w-full border-gray-300 rounded-md p-2"/>
+                                </div>
+                            </>
+                        ) : (
+                             <>
+                                <input type="text" readOnly disabled value={pallet.supplyName || ''} className="block w-full bg-gray-100 border-gray-300 rounded-md p-2" title="El consumible se define en el grupo."/>
+                                <div>
+                                    <label className="text-xs text-gray-500">Cantidad*</label>
+                                    <input type="number" placeholder="Cantidad" value={pallet.supplyQuantity || ''} onChange={e => updatePallet(index, () => ({ supplyQuantity: parseInt(e.target.value, 10) || 0 }))} className={`block w-full rounded-md p-2 ${getErrorClass(['supplyQuantity'])}`} min="1" />
+                                </div>
+                            </>
+                        )}
                     </div>
-                     <div className="mt-4 flex justify-end"><Button type="button" variant="secondary" onClick={onCopyToOthers} title="Copia Producto, Lote, Cajas y Botellas a todos los otros pallets.">Copiar a los demás</Button></div>
+                    
+                    {pallet.type === 'product' && (
+                        <div className="mt-4 flex justify-end"><Button type="button" variant="secondary" onClick={onCopyToGroup} title="Copia Lote, Cajas y Botellas a todos los otros pallets de este mismo grupo.">Copiar al resto del grupo</Button></div>
+                    )}
+                    
                      <div className="flex items-center mt-4"><input type="checkbox" id={`incident-check-${index}`} checked={isIncident} onChange={handleIncidentToggle} className="h-4 w-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"/><label htmlFor={`incident-check-${index}`} className="ml-2 block text-sm text-gray-900">Reportar incidencia en este pallet</label></div>
                      {isIncident && (<div className="p-4 border-l-4 border-yellow-400 bg-yellow-50"><textarea placeholder="Describe la incidencia del pallet..." value={incidentDescription} onChange={handleIncidentDescriptionChange} className="w-full border-gray-300 rounded-md p-2 mb-2"/><input type="file" multiple onChange={handlePalletIncidentImagesChange} className="block w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-700 hover:file:bg-yellow-200" /></div>)}
                 </div>

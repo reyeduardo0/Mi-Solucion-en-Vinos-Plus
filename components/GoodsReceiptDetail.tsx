@@ -19,16 +19,24 @@ const PalletDetailCard: React.FC<{ pallet: Pallet, index: number }> = ({ pallet,
     return (
         <Card className="mb-4">
             <h4 className="text-md font-semibold text-gray-800 mb-3">Pallet #{index + 1} - Nº: {pallet.palletNumber || 'N/A'}</h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                <InfoPair label="Producto" value={pallet.product.name} />
-                <InfoPair label="Lote" value={pallet.product.lot} />
-                <InfoPair label="SSCC" value={pallet.sscc} />
-                <InfoPair label="Cajas/Pallet" value={pallet.boxesPerPallet} />
-                <InfoPair label="Botellas/Caja" value={pallet.bottlesPerBox} />
-                <InfoPair label="Total Botellas" value={pallet.totalBottles} />
-            </div>
+            {pallet.type === 'product' ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    <InfoPair label="Producto" value={pallet.product?.name} />
+                    <InfoPair label="Lote" value={pallet.product?.lot} />
+                    <InfoPair label="SSCC" value={pallet.sscc} />
+                    <InfoPair label="Cajas/Pallet" value={pallet.boxesPerPallet} />
+                    <InfoPair label="Botellas/Caja" value={pallet.bottlesPerBox} />
+                    <InfoPair label="Total Botellas" value={pallet.totalBottles} />
+                </div>
+            ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    <InfoPair label="Tipo" value={<span className="font-semibold">Consumible</span>} />
+                    <InfoPair label="Consumible" value={pallet.supplyName} />
+                    <InfoPair label="Cantidad" value={`${pallet.supplyQuantity} unidades`} />
+                </div>
+            )}
             {pallet.incident && (
-                 <div className="mt-4 p-3 border-l-4 border-yellow-400 bg-yellow-50">
+                 <div className="mt-4 p-3 border-l-4 border-yellow-40aud bg-yellow-50">
                     <h5 className="text-sm font-semibold text-yellow-800">Incidencia del Pallet</h5>
                     <p className="text-sm text-yellow-700 mt-1">{pallet.incident.description}</p>
                     {pallet.incident.images.length > 0 && <p className="text-xs mt-2 text-yellow-600">({pallet.incident.images.length} imágenes adjuntas)</p>}
@@ -80,7 +88,6 @@ const GoodsReceiptDetail: React.FC = () => {
                             <InfoPair label="Transportista" value={albaran.carrier} />
                             <InfoPair label="Conductor" value={albaran.driver} />
                             <InfoPair label="Origen" value={albaran.origin} />
-                            <InfoPair label="Destino" value={albaran.destination} />
                         </dl>
                     </Card>
 
