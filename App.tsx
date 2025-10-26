@@ -23,6 +23,7 @@ import Traceability from './components/Traceability';
 import Login from './components/Login';
 import SupabaseConfigNotice from './components/SupabaseConfigNotice';
 import Spinner from './components/ui/Spinner';
+import ProfileModal from './components/users/ProfileModal';
 
 // --- Hooks and Context ---
 import { PermissionsProvider } from './hooks/usePermissions';
@@ -88,6 +89,7 @@ const AppRoutes: React.FC = () => {
 
 const AppLayout: React.FC = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isProfileModalOpen, setProfileModalOpen] = useState(false);
     const navigate = useNavigate();
     
     // Consume the centralized data and user context
@@ -131,6 +133,7 @@ const AppLayout: React.FC = () => {
                         roleName={roleName} 
                         onLogout={handleLogout} 
                         toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} 
+                        onOpenProfile={() => setProfileModalOpen(true)}
                     />
                     <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
                         <Routes>
@@ -153,6 +156,7 @@ const AppLayout: React.FC = () => {
                         </Routes>
                     </main>
                 </div>
+                {isProfileModalOpen && <ProfileModal onClose={() => setProfileModalOpen(false)} />}
             </div>
         </PermissionsProvider>
     );

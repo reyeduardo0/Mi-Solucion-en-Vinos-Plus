@@ -47,6 +47,8 @@ interface DataContextType {
     updateRole: (role: Role) => Promise<void>;
     deleteRole: (roleId: string) => Promise<void>;
     addAuditLog: (action: string, userId: string, userName: string) => Promise<void>;
+    updateCurrentUserPassword: (password: string) => Promise<void>;
+    updateUserPasswordByAdmin: (userId: string, password: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -296,7 +298,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         if (!supabase) return;
         const { error } = await supabase.from('users').update({ full_name: user.name, role_id: user.roleId }).eq('id', user.id);
         if (error) throw error;
-        if (currentUser) await addAuditLog(`Actualizó el usuario ${user.name}`, currentUser.id, currentUser.name);
+        if (currentUser) await addAuditLog(`Actualizó el perfil del usuario ${user.name}`, currentUser.id, currentUser.name);
         await fetchData();
     };
 
@@ -347,6 +349,107 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await fetchData();
     };
 
+    const updateCurrentUserPassword = async (password: string) => {
+        if (!supabase) throw new Error("Cliente Supabase no inicializado.");
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) {
+            console.error("Error updating current user password:", error);
+            throw new Error(`No se pudo actualizar la contraseña: ${error.message}`);
+        }
+        if (currentUser) {
+            await addAuditLog('Actualizó su propia contraseña', currentUser.id, currentUser.name);
+        }
+    };
+
+    const updateUserPasswordByAdmin = async (userId: string, password: string) => {
+        if (!supabase) throw new Error("Cliente Supabase no inicializado.");
+        
+        /*
+         * ==============================================================================
+         * SCRIPT SQL PARA LA FUNCIÓN DE CAMBIO DE CONTRASEÑA DE ADMINISTRADOR
+         * ==============================================================================
+         * Copia y ejecuta este bloque completo en tu editor de SQL de Supabase para
+         * crear o corregir la función necesaria.
+         *
+         * ¿POR QUÉ ES NECESARIO?
+         * 1. Orden de Parámetros: La librería de Supabase envía los parámetros en orden
+         *    alfabético ('new_password', 'user_id'). La función debe declararse en
+         *    este orden exacto para evitar errores de "función no encontrada".
+         * 2. Permisos: La función usa 'SECURITY DEFINER' para poder modificar la tabla
+         *    'auth.users', que normalmente es inaccesible.
+         * 3. Seguridad: Valida que el usuario que llama a la función tenga los
+         *    permisos adecuados ('users:manage' o '*') antes de proceder.
+         * 4. Extensión 'pgcrypto': Se asegura de que la ruta de búsqueda incluya
+         *    el esquema 'extensions' para poder usar la función 'gen_salt'.
+         *
+         * --- PEGA ESTO EN EL EDITOR DE SQL DE SUPABASE ---
+         *
+         * -- Paso 1: Habilitar la extensión pgcrypto si aún no está habilitada.
+         * CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+         * 
+         * -- Paso 2: Crear o reemplazar la función con el orden de parámetros correcto.
+         * CREATE OR REPLACE FUNCTION public.admin_update_user_password(new_password text, user_id uuid)
+         * RETURNS void
+         * LANGUAGE plpgsql
+         * SECURITY DEFINER
+         * -- Importante: Incluir 'extensions' para que encuentre la función gen_salt()
+         * SET search_path = public, extensions
+         * AS $$
+         * DECLARE
+         *   caller_role_id TEXT;
+         *   caller_permissions JSONB;
+         * BEGIN
+         *   -- Validar que el usuario que llama a la función (el admin) tiene permisos.
+         *   -- auth.uid() devuelve el ID del usuario autenticado que realiza la llamada.
+         *   SELECT role_id INTO caller_role_id FROM public.users WHERE id = auth.uid();
+         * 
+         *   IF caller_role_id IS NULL THEN
+         *     RAISE EXCEPTION 'Acción no autorizada: Perfil de administrador no encontrado.';
+         *   END IF;
+         * 
+         *   -- Obtener los permisos del rol del administrador.
+         *   SELECT permissions INTO caller_permissions FROM public.roles WHERE id = caller_role_id;
+         * 
+         *   -- Comprobar si el administrador tiene el permiso específico 'users:manage' o el comodín '*'.
+         *   IF NOT (caller_permissions ? 'users:manage' OR caller_permissions ? '*') THEN
+         *      RAISE EXCEPTION 'Acción no autorizada: No tiene permisos para gestionar usuarios.';
+         *   END IF;
+         * 
+         *   -- Si todas las verificaciones de seguridad pasan, proceder a actualizar la contraseña.
+         *   -- Se modifica la tabla 'users' en el esquema protegido 'auth'.
+         *   UPDATE auth.users
+         *   SET encrypted_password = crypt(new_password, gen_salt('bf'))
+         *   WHERE id = user_id;
+         * END;
+         * $$;
+         * 
+         * --- FIN DEL SCRIPT SQL ---
+         */
+
+        const { error } = await supabase.rpc('admin_update_user_password', {
+            user_id: userId,
+            new_password: password
+        });
+
+        if (error) {
+            console.error("Error updating user password via RPC:", JSON.stringify(error, null, 2));
+            
+            // Check for the specific 'gen_salt' error, which indicates the DB function is outdated.
+            if (error.message.includes("gen_salt") && error.message.includes("does not exist")) {
+                const detailedError = `¡ACCIÓN REQUERIDA EN SUPABASE! La función de base de datos para esta operación es incorrecta. Para solucionarlo, por favor, vaya al archivo 'context/DataContext.tsx', copie el bloque de código SQL completo de los comentarios dentro de la función 'updateUserPasswordByAdmin' y ejecútelo en el 'SQL Editor' de su proyecto de Supabase. Esto corregirá el error: "${error.message}"`;
+                throw new Error(detailedError);
+            }
+            
+            // For all other errors, throw a more generic message.
+            throw new Error(`Error al actualizar la contraseña del usuario: ${error.message}`);
+        }
+        
+        const userBeingUpdated = users.find(u => u.id === userId);
+        if (currentUser && userBeingUpdated) {
+            await addAuditLog(`Cambió la contraseña del usuario ${userBeingUpdated.name}`, currentUser.id, currentUser.name);
+        }
+    };
+
     const value = {
         currentUser, users, roles, albaranes, incidents, supplies, packs, packModels, salidas, auditLogs, loadingData,
         addAlbaran, updateAlbaran, deleteAlbaran,
@@ -356,7 +459,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         handleDispatch,
         addUser, updateUser, deleteUser,
         addRole, updateRole, deleteRole,
-        addAuditLog
+        addAuditLog,
+        updateCurrentUserPassword,
+        updateUserPasswordByAdmin
     };
 
     return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

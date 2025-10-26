@@ -3,26 +3,33 @@ import { User, Role } from '../../types';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Spinner from '../ui/Spinner';
+import { useData } from '../../context/DataContext';
 
 interface UserModalProps {
     user: User | null;
     roles: Role[];
-    onSave: (user: (Omit<User, 'id'> & { password?: string }) | User) => Promise<void>;
+    onSave: (user: (Omit<User, 'id'> & { password?: string }) | User, newPassword?: string) => Promise<void>;
     onClose: () => void;
 }
 
 const SUPER_USER_EMAIL = 'reyeduardo0@gmail.com';
 
 const UserModal: React.FC<UserModalProps> = ({ user, roles, onSave, onClose }) => {
+    const { currentUser } = useData();
     const [name, setName] = useState(user?.name || '');
     const [email, setEmail] = useState(user?.email || '');
     const [roleId, setRoleId] = useState(user?.roleId || '');
     const [password, setPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
     
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const isEditingSuperUser = user?.email === SUPER_USER_EMAIL;
+    const isSuperUserSession = currentUser?.email === SUPER_USER_EMAIL;
+    const isEditingSelf = user?.id === currentUser?.id;
+    const canChangePassword = isSuperUserSession && user && !isEditingSelf;
+
 
     useEffect(() => {
         if (isEditingSuperUser) {
@@ -32,7 +39,7 @@ const UserModal: React.FC<UserModalProps> = ({ user, roles, onSave, onClose }) =
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (isEditingSuperUser) return; // Extra safety check
+        if (isEditingSuperUser) return;
 
         if (!roleId) {
             setError("Por favor, seleccione un rol.");
@@ -49,7 +56,7 @@ const UserModal: React.FC<UserModalProps> = ({ user, roles, onSave, onClose }) =
         try {
             const userData = { name, email, roleId };
             if (user) {
-                await onSave({ ...user, ...userData });
+                await onSave({ ...user, ...userData }, newPassword);
             } else {
                 await onSave({ ...userData, password });
             }
@@ -73,6 +80,18 @@ const UserModal: React.FC<UserModalProps> = ({ user, roles, onSave, onClose }) =
                 <div><label className="block text-sm font-medium">Nombre Completo</label><input type="text" value={name} onChange={e => setName(e.target.value)} required disabled={isEditingSuperUser} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 disabled:bg-gray-100" /></div>
                 <div><label className="block text-sm font-medium">Correo Electrónico</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={!!user || isEditingSuperUser} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 disabled:bg-gray-100" /></div>
                 {!user && (<div><label className="block text-sm font-medium">Contraseña</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} required={!user} placeholder="Mínimo 6 caracteres" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>)}
+                {canChangePassword && (
+                    <div>
+                        <label className="block text-sm font-medium">Nueva Contraseña (Opcional)</label>
+                        <input 
+                            type="password" 
+                            value={newPassword} 
+                            onChange={e => setNewPassword(e.target.value)} 
+                            placeholder="Dejar en blanco para no cambiar" 
+                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" 
+                        />
+                    </div>
+                )}
                 <div><label className="block text-sm font-medium">Rol</label><select value={roleId} onChange={e => setRoleId(e.target.value)} required disabled={isEditingSuperUser} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 disabled:bg-gray-100"><option value="">Seleccionar un rol...</option>{roles.map(r => <option key={r.id} value={r.id} disabled={r.name === 'Super Usuario' && !isEditingSuperUser}>{r.name}</option>)}</select></div>
                 
                 {error && !isEditingSuperUser && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">{error}</div>}

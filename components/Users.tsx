@@ -17,7 +17,7 @@ const SUPER_USER_EMAIL = 'reyeduardo0@gmail.com';
 const SUPER_USER_ROLE_NAME = 'Super Usuario';
 
 const Users: React.FC = () => {
-    const { users, roles, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, currentUser } = useData();
+    const { users, roles, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, currentUser, updateUserPasswordByAdmin } = useData();
     const { can } = usePermissions();
     const [activeTab, setActiveTab] = useState<'users' | 'roles'>('users');
     const [isUserModalOpen, setUserModalOpen] = useState(false);
@@ -42,11 +42,17 @@ const Users: React.FC = () => {
         setRoleModalOpen(true);
     };
 
-    const handleSaveUser = async (data: (Omit<User, 'id'> & { password?: string }) | User) => {
-        if ('id' in data) {
+    const handleSaveUser = async (data: (Omit<User, 'id'> & { password?: string }) | User, newPassword?: string) => {
+        if ('id' in data) { // Editing
+            // The error from updateUserPasswordByAdmin will now propagate up to the modal's catch block.
             await updateUser(data);
-            showSuccessMessage(`Usuario "${data.name}" actualizado correctamente.`);
-        } else {
+            if (newPassword && newPassword.trim() !== '' && currentUser?.email === SUPER_USER_EMAIL && data.id !== currentUser.id) {
+                await updateUserPasswordByAdmin(data.id, newPassword);
+                showSuccessMessage(`Usuario "${data.name}" y su contraseña fueron actualizados.`);
+            } else {
+                showSuccessMessage(`Usuario "${data.name}" actualizado correctamente.`);
+            }
+        } else { // Creating
             await addUser(data);
             showSuccessMessage(`Usuario "${data.name}" creado correctamente.`);
         }
