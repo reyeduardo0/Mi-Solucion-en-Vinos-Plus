@@ -39,8 +39,10 @@ interface DataContextType {
     deleteAlbaran: (albaran: Albaran) => Promise<void>;
     addIncident: (incident: Omit<Incident, 'id' | 'date' | 'resolved' | 'created_at'>) => Promise<void>;
     resolveIncident: (incident: Incident) => Promise<void>;
-    addNewSupply: (supply: Omit<Supply, 'id' | 'created_at' | 'quantity'>) => Promise<void>;
-    addSupplyStock: (supplyId: string, quantity: number) => Promise<void>;
+    addNewSupply: (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }) => Promise<void>;
+    updateSupply: (supply: Supply) => Promise<void>;
+    deleteSupply: (supplyId: string, nameHint: string) => Promise<void>;
+    addSupplyStock: (supplyId: string, quantity: number, lot?: string) => Promise<void>;
     addPackModel: (model: Omit<PackModel, 'id' | 'created_at'>) => Promise<void>;
     addPack: (pack: WinePack) => Promise<void>;
     handleDispatch: (dispatchData: Omit<DispatchNote, 'id' | 'status' | 'created_at'>) => Promise<void>;
@@ -238,6 +240,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                         eanBox: isProduct ? p.eanbox : undefined,
                         supplyName: !isProduct ? p.product_name : undefined,
                         supplyQuantity: !isProduct ? p.totalbottles : undefined,
+                        supplyLot: !isProduct ? p.supply_lot : undefined,
                         incident: p.incident_description ? { description: p.incident_description, images: p.incident_images || [] } : undefined,
                         created_at: p.created_at,
                     };
@@ -345,42 +348,49 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             });
         });
 
-        // 2. Initialize Supplies from the supplies table
-        supplies.forEach(s => {
-            const key = `supply-${s.name}`;
-            stockMap.set(key, {
-                name: s.name,
-                type: 'Consumible',
-                unit: s.unit,
-                total: s.quantity, // Initial total is current available, will be adjusted
-                inPacks: 0, inMerma: 0,
-                available: s.quantity, // `quantity` from DB is the available stock
-                minStock: s.minStock
+        // 2. Process Consumables from Albaranes to get Total Stock by Lot
+        albaranes.forEach(a => {
+            a.pallets.forEach(p => {
+                if (p.type === 'consumable' && p.supplyName && p.supplyQuantity) {
+                    const lot = p.supplyLot || 'SIN LOTE';
+                    const key = `supply-${p.supplyName}-${lot}`;
+                    const supplyDef = supplies.find(s => s.name === p.supplyName);
+
+                    const entry = stockMap.get(key) || {
+                        name: p.supplyName,
+                        type: 'Consumible',
+                        lot: lot,
+                        unit: supplyDef?.unit || 'unidades',
+                        total: 0,
+                        inPacks: 0,
+                        inMerma: 0,
+                        available: 0,
+                        minStock: supplyDef?.minStock
+                    };
+                    entry.total += p.supplyQuantity;
+                    stockMap.set(key, entry);
+                }
             });
         });
 
-        // 3. Calculate "In Packs" quantities
+        // 3. Calculate "In Packs" quantities (affects only products)
         packs.filter(p => p.status === 'Ensamblado').forEach(p => {
             p.contents.forEach(c => {
                 const key = `product-${c.productName}-${c.lot}`;
                 const entry = stockMap.get(key);
                 if(entry) entry.inPacks += c.quantity;
             });
-            p.suppliesUsed?.forEach(s => {
-                const supplyDef = supplies.find(sup => sup.id === s.supplyId);
-                if(supplyDef) {
-                    const key = `supply-${supplyDef.name}`;
-                    const entry = stockMap.get(key);
-                    if (entry) entry.inPacks += s.quantity;
-                }
-            });
+            // Note: Consumption of supplies is not tracked by lot in packs, so we can't subtract it here.
         });
         
-        // 4. Calculate "In Merma" quantities
+        // 4. Calculate "In Merma" quantities (affects only products)
         mermas.forEach(m => {
-            const key = m.itemType === 'product' ? `product-${m.itemName}-${m.lot}` : `supply-${m.itemName}`;
-            const entry = stockMap.get(key);
-            if (entry) entry.inMerma += m.quantity;
+            if (m.itemType === 'product' && m.lot) {
+                const key = `product-${m.itemName}-${m.lot}`;
+                const entry = stockMap.get(key);
+                if (entry) entry.inMerma += m.quantity;
+            }
+             // Note: Merma of supplies is not tracked by lot, so we can't subtract it here.
         });
 
         // 5. Final calculations for all items
@@ -388,10 +398,13 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             if (item.type === 'Producto') {
                 item.available = item.total - item.inPacks - item.inMerma;
             } else { // Consumible
-                item.total = item.available + item.inPacks + item.inMerma;
+                // As consumption isn't tracked by lot, available stock per lot cannot be accurately calculated.
+                // We will show the total incoming stock per lot as the available amount.
+                // This provides visibility into lots, which is the main goal.
+                item.available = item.total;
             }
             return item;
-        }).sort((a, b) => a.name.localeCompare(b.name));
+        }).sort((a, b) => a.name.localeCompare(b.name) || (a.lot || '').localeCompare(b.lot || ''));
     }, [albaranes, supplies, packs, mermas]);
 
     // Data modification functions
@@ -420,6 +433,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 palletnumber: p.palletNumber,
                 product_name: p.type === 'product' ? p.product?.name : p.supplyName,
                 product_lot: p.type === 'product' ? p.product?.lot : null,
+                supply_lot: p.type === 'consumable' ? p.supplyLot : null,
                 boxesperpallet: p.type === 'product' ? p.boxesPerPallet : null,
                 bottlesperbox: p.type === 'product' ? p.bottlesPerBox : null,
                 totalbottles: p.type === 'product' ? p.totalBottles : p.supplyQuantity,
@@ -471,6 +485,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 palletnumber: p.palletNumber,
                 product_name: p.type === 'product' ? p.product?.name : p.supplyName,
                 product_lot: p.type === 'product' ? p.product?.lot : null,
+                supply_lot: p.type === 'consumable' ? p.supplyLot : null,
                 boxesperpallet: p.type === 'product' ? p.boxesPerPallet : null,
                 bottlesperbox: p.type === 'product' ? p.bottlesPerBox : null,
                 totalbottles: p.type === 'product' ? p.totalBottles : p.supplyQuantity,
@@ -523,23 +538,111 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         });
     };
 
-    const addNewSupply = async (supply: Omit<Supply, 'id' | 'created_at' | 'quantity'>) => logAndRefetch(`Creó el consumible ${supply.name}`, async () => {
+    const addNewSupply = async (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }) => {
+        let logMessage = `Creó el consumible ${supplyData.name}`;
+        if (initialData && initialData.quantity > 0) {
+            logMessage += ` con un stock inicial de ${initialData.quantity} unidades`;
+            if (initialData.lot) {
+                logMessage += ` en el lote ${initialData.lot}`;
+            }
+        }
+    
+        await logAndRefetch(logMessage, async () => {
+            if (!supabase) return;
+            // 1. Insert the master data
+            const { data: newSupply, error } = await supabase
+                .from('supplies')
+                .insert({ ...supplyData, quantity: 0 }) // Master data quantity is not used for lot tracking
+                .select()
+                .single();
+                
+            if (error) throw error;
+            if (!newSupply) throw new Error("Fallo al crear el consumible, no se devolvieron datos.");
+    
+            // 2. If there's initial stock, add it via a synthetic albaran
+            if (initialData && initialData.quantity > 0) {
+                 const syntheticAlbaranId = `MANUAL-INIT-${Date.now()}`;
+                 const palletData = {
+                    id: `manual-pallet-init-${Date.now()}`,
+                    palletNumber: `INIT-${newSupply.id.slice(0, 4)}-${Date.now()}`,
+                    type: 'consumable' as const,
+                    supplyId: newSupply.id,
+                    supplyName: newSupply.name,
+                    supplyQuantity: initialData.quantity,
+                    supplyLot: initialData.lot || undefined,
+                };
+                
+                const { data: albaranInsertData, error: albaranError } = await supabase.from('albaranes').insert({
+                    id: syntheticAlbaranId,
+                    entrydate: new Date().toISOString(),
+                    truckplate: 'N/A',
+                    carrier: 'Stock Inicial',
+                    status: 'verified',
+                }).select('id').single();
+
+                if (albaranError) throw albaranError;
+
+                const { error: palletError } = await supabase.from('pallets').insert({
+                    albaran_id: albaranInsertData.id,
+                    palletnumber: palletData.palletNumber,
+                    product_name: palletData.supplyName,
+                    supply_lot: palletData.supplyLot,
+                    totalbottles: palletData.supplyQuantity,
+                });
+                if (palletError) throw palletError;
+                
+                 const { error: rpcError } = await supabase.rpc('add_supply_stock', { p_supply_id: newSupply.id, p_quantity: initialData.quantity });
+                 if (rpcError) {
+                    console.error(`Fallo al actualizar el stock para el nuevo consumible ${newSupply.id}:`, rpcError);
+                 }
+            }
+        });
+    };
+    
+    const updateSupply = async (supply: Supply) => logAndRefetch(`Actualizó el consumible ${supply.name}`, async () => {
         if (!supabase) return;
-        const { error } = await supabase.from('supplies').insert({ ...supply, quantity: 0 });
+        const { id, created_at, quantity, ...updateData } = supply;
+        const { error } = await supabase.from('supplies').update(updateData).eq('id', id);
+        if (error) throw error;
+    });
+    
+    const deleteSupply = async (supplyId: string, nameHint: string) => logAndRefetch(`Eliminó el consumible ${nameHint}`, async () => {
+        if (!supabase) return;
+        const inUseInPacks = packModels.some(pm => pm.supplyRequirements.some(sr => sr.supplyId === supplyId));
+        if (inUseInPacks) throw new Error(`No se puede eliminar "${nameHint}" porque está siendo utilizado en uno o más modelos de pack.`);
+        const { error } = await supabase.from('supplies').delete().eq('id', supplyId);
         if (error) throw error;
     });
 
-    const addSupplyStock = async (supplyId: string, quantity: number) => {
+    const addSupplyStock = async (supplyId: string, quantity: number, lot?: string) => {
         const supplyInState = supplies.find(s => s.id === supplyId);
-        const action = `Añadió ${quantity} ${supplyInState?.unit || 'unidades'} de stock al consumible "${supplyInState?.name || `ID ${supplyId}`}"`;
+        if (!supplyInState) {
+            throw new Error(`No se pudo encontrar el consumible con ID ${supplyId}.`);
+        }
+
+        const syntheticAlbaran: Albaran = {
+            id: `MANUAL-${Date.now()}`,
+            entryDate: new Date().toISOString(),
+            truckPlate: 'N/A',
+            carrier: 'Entrada Manual de Stock',
+            driver: 'N/A',
+            origin: 'Interno',
+            status: 'verified',
+            pallets: [{
+                id: `manual-pallet-${Date.now()}`,
+                palletNumber: `MANUAL-${supplyId.slice(0, 4)}-${Date.now()}`,
+                type: 'consumable',
+                supplyId: supplyId,
+                supplyName: supplyInState.name,
+                supplyQuantity: quantity,
+                supplyLot: lot || undefined,
+            }]
+        };
         
-        await logAndRefetch(action, async () => {
-            if (!supabase) return;
-            const freshSupply = supplies.find(s => s.id === supplyId);
-            if (!freshSupply) throw new Error(`No se pudo encontrar el consumible con ID ${supplyId}. Puede que haya sido eliminado.`);
-            const { error } = await supabase.rpc('add_supply_stock', { p_supply_id: supplyId, p_quantity: quantity });
-            if (error) throw error;
-        });
+        // Let addAlbaran handle logging and refetching.
+        // The log message inside addAlbaran is generic ("Creó el albarán..."),
+        // which is acceptable for this internal action.
+        await addAlbaran(syntheticAlbaran);
     };
 
     const addPackModel = async (model: Omit<PackModel, 'id' | 'created_at'>) => logAndRefetch(`Creó el modelo de pack ${model.name}`, async () => {
@@ -757,7 +860,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         inventoryStock,
         addAlbaran, updateAlbaran, deleteAlbaran,
         addIncident, resolveIncident,
-        addNewSupply, addSupplyStock,
+        addNewSupply, updateSupply, deleteSupply,
+        addSupplyStock,
         addPackModel, addPack,
         handleDispatch,
         addMerma,

@@ -1,4 +1,5 @@
 
+
 export type Permission = 
   | 'users:manage'
   | 'entries:create'
@@ -91,6 +92,7 @@ export interface Pallet {
   supplyId?: string;
   supplyName?: string; // Denormalized for display and code
   supplyQuantity?: number;
+  supplyLot?: string;
 
   // Common fields
   sscc?: string;
@@ -135,6 +137,7 @@ export interface Supply {
   unit: 'unidades' | 'cajas' | 'rollos' | 'metros';
   quantity: number;
   minStock?: number;
+  ean?: string;
   created_at?: string;
 }
 

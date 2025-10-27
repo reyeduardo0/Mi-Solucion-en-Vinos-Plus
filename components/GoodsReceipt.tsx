@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Albaran, Pallet, Supply } from '../types';
@@ -19,6 +20,7 @@ interface PalletGroup {
     bottlesPerBox: number;
     // Consumable fields
     supplyId: string;
+    supplyLot: string;
     // Common
     palletCount: number;
     pallets: Partial<Pallet>[];
@@ -99,7 +101,7 @@ const GoodsReceipt: React.FC = () => {
                         groupKey = `prod-${p.product!.name}-${p.product!.lot}`;
                     } else { // Consumable
                         supplyForGroup = supplies.find(s => s.name === p.supplyName);
-                        groupKey = `supp-${supplyForGroup ? supplyForGroup.id : p.supplyName!}`;
+                        groupKey = `supp-${supplyForGroup ? supplyForGroup.id : p.supplyName!}-${p.supplyLot}`;
                     }
                 
                     if (!groups[groupKey]) {
@@ -111,6 +113,7 @@ const GoodsReceipt: React.FC = () => {
                             boxesPerPallet: p.type === 'product' ? (p.boxesPerPallet || 0) : 0,
                             bottlesPerBox: p.type === 'product' ? (p.bottlesPerBox || 0) : 0,
                             supplyId: p.type === 'consumable' ? (supplyForGroup?.id || '') : '',
+                            supplyLot: p.type === 'consumable' ? (p.supplyLot || '') : '',
                             palletCount: 0,
                             pallets: [],
                             isCollapsed: true,
@@ -139,12 +142,13 @@ const GoodsReceipt: React.FC = () => {
                     totalBottles: group.type === 'product' ? group.boxesPerPallet * group.bottlesPerBox : undefined,
                     supplyId: group.type === 'consumable' ? group.supplyId : undefined,
                     supplyName: group.type === 'consumable' ? supplies.find(s => s.id === group.supplyId)?.name : undefined,
+                    supplyLot: group.type === 'consumable' ? group.supplyLot : undefined,
                     supplyQuantity: group.pallets[i]?.supplyQuantity || undefined,
                 }));
                 return { ...group, pallets: newPallets };
             })
         );
-    }, [palletGroups.map(g => `${g.id}-${g.palletCount}-${g.productName}-${g.productLot}-${g.boxesPerPallet}-${g.bottlesPerBox}-${g.supplyId}`).join(), supplies]);
+    }, [palletGroups.map(g => `${g.id}-${g.palletCount}-${g.productName}-${g.productLot}-${g.boxesPerPallet}-${g.bottlesPerBox}-${g.supplyId}-${g.supplyLot}`).join(), supplies]);
 
     const validate = useCallback(() => {
         const errors: Record<string, string[]> = {};
@@ -198,6 +202,7 @@ const GoodsReceipt: React.FC = () => {
             boxesPerPallet: 0,
             bottlesPerBox: 0,
             supplyId: '',
+            supplyLot: '',
             palletCount: 1,
             pallets: [],
             isCollapsed: false,
@@ -216,7 +221,8 @@ const GoodsReceipt: React.FC = () => {
         if (e.target.files) {
             const files = Array.from(e.target.files);
             setIncidentImages(files);
-            const previews = await Promise.all(files.map(async file => `data:${file.type};base64,${await fileToBase64(file)}`));
+            // FIX: Explicitly type 'file' as File to resolve type inference issue.
+            const previews = await Promise.all(files.map(async (file: File) => `data:${file.type};base64,${await fileToBase64(file)}`));
             setImagePreviews(previews);
         }
     };
@@ -403,7 +409,7 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
             ...g,
             type: newType,
             productName: '', productLot: '', boxesPerPallet: 0, bottlesPerBox: 0,
-            supplyId: ''
+            supplyId: '', supplyLot: ''
         }));
     };
 
@@ -468,13 +474,34 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
                         </div>
                     </>
                 ) : (
-                    <div className="sm:col-span-2">
-                        <label className="text-xs font-medium text-gray-600">Consumible</label>
-                        <select value={group.supplyId} onChange={e => handleFieldChange('supplyId', e.target.value)} className="w-full p-2 border rounded-md text-sm">
-                            <option value="">Seleccionar...</option>
-                            {supplies.map(s => <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>)}
-                        </select>
-                    </div>
+                    <>
+                        <div className="sm:col-span-2">
+                            <label className="text-xs font-medium text-gray-600">Consumible</label>
+                            <input
+                                type="text"
+                                list="supply-list"
+                                placeholder="Escriba o seleccione un consumible"
+                                onBlur={(e) => {
+                                    const selectedSupply = supplies.find(s => s.name === e.target.value);
+                                    if (selectedSupply) {
+                                        handleFieldChange('supplyId', selectedSupply.id);
+                                    } else {
+                                        e.target.value = '';
+                                        handleFieldChange('supplyId', '');
+                                    }
+                                }}
+                                defaultValue={supplies.find(s => s.id === group.supplyId)?.name || ''}
+                                className="w-full p-2 border rounded-md text-sm"
+                            />
+                            <datalist id="supply-list">
+                                {supplies.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                            </datalist>
+                        </div>
+                         <div className="sm:col-span-1">
+                            <label className="text-xs font-medium text-gray-600">Lote (Opcional)</label>
+                            <input type="text" value={group.supplyLot || ''} onChange={e => handleFieldChange('supplyLot', e.target.value.toUpperCase())} className="w-full p-2 border rounded-md text-sm"/>
+                        </div>
+                    </>
                 )}
             </div>
              <div className="mt-3 text-center">
