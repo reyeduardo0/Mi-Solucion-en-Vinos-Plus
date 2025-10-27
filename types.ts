@@ -201,3 +201,15 @@ export interface Merma {
   reason?: string;
   created_at: string;
 }
+
+export interface InventoryStockItem {
+  name: string;
+  type: 'Producto' | 'Consumible';
+  lot?: string;
+  unit: string;
+  total: number;
+  inPacks: number;
+  inMerma: number;
+  available: number;
+  minStock?: number;
+}

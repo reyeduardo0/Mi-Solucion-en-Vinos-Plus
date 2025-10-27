@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 // FIX: Changed to a type-only import for Session.
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../services/supabaseClient';
-import { Albaran, User, Role, AuditLog, Incident, Supply, PackModel, WinePack, DispatchNote, Merma, Pallet } from '../types';
+import { Albaran, User, Role, AuditLog, Incident, Supply, PackModel, WinePack, DispatchNote, Merma, Pallet, InventoryStockItem } from '../types';
 
 const SUPER_USER_EMAIL = 'reyeduardo0@gmail.com';
 const SUPER_USER_ROLE_NAME = 'Super Usuario';
@@ -31,6 +31,7 @@ interface DataContextType {
     salidas: DispatchNote[];
     auditLogs: AuditLog[];
     mermas: Merma[];
+    inventoryStock: InventoryStockItem[];
     loadingData: boolean;
     // Functions to modify data
     addAlbaran: (albaran: Albaran) => Promise<void>;
@@ -322,6 +323,76 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         
         await fetchData();
     }, [addAuditLog, fetchData, session.user]);
+
+    const inventoryStock = React.useMemo((): InventoryStockItem[] => {
+        const stockMap = new Map<string, InventoryStockItem>();
+
+        // 1. Process Products from Albaranes to get Total Stock
+        albaranes.forEach(a => {
+            a.pallets.forEach(p => {
+                if (p.type === 'product' && p.product?.name && p.product?.lot) {
+                    const key = `product-${p.product.name}-${p.product.lot}`;
+                    const entry = stockMap.get(key) || {
+                        name: p.product.name,
+                        type: 'Producto',
+                        lot: p.product.lot,
+                        unit: 'botellas',
+                        total: 0, inPacks: 0, inMerma: 0, available: 0,
+                    };
+                    entry.total += p.totalBottles || 0;
+                    stockMap.set(key, entry);
+                }
+            });
+        });
+
+        // 2. Initialize Supplies from the supplies table
+        supplies.forEach(s => {
+            const key = `supply-${s.name}`;
+            stockMap.set(key, {
+                name: s.name,
+                type: 'Consumible',
+                unit: s.unit,
+                total: s.quantity, // Initial total is current available, will be adjusted
+                inPacks: 0, inMerma: 0,
+                available: s.quantity, // `quantity` from DB is the available stock
+                minStock: s.minStock
+            });
+        });
+
+        // 3. Calculate "In Packs" quantities
+        packs.filter(p => p.status === 'Ensamblado').forEach(p => {
+            p.contents.forEach(c => {
+                const key = `product-${c.productName}-${c.lot}`;
+                const entry = stockMap.get(key);
+                if(entry) entry.inPacks += c.quantity;
+            });
+            p.suppliesUsed?.forEach(s => {
+                const supplyDef = supplies.find(sup => sup.id === s.supplyId);
+                if(supplyDef) {
+                    const key = `supply-${supplyDef.name}`;
+                    const entry = stockMap.get(key);
+                    if (entry) entry.inPacks += s.quantity;
+                }
+            });
+        });
+        
+        // 4. Calculate "In Merma" quantities
+        mermas.forEach(m => {
+            const key = m.itemType === 'product' ? `product-${m.itemName}-${m.lot}` : `supply-${m.itemName}`;
+            const entry = stockMap.get(key);
+            if (entry) entry.inMerma += m.quantity;
+        });
+
+        // 5. Final calculations for all items
+        return Array.from(stockMap.values()).map(item => {
+            if (item.type === 'Producto') {
+                item.available = item.total - item.inPacks - item.inMerma;
+            } else { // Consumible
+                item.total = item.available + item.inPacks + item.inMerma;
+            }
+            return item;
+        }).sort((a, b) => a.name.localeCompare(b.name));
+    }, [albaranes, supplies, packs, mermas]);
 
     // Data modification functions
     const addAlbaran = async (albaran: Albaran) => logAndRefetch(`Creó el albarán ${albaran.id}`, async () => {
@@ -683,6 +754,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
     const value = {
         currentUser, users, roles, albaranes, products, incidents, supplies, packs, packModels, salidas, auditLogs, mermas, loadingData,
+        inventoryStock,
         addAlbaran, updateAlbaran, deleteAlbaran,
         addIncident, resolveIncident,
         addNewSupply, addSupplyStock,
