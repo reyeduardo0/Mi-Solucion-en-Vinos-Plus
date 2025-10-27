@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { WinePack, PackModel, Merma, Supply, InventoryStockItem } from '../types';
@@ -59,8 +60,8 @@ const AssignLotsModal: React.FC<AssignLotsModalProps> = ({ productAssignment, av
     const handleSave = () => {
         const finalAssignments = Object.entries(assignments)
             // FIX: Explicitly cast qty to a number to handle potential 'unknown' type and allow comparison.
-            .filter(([, qty]) => Number(qty) > 0)
-            .map(([lot, quantity]) => ({ lot, quantity: Number(quantity) }));
+            .filter(([, qty]) => (Number(qty) || 0) > 0)
+            .map(([lot, quantity]) => ({ lot, quantity: Number(quantity) || 0 }));
         onSave(productName, finalAssignments);
         onClose();
     };

@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 // FIX: Changed to a type-only import for Session.
 import type { Session } from '@supabase/supabase-js';
@@ -42,6 +41,7 @@ interface DataContextType {
     resolveIncident: (incident: Incident) => Promise<void>;
     addNewSupply: (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }) => Promise<void>;
     updateSupply: (supply: Supply) => Promise<void>;
+    updateSupplyLot: (supplyName: string, oldLot: string, newLot: string) => Promise<void>;
     deleteSupply: (supplyId: string, nameHint: string) => Promise<void>;
     addSupplyStock: (supplyId: string, quantity: number, lot?: string) => Promise<void>;
     addPackModel: (model: Omit<PackModel, 'id' | 'created_at'>) => Promise<void>;
@@ -640,6 +640,30 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const { error } = await supabase.from('supplies').update(updateData).eq('id', id);
         if (error) throw error;
     });
+
+    const updateSupplyLot = async (supplyName: string, oldLot: string, newLot: string) => {
+        const finalNewLot = newLot.trim() === '' ? null : newLot.trim().toUpperCase();
+        const action = `Actualizó el lote '${oldLot}' a '${finalNewLot || 'SIN LOTE'}' para el consumible '${supplyName}'`;
+        
+        await logAndRefetch(action, async () => {
+            if (!supabase) return;
+
+            let query = supabase
+                .from('pallets')
+                .update({ supply_lot: finalNewLot })
+                .eq('product_name', supplyName);
+
+            if (oldLot === 'SIN LOTE') {
+                // Target rows where supply_lot is NULL or an empty string.
+                query = query.or('supply_lot.is.null,supply_lot.eq.');
+            } else {
+                query = query.eq('supply_lot', oldLot);
+            }
+            
+            const { error } = await query;
+            if (error) throw error;
+        });
+    };
     
     const deleteSupply = async (supplyId: string, nameHint: string) => logAndRefetch(`Eliminó el consumible ${nameHint}`, async () => {
         if (!supabase) return;
@@ -895,7 +919,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         inventoryStock,
         addAlbaran, updateAlbaran, deleteAlbaran,
         addIncident, resolveIncident,
-        addNewSupply, updateSupply, deleteSupply,
+        addNewSupply, updateSupply, updateSupplyLot, deleteSupply,
         addSupplyStock,
         addPackModel, addPack,
         handleDispatch,
