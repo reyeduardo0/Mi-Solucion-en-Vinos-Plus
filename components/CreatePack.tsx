@@ -1,7 +1,4 @@
 
-
-
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { WinePack, PackModel, Merma, Supply, InventoryStockItem } from '../types';
@@ -48,8 +45,7 @@ const AssignLotsModal: React.FC<AssignLotsModalProps> = ({ productAssignment, av
         existingAssignments.reduce((acc, curr) => ({ ...acc, [curr.lot]: curr.quantity }), {})
     );
 
-    // FIX: Operator '+' cannot be applied to types 'unknown' and 'number'.
-    // Explicitly cast qty to a number as Object.values can be inferred as returning 'unknown'.
+    // FIX: Operator '+' cannot be applied to types 'unknown' and 'number'. Explicitly cast `qty` to a number.
     const totalAssigned = useMemo(() => Object.values(assignments).reduce((sum, qty) => sum + (Number(qty) || 0), 0), [assignments]);
     const isComplete = totalAssigned === requiredQuantity;
     const remaining = requiredQuantity - totalAssigned;
@@ -62,7 +58,7 @@ const AssignLotsModal: React.FC<AssignLotsModalProps> = ({ productAssignment, av
 
     const handleSave = () => {
         const finalAssignments = Object.entries(assignments)
-            // FIX: Explicitly cast qty to number to prevent type errors with comparison and object creation.
+            // FIX: Explicitly cast qty to a number to handle potential 'unknown' type and allow comparison.
             .filter(([, qty]) => Number(qty) > 0)
             .map(([lot, quantity]) => ({ lot, quantity: Number(quantity) }));
         onSave(productName, finalAssignments);

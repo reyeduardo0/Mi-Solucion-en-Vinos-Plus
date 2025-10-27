@@ -215,12 +215,12 @@ const Inventory: React.FC = () => {
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">EAN</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unidad</th>
+                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">EAN</th>
+                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
+                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Unidad</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lotes en Stock</th>
-                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Mínimo</th>
-                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Mínimo</th>
+                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                             </tr>
                         </thead>
                          <tbody className="bg-white divide-y divide-gray-200">
@@ -232,9 +232,9 @@ const Inventory: React.FC = () => {
                                 return (
                                 <tr key={s.id}>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{s.name}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">{s.ean || 'N/A'}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{s.type}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{s.unit}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 font-mono text-center">{s.ean || 'N/A'}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{s.type}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{s.unit}</td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                                         {lotsForSupply.length > 0 ? (
                                             <ul className="space-y-1">
@@ -249,8 +249,8 @@ const Inventory: React.FC = () => {
                                             'N/A'
                                         )}
                                     </td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-right">{s.minStock != null ? s.minStock : 'N/A'}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-right text-sm space-x-2">
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{s.minStock != null ? s.minStock : 'N/A'}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-center text-sm space-x-2">
                                         <Button variant="secondary" className="p-1.5" onClick={() => handleEdit(s)}><PencilIcon /></Button>
                                         <Button variant="danger" className="p-1.5" onClick={() => setSupplyToDelete(s)}><TrashIcon /></Button>
                                     </td>

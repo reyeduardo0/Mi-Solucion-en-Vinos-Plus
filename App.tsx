@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 // FIX: Changed to a type-only import for Session.
@@ -48,8 +49,14 @@ const AppRoutes: React.FC = () => {
 
     useEffect(() => {
         const fetchSession = async () => {
-            const { data: { session } } = await supabase!.auth.getSession();
-            setSession(session);
+            // More robust session fetching with error handling.
+            const { data, error } = await supabase!.auth.getSession();
+            if (error) {
+                console.error("Error fetching session on initial load:", error.message);
+                setSession(null); // Ensure session is cleared on error
+            } else {
+                setSession(data.session);
+            }
             setLoading(false);
         };
         

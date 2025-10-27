@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
 // FIX: Changed to a type-only import for Session.
 import type { Session } from '@supabase/supabase-js';
@@ -291,8 +292,24 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             const fetchedAuditLogs = (auditLogsRes.data || []).map((log: any) => ({ id: log.id, timestamp: log.timestamp, userId: log.userid, userName: log.username || 'Usuario Desconocido', action: log.action }));
             setAuditLogs(fetchedAuditLogs as AuditLog[]);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error fetching data:", JSON.stringify(error, null, 2));
+            // Add robust sign-out logic for auth errors.
+            // Supabase client errors often have a __isAuthError property or specific messages.
+            const isAuthError =
+                error?.__isAuthError ||
+                error?.message?.includes('JWT') ||
+                error?.message?.includes('token') ||
+                error?.message?.includes('Unauthorized') ||
+                error?.code === 'PGRST301' || // JWT expired
+                error?.status === 401;
+
+            if (isAuthError) {
+                console.warn("Authentication error detected during data fetch. Forcing sign out.", error);
+                // Don't await here, just fire and forget. 
+                // The onAuthStateChange listener in App.tsx will handle the UI update and redirect.
+                supabase?.auth.signOut();
+            }
         } finally {
             setLoadingData(false);
         }
@@ -304,27 +321,45 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     }, [fetchData]);
 
     const logAndRefetch = useCallback(async (action: string, operation: () => Promise<any>) => {
-        await operation();
-        
-        const userForLog = currentUserRef.current;
+        try {
+            await operation();
+            
+            const userForLog = currentUserRef.current;
 
-        // DEFINITIVE FIX: This robust guard prevents the race condition.
-        // It checks if the user profile is fully loaded before trying to use its 'name'.
-        if (userForLog && typeof userForLog.id === 'string' && typeof userForLog.name === 'string' && userForLog.name.length > 0) {
-             await addAuditLog(action, userForLog.id, userForLog.name);
-        } else {
-            // FALLBACK: If the profile isn't loaded, use session data to ensure the log is still created
-            // and the app does NOT crash.
-            console.warn("logAndRefetch: currentUser not fully loaded. Falling back to session data for audit log.", { user: userForLog });
-            const sessionUser = session.user;
-            if (sessionUser) {
-                await addAuditLog(action, sessionUser.id, sessionUser.email || 'Usuario Desconocido');
+            // DEFINITIVE FIX: This robust guard prevents the race condition.
+            // It checks if the user profile is fully loaded before trying to use its 'name'.
+            if (userForLog && typeof userForLog.id === 'string' && typeof userForLog.name === 'string' && userForLog.name.length > 0) {
+                await addAuditLog(action, userForLog.id, userForLog.name);
             } else {
-                console.error("CRITICAL: An audited action was performed without a user session.", { action });
+                // FALLBACK: If the profile isn't loaded, use session data to ensure the log is still created
+                // and the app does NOT crash.
+                console.warn("logAndRefetch: currentUser not fully loaded. Falling back to session data for audit log.", { user: userForLog });
+                const sessionUser = session.user;
+                if (sessionUser) {
+                    await addAuditLog(action, sessionUser.id, sessionUser.email || 'Usuario Desconocido');
+                } else {
+                    console.error("CRITICAL: An audited action was performed without a user session.", { action });
+                }
             }
+            
+            await fetchData();
+        } catch (error: any) {
+            console.error(`Error during audited action '${action}':`, error);
+            const isAuthError =
+                error?.__isAuthError ||
+                error?.message?.includes('JWT') ||
+                error?.message?.includes('token') ||
+                error?.message?.includes('Unauthorized') ||
+                error?.code === 'PGRST301' ||
+                error?.status === 401;
+
+            if (isAuthError) {
+                console.warn("Authentication error detected during operation. Forcing sign out.", error);
+                supabase?.auth.signOut();
+            }
+            // Re-throw the error so UI components can still handle it (e.g., show a message in a modal)
+            throw error;
         }
-        
-        await fetchData();
     }, [addAuditLog, fetchData, session.user]);
 
     const inventoryStock = React.useMemo((): InventoryStockItem[] => {
