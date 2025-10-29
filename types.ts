@@ -12,7 +12,9 @@ export type Permission =
   | 'labels:generate'
   | 'dispatch:create'
   | 'incidents:manage'
-  | 'reports:view';
+  | 'reports:view'
+  | 'traceability:view'
+  | 'audit:view';
 
 
 export interface Role {
@@ -28,14 +30,6 @@ export interface User {
   name: string;
   email: string;
   roleId: string;
-}
-
-export interface AuditLog {
-  id: string;
-  timestamp: string;
-  userId: string;
-  userName:string;
-  action: string;
 }
 
 export enum IncidentType {
@@ -137,7 +131,6 @@ export interface Supply {
   unit: 'unidades' | 'cajas' | 'rollos' | 'metros';
   quantity: number;
   minStock?: number;
-  ean?: string;
   created_at?: string;
 }
 
@@ -196,7 +189,6 @@ export interface DispatchNote {
 
 export interface Merma {
   id: string;
-  itemId?: string; // ID of the product or supply, primarily for client-side operations
   itemName: string;
   itemType: 'product' | 'supply';
   lot?: string;

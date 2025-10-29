@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import Card from './ui/Card';
 import { useData } from '../context/DataContext';

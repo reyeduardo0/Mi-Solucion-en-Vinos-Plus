@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Pallet } from '../types';
@@ -36,7 +37,7 @@ const PalletDetailCard: React.FC<{ pallet: Pallet, index: number }> = ({ pallet,
                 </div>
             )}
             {pallet.incident && (
-                 <div className="mt-4 p-3 border-l-4 border-yellow-40aud bg-yellow-50">
+                 <div className="mt-4 p-3 border-l-4 border-yellow-400 bg-yellow-50">
                     <h5 className="text-sm font-semibold text-yellow-800">Incidencia del Pallet</h5>
                     <p className="text-sm text-yellow-700 mt-1">{pallet.incident.description}</p>
                     {pallet.incident.images.length > 0 && <p className="text-xs mt-2 text-yellow-600">({pallet.incident.images.length} imágenes adjuntas)</p>}
@@ -79,7 +80,7 @@ const GoodsReceiptDetail: React.FC = () => {
                         <dl className="space-y-4">
                             <InfoPair label="Fecha y Hora de Entrada" value={formatDateTimeLong(albaran.entryDate)} />
                             <InfoPair label="Estado" value={<StatusBadge status={albaran.status} />} />
-                            <InfoPair label="Número de Pallets" value={albaran.pallets.length} />
+                            <InfoPair label="Número de Pallets" value={albaran.pallets?.length || 0} />
                         </dl>
                     </Card>
                      <Card title="Datos de Transporte">
@@ -95,21 +96,25 @@ const GoodsReceiptDetail: React.FC = () => {
                         <Card title="Incidencia General">
                              <div className="p-3 border-l-4 border-red-400 bg-red-50">
                                 <p className="text-sm text-red-800">{albaran.incidentDetails}</p>
-                                {albaran.incidentImages && albaran.incidentImages.length > 0 && <p className="text-xs mt-2 text-red-600">({albaran.incidentImages.length} imágenes adjuntas)</p>}
+                                {/* FIX: Correctly close JSX and display image count. */}
+                                {albaran.incidentImages && albaran.incidentImages.length > 0 && (
+                                    <p className="text-xs mt-2 text-red-600">({albaran.incidentImages.length} imágenes adjuntas)</p>
+                                )}
                              </div>
                         </Card>
                     )}
                 </div>
-
                 <div className="lg:col-span-2">
-                    <Card title="Pallets Recibidos">
-                        {albaran.pallets.length > 0 ? (
-                            albaran.pallets.map((pallet, index) => (
-                                <PalletDetailCard key={pallet.id || index} pallet={pallet} index={index} />
-                            ))
-                        ) : (
-                            <p className="text-gray-500 text-center py-4">No se registraron pallets para esta entrada.</p>
-                        )}
+                    <Card title={`Pallets (${albaran.pallets?.length || 0})`}>
+                        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                            {albaran.pallets && albaran.pallets.length > 0 ? (
+                                albaran.pallets.map((pallet, index) => (
+                                    <PalletDetailCard key={pallet.id} pallet={pallet} index={index} />
+                                ))
+                            ) : (
+                                <p className="text-gray-500 text-center py-4">No hay pallets registrados para esta entrada.</p>
+                            )}
+                        </div>
                     </Card>
                 </div>
             </div>

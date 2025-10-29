@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from './ui/Card';
@@ -22,12 +21,25 @@ const StatCard: React.FC<{ title: string; value: string | number; colorClass: st
 
 const Dashboard: React.FC = () => {
   const navigateTo = useNavigate();
-  const { albaranes, incidents, packs, salidas } = useData();
+  const { albaranes, incidents, packs, salidas, inventoryStock } = useData();
 
-  const totalPallets = albaranes.reduce((sum, a) => sum + a.pallets.length, 0);
-  const totalBottles = albaranes.reduce((sum, a) => sum + a.pallets.reduce((pSum, p) => pSum + p.totalBottles, 0), 0);
-  const openIncidents = incidents.filter(i => !i.resolved).length;
+  const totalPalletsReceived = albaranes.reduce((sum, a) => sum + (a.pallets?.length || 0), 0);
+  
+  const availableBottles = inventoryStock
+    .filter(item => item.type === 'Producto')
+    .reduce((sum, item) => sum + item.available, 0);
+
   const packsCreated = packs.length;
+  const packsInProgress = packs.filter(p => p.status === 'Ensamblado').length;
+  const openIncidents = incidents.filter(i => !i.resolved).length;
+  
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const dispatchesThisMonth = salidas.filter(s => {
+      const dispatchDate = new Date(s.dispatchDate);
+      return dispatchDate.getMonth() === currentMonth && dispatchDate.getFullYear() === currentYear;
+  }).length;
 
   const movementData = [
     { name: 'Entradas', Total: albaranes.length },
@@ -36,11 +48,10 @@ const Dashboard: React.FC = () => {
   ];
   const movementColors = ['#22c55e', '#ef4444', '#f59e0b'];
   
-  const recentEntries = [
-    { id: 'ALB-E-20251013', carrier: 'Transportes Rápidos - 2 palets' },
-    { id: 'ALB-E-20251014', carrier: 'Logística Segura - 1 palets' },
-    { id: 'ALB-E-20251015', carrier: 'Transportes Rápidos - 1 palets' },
-  ];
+  const recentEntries = [...albaranes]
+    .sort((a, b) => new Date(b.entryDate).getTime() - new Date(a.entryDate).getTime())
+    .slice(0, 3);
+
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -56,12 +67,12 @@ const Dashboard: React.FC = () => {
       </section>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        <div className="col-span-2 md:col-span-1 lg:col-span-2"><StatCard title="Stock Total (Palets)" value={totalPallets} colorClass="bg-blue-500" /></div>
-        <div className="col-span-2 md:col-span-1 lg:col-span-2"><StatCard title="Stock Total (Botellas)" value={totalBottles.toLocaleString('es-ES')} colorClass="bg-green-500" /></div>
+        <div className="col-span-2 md:col-span-1 lg:col-span-2"><StatCard title="Total Palets Recibidos" value={totalPalletsReceived} colorClass="bg-blue-500" /></div>
+        <div className="col-span-2 md:col-span-1 lg:col-span-2"><StatCard title="Botellas Disponibles" value={availableBottles.toLocaleString('es-ES')} colorClass="bg-green-500" /></div>
         <div className="col-span-2 md:col-span-1 lg:col-span-2"><StatCard title="Packs Creados" value={packsCreated} colorClass="bg-cyan-500" /></div>
-        <div className="col-span-2 md:col-span-1 lg:col-span-2"><StatCard title="Packs en Proceso" value={0} colorClass="bg-orange-500" /></div>
+        <div className="col-span-2 md:col-span-1 lg:col-span-2"><StatCard title="Packs en Proceso" value={packsInProgress} colorClass="bg-orange-500" /></div>
         <div className="col-span-2 md:col-span-1 lg:col-span-2"><StatCard title="Incidencias Pendientes" value={openIncidents} colorClass="bg-yellow-500" /></div>
-        <div className="col-span-2 md:col-span-1 lg:col-span-2"><StatCard title="Salidas (Este Mes)" value={salidas.length} colorClass="bg-purple-500" /></div>
+        <div className="col-span-2 md:col-span-1 lg:col-span-2"><StatCard title="Salidas (Este Mes)" value={dispatchesThisMonth} colorClass="bg-purple-500" /></div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -86,12 +97,16 @@ const Dashboard: React.FC = () => {
         
         <Card title="Últimas Entradas">
             <div className="flex flex-col space-y-3">
-                {recentEntries.map((entry, index) => (
-                    <div key={index} className="border-b pb-2 last:border-b-0">
-                        <p className="font-semibold text-sm text-gray-700">{entry.id}</p>
-                        <p className="text-xs text-gray-500">{entry.carrier}</p>
-                    </div>
-                ))}
+                {recentEntries.length > 0 ? (
+                    recentEntries.map((entry) => (
+                        <div key={entry.id} className="border-b pb-2 last:border-b-0">
+                            <p className="font-semibold text-sm text-gray-700">{entry.id}</p>
+                            <p className="text-xs text-gray-500">{`${entry.carrier} - ${entry.pallets?.length || 0} palets`}</p>
+                        </div>
+                    ))
+                ) : (
+                    <p className="text-sm text-gray-500 text-center py-4">No hay entradas recientes.</p>
+                )}
             </div>
         </Card>
       </div>

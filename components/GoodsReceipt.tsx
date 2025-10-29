@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Albaran, Pallet, Supply } from '../types';
@@ -6,9 +5,8 @@ import Card from './ui/Card';
 import Button from './ui/Button';
 import Spinner from './ui/Spinner';
 import { useData } from '../context/DataContext';
-import { toDateTimeLocalInput, fileToBase64, capitalizeWords } from '../utils/helpers';
+import { toDateTimeLocalInput, fileToBase64, capitalizeWords, getErrorMessage } from '../utils/helpers';
 import ConfirmationModal from './ui/ConfirmationModal';
-import { extractDataFromImage } from '../services/geminiService';
 
 interface PalletGroup {
     id: string; // for react key
@@ -69,10 +67,6 @@ const GoodsReceipt: React.FC = () => {
     const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
     const [showCancelModal, setShowCancelModal] = useState(false);
     
-    const [albaranImageFile, setAlbaranImageFile] = useState<File | null>(null);
-    const [isAiLoading, setIsAiLoading] = useState(false);
-    const [aiError, setAiError] = useState<string | null>(null);
-
     const isEditing = !!albaranIdFromParams;
 
     const assignedPalletsCount = useMemo(() => palletGroups.reduce((acc, group) => acc + (group.palletCount || 0), 0), [palletGroups]);
@@ -90,10 +84,10 @@ const GoodsReceipt: React.FC = () => {
                 setOrigin(existingAlbaran.origin || '');
                 setStatus(existingAlbaran.status);
                 setIncidentDetails(existingAlbaran.incidentDetails || '');
-                setTotalPallets(existingAlbaran.pallets.length);
+                setTotalPallets(existingAlbaran.pallets?.length || 0);
 
                 const groups: Record<string, PalletGroup> = {};
-                existingAlbaran.pallets.forEach(p => {
+                existingAlbaran.pallets?.forEach(p => {
                     let groupKey: string;
                     let supplyForGroup: Supply | undefined;
 
@@ -270,36 +264,8 @@ const GoodsReceipt: React.FC = () => {
             }
             navigate('/entradas');
         } catch (e: any) {
-            setError(e.message || 'Ocurrió un error al guardar.');
+            setError(getErrorMessage(e));
             setIsLoading(false);
-        }
-    };
-
-    const handleAlbaranImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            setAlbaranImageFile(e.target.files[0]);
-            setAiError(null);
-        }
-    };
-
-    const handleProcessAlbaranImage = async () => {
-        if (!albaranImageFile) return;
-        setIsAiLoading(true);
-        setAiError(null);
-        try {
-            const prompt = `From this delivery note image, extract: Delivery Note Number ('Nº Albarán'), Truck Plate ('Matrícula'), Carrier ('Transportista'), Driver ('Conductor'), and Origin ('Origen'). Return a JSON object with keys: albaranId, truckPlate, carrier, driver, origin. Be concise and accurate.`;
-            const extractedData = await extractDataFromImage(albaranImageFile, prompt);
-
-            if (extractedData.albaranId) setAlbaranId(extractedData.albaranId);
-            if (extractedData.truckPlate) setTruckPlate(extractedData.truckPlate);
-            if (extractedData.carrier) setCarrier(extractedData.carrier);
-            if (extractedData.driver) setDriver(extractedData.driver);
-            if (extractedData.origin) setOrigin(extractedData.origin);
-            
-        } catch (e: any) {
-            setAiError(e.message || 'Error al procesar la imagen.');
-        } finally {
-            setIsAiLoading(false);
         }
     };
     
@@ -308,23 +274,6 @@ const GoodsReceipt: React.FC = () => {
             {showCancelModal && <ConfirmationModal title="Descartar Cambios" message="¿Estás seguro de que quieres cancelar? Todos los cambios no guardados se perderán." onConfirm={() => navigate('/entradas')} onCancel={() => setShowCancelModal(false)} confirmText="Sí, descartar" />}
             <h1 className="text-3xl font-bold text-gray-800 mb-6">{isEditing ? 'Editar Entrada' : 'Registrar Nueva Entrada'}</h1>
             
-            <Card className="mb-6 bg-yellow-50 border-yellow-200">
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">Extracción Automática por IA</h3>
-                <p className="text-sm text-gray-600 mb-4">Sube una foto del albarán para que la IA extraiga los datos principales.</p>
-                <div className="flex items-center space-x-4">
-                    <input 
-                        type="file" 
-                        accept="image/*" 
-                        onChange={handleAlbaranImageChange} 
-                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-yellow-100 file:text-yellow-700 hover:file:bg-yellow-200"
-                    />
-                    <Button onClick={handleProcessAlbaranImage} disabled={!albaranImageFile || isAiLoading}>
-                        {isAiLoading ? <Spinner /> : 'Procesar Albarán'}
-                    </Button>
-                </div>
-                {aiError && <p className="text-red-600 text-sm mt-2">{aiError}</p>}
-            </Card>
-
             <Card title="Datos Generales del Albarán" className="mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {!isEditing && <HeaderInput label="Nº Albarán de Entrada" id="albaranId" value={albaranId} onChange={e => setAlbaranId(e.target.value)} required errorField="albaranId" validationErrors={validationErrors}/>}

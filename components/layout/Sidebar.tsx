@@ -10,9 +10,10 @@ import {
   ExitIcon,
   IncidentIcon,
   ReportsIcon,
-  TraceabilityIcon,
   UsersIcon,
-  AuditIcon
+  TraceabilityIcon,
+  AuditIcon,
+  ChangelogIcon,
 } from '../../constants';
 import { usePermissions } from '../../hooks/usePermissions';
 
@@ -33,12 +34,16 @@ const Sidebar: React.FC<SidebarProps> = ({ onLinkClick }) => {
         { path: '/salidas', label: 'Salidas', icon: <ExitIcon />, permission: can('dispatch:create') },
         { path: '/incidencias', label: 'Incidencias', icon: <IncidentIcon />, permission: can('incidents:manage') },
         { path: '/reportes', label: 'Reportes', icon: <ReportsIcon />, permission: can('reports:view') },
-        { path: '/trazabilidad', label: 'Trazabilidad', icon: <TraceabilityIcon />, permission: true },
+        { path: '/trazabilidad', label: 'Trazabilidad', icon: <TraceabilityIcon />, permission: can('traceability:view') },
     ];
     
     const adminLinks = [
         { path: '/usuarios', label: 'Usuarios y Roles', icon: <UsersIcon />, permission: can('users:manage') },
-        { path: '/auditoria', label: 'Auditoría', icon: <AuditIcon />, permission: true },
+        { path: '/auditoria', label: 'Auditoría', icon: <AuditIcon />, permission: can('audit:view') },
+    ]
+
+    const systemLinks = [
+        { path: '/changelog', label: 'Historial de Cambios', icon: <ChangelogIcon />, permission: true },
     ]
 
   return (
@@ -71,6 +76,28 @@ const Sidebar: React.FC<SidebarProps> = ({ onLinkClick }) => {
              <h3 className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Administración</h3>
              <div className="space-y-1">
                 {adminLinks.filter(link => link.permission).map((link) => (
+                    <NavLink
+                        key={link.path}
+                        to={link.path}
+                        onClick={onLinkClick}
+                        className={({ isActive }) =>
+                        `flex items-center space-x-3 p-2 rounded-md font-medium text-sm transition-colors duration-200 ${
+                            isActive
+                            ? 'bg-brand-yellow text-brand-dark'
+                            : 'hover:bg-brand-gray-dark hover:text-white'
+                        }`
+                        }
+                    >
+                        {link.icon}
+                        <span>{link.label}</span>
+                    </NavLink>
+                ))}
+             </div>
+        </div>
+         <div className="mt-6 pt-6 border-t border-brand-gray-dark">
+             <h3 className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Sistema</h3>
+             <div className="space-y-1">
+                {systemLinks.filter(link => link.permission).map((link) => (
                     <NavLink
                         key={link.path}
                         to={link.path}

@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useMemo } from 'react';
 import { Incident, IncidentType } from '../types';
 import Card from './ui/Card';

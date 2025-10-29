@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 // FIX: Changed to a type-only import for Session.
@@ -20,12 +19,13 @@ import GenerateLabels from './components/GenerateLabels';
 import Incidents from './components/Incidents';
 import Reports from './components/Reports';
 import Users from './components/Users';
-import Audit from './components/Audit';
-import Traceability from './components/Traceability';
 import Login from './components/Login';
 import SupabaseConfigNotice from './components/SupabaseConfigNotice';
 import Spinner from './components/ui/Spinner';
 import ProfileModal from './components/users/ProfileModal';
+import Traceability from './components/Traceability';
+import Audit from './components/Audit';
+import Changelog from './components/Changelog';
 
 // --- Hooks and Context ---
 import { PermissionsProvider } from './hooks/usePermissions';
@@ -104,14 +104,14 @@ const AppLayout: React.FC = () => {
     const navigate = useNavigate();
     
     // Consume the centralized data and user context
-    const { currentUser, roles } = useData();
+    const { currentUser, roles, error } = useData();
 
     const handleLogout = async () => {
         await supabase!.auth.signOut();
         navigate('/login');
     };
 
-    if (!currentUser) {
+    if (!currentUser || roles.length === 0) {
         // This can happen briefly while the DataProvider is loading its own user data
         return <div className="min-h-screen bg-brand-light flex justify-center items-center"><Spinner /></div>;
     }
@@ -149,6 +149,12 @@ const AppLayout: React.FC = () => {
                         toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} 
                         onOpenProfile={() => setProfileModalOpen(true)}
                     />
+                     {error && (
+                        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mx-4 mt-4" role="alert">
+                            <p className="font-bold">Error de Carga de Datos</p>
+                            <p>{error}</p>
+                        </div>
+                    )}
                     <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
                         <Routes>
                             <Route index element={<Dashboard />} />
@@ -163,9 +169,10 @@ const AppLayout: React.FC = () => {
                             <Route path="etiquetas" element={<GenerateLabels />} />
                             <Route path="incidencias" element={<Incidents />} />
                             <Route path="reportes" element={<Reports />} />
-                            <Route path="trazabilidad" element={<Traceability />} />
                             <Route path="usuarios" element={<Users />} />
+                            <Route path="trazabilidad" element={<Traceability />} />
                             <Route path="auditoria" element={<Audit />} />
+                            <Route path="changelog" element={<Changelog />} />
                             <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>
                     </main>

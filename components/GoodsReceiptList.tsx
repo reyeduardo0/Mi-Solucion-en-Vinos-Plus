@@ -1,5 +1,3 @@
-
-
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Albaran } from '../types';
@@ -82,42 +80,30 @@ const GoodsReceiptList: React.FC = () => {
                             <tr>
                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nº Albarán</th>
                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha Entrada</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Matrícula</th>
                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transportista</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pallets</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Matrícula</th>
                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                                 <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {filteredAlbaranes.length > 0 ? (
-                                filteredAlbaranes.map((albaran) => (
-                                    <tr key={albaran.id}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{albaran.id}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTimeSafe(albaran.entryDate)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{albaran.truckPlate}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{albaran.carrier}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{albaran.pallets.length}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><StatusBadge status={albaran.status} /></td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <div className="flex items-center justify-end space-x-4">
-                                                {can('entries:view') && (
-                                                    <button onClick={() => navigate(`/entradas/${albaran.id}`)} className="text-yellow-600 hover:text-yellow-900">Ver</button>
-                                                )}
-                                                {can('entries:edit') && (
-                                                    <button onClick={() => navigate(`/entradas/editar/${albaran.id}`)} className="text-blue-600 hover:text-blue-900">Editar</button>
-                                                )}
-                                                {can('entries:delete') && (
-                                                    <button onClick={() => setAlbaranToDelete(albaran)} className="text-red-600 hover:text-red-900">Eliminar</button>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            ) : (
+                            {filteredAlbaranes.map(albaran => (
+                                <tr key={albaran.id} onClick={() => navigate(`/entradas/${albaran.id}`)} className="hover:bg-gray-50 cursor-pointer">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{albaran.id}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTimeSafe(albaran.entryDate)}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{albaran.carrier}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{albaran.truckPlate}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap"><StatusBadge status={albaran.status} /></td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                        {can('entries:edit') && <Button variant="secondary" onClick={(e) => { e.stopPropagation(); navigate(`/entradas/editar/${albaran.id}`)}}>Editar</Button>}
+                                        {can('entries:delete') && <Button variant="danger" onClick={(e) => { e.stopPropagation(); setAlbaranToDelete(albaran);}}>Eliminar</Button>}
+                                    </td>
+                                </tr>
+                            ))}
+                            {filteredAlbaranes.length === 0 && (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-500">
-                                        No se encontraron entradas que coincidan con la búsqueda.
+                                    <td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">
+                                        No se encontraron entradas.
                                     </td>
                                 </tr>
                             )}

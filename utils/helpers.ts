@@ -64,3 +64,19 @@ export const getInitials = (name: string) => {
     if (names.length === 1) return names[0].charAt(0).toUpperCase();
     return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
 };
+
+export const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'object' && error !== null) {
+    const err = error as { message?: unknown; details?: unknown };
+    if (typeof err.message === 'string' && err.message) {
+      return err.message;
+    }
+    if (typeof err.details === 'string' && err.details) {
+      return err.details;
+    }
+  }
+  return 'Ocurrió un error inesperado. Por favor, revise la consola para más detalles.';
+};

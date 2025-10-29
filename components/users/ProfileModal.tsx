@@ -3,6 +3,7 @@ import { useData } from '../../context/DataContext';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Spinner from '../ui/Spinner';
+import { getErrorMessage } from '../../utils/helpers';
 
 interface ProfileModalProps {
     onClose: () => void;
@@ -36,7 +37,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ onClose }) => {
                 onClose();
             }, 1500);
         } catch (e: any) {
-            setError(e.message);
+            setError(getErrorMessage(e));
         } finally {
             setIsLoading(false);
         }

@@ -4,6 +4,7 @@ import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Spinner from '../ui/Spinner';
 import { useData } from '../../context/DataContext';
+import { getErrorMessage } from '../../utils/helpers';
 
 interface UserModalProps {
     user: User | null;
@@ -62,7 +63,7 @@ const UserModal: React.FC<UserModalProps> = ({ user, roles, onSave, onClose }) =
             }
             onClose();
         } catch (e: any) {
-             setError(e.message || 'Ocurrió un error inesperado.');
+            setError(getErrorMessage(e));
         } finally {
             setIsLoading(false);
         }

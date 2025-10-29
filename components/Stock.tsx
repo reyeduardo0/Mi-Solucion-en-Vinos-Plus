@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Supply, InventoryStockItem } from '../types';
 import Card from './ui/Card';
@@ -6,6 +7,7 @@ import { useData } from '../context/DataContext';
 import Modal from './ui/Modal';
 import StatusBadge from './ui/StatusBadge';
 import ConfirmationModal from './ui/ConfirmationModal';
+import { getErrorMessage } from '../utils/helpers';
 
 const PencilIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" /></svg>;
 const TrashIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>;
@@ -28,7 +30,6 @@ const AddSupplyModal: React.FC<AddSupplyModalProps> = ({ supply, onSave, onClose
     const [type, setType] = useState<'Contable' | 'No Contable'>(supply?.type || 'Contable');
     const [unit, setUnit] = useState<'unidades' | 'cajas' | 'rollos' | 'metros'>(supply?.unit || 'unidades');
     const [minStock, setMinStock] = useState(supply?.minStock?.toString() || '');
-    const [ean, setEan] = useState(supply?.ean || '');
     const [initialQuantity, setInitialQuantity] = useState('');
     const [initialLot, setInitialLot] = useState('');
     const [lotUpdates, setLotUpdates] = useState<Record<string, { originalName: string, newName: string }>>({});
@@ -67,7 +68,6 @@ const AddSupplyModal: React.FC<AddSupplyModalProps> = ({ supply, onSave, onClose
             type, 
             unit, 
             minStock: minStock ? parseInt(minStock, 10) : undefined,
-            ean: ean || undefined
         };
         
         const initialQtyNum = initialQuantity ? parseInt(initialQuantity, 10) : 0;
@@ -84,7 +84,6 @@ const AddSupplyModal: React.FC<AddSupplyModalProps> = ({ supply, onSave, onClose
         <Modal title={supply ? "Editar Consumible" : "Añadir Nuevo Consumible"} onClose={onClose}>
             <form onSubmit={handleSubmit} className="space-y-4">
                 <div><label className="block text-sm font-medium">Nombre</label><input type="text" value={name} onChange={e => setName(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
-                <div><label className="block text-sm font-medium">Código EAN (Opcional)</label><input type="text" value={ean} onChange={e => setEan(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
                 <div><label className="block text-sm font-medium">Tipo</label><select value={type} onChange={e => setType(e.target.value as any)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"><option value="Contable">Contable</option><option value="No Contable">No Contable</option></select></div>
                 <div><label className="block text-sm font-medium">Unidad</label><select value={unit} onChange={e => setUnit(e.target.value as any)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"><option value="unidades">Unidades</option><option value="cajas">Cajas</option><option value="rollos">Rollos</option><option value="metros">Metros</option></select></div>
                 <div><label className="block text-sm font-medium">Stock Mínimo (Opcional)</label><input type="number" value={minStock} onChange={e => setMinStock(e.target.value)} min="0" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
@@ -193,7 +192,8 @@ const Inventory: React.FC = () => {
     const handleSaveSupplyStock = (supplyId: string, quantity: number, lot: string) => {
         addSupplyStock(supplyId, quantity, lot).catch((error: any) => {
             console.error("Error adding supply stock:", error);
-            alert(`Error al añadir stock: ${error.message}`);
+            const errorMessage = getErrorMessage(error);
+            alert(`Error al añadir stock: ${errorMessage}`);
         });
     };
     
@@ -219,7 +219,7 @@ const Inventory: React.FC = () => {
                 await addNewSupply(data, initialData);
             }
         } catch (err: any) {
-            alert(err.message);
+            alert(getErrorMessage(err));
         } finally {
             setSupplyToEdit(null);
             setShowAddSupplyModal(false);
@@ -234,7 +234,7 @@ const Inventory: React.FC = () => {
     const handleConfirmDelete = () => {
         if (supplyToDelete) {
             deleteSupply(supplyToDelete.id, supplyToDelete.name)
-                .catch(err => alert(err.message))
+                .catch(err => alert(getErrorMessage(err)))
                 .finally(() => setSupplyToDelete(null));
         }
     };
@@ -305,7 +305,6 @@ const Inventory: React.FC = () => {
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
-                                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">EAN</th>
                                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
                                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Unidad</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lotes en Stock</th>
@@ -322,7 +321,6 @@ const Inventory: React.FC = () => {
                                 return (
                                 <tr key={s.id}>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{s.name}</td>
-                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 font-mono text-center">{s.ean || 'N/A'}</td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{s.type}</td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{s.unit}</td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -348,7 +346,7 @@ const Inventory: React.FC = () => {
                                 )
                             }) : (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-500">
+                                    <td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">
                                         No hay consumibles definidos. Haz clic en "Añadir Nuevo Consumible" para empezar.
                                     </td>
                                 </tr>
