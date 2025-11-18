@@ -5,7 +5,7 @@ import Card from './ui/Card';
 import Button from './ui/Button';
 import { usePermissions } from '../hooks/usePermissions';
 import { useData } from '../context/DataContext';
-import { formatDateTimeSafe } from '../utils/helpers';
+import { formatDateTimeSafe, getErrorMessage } from '../utils/helpers';
 import ConfirmationModal from './ui/ConfirmationModal';
 import StatusBadge from './ui/StatusBadge';
 
@@ -38,7 +38,7 @@ const GoodsReceiptList: React.FC = () => {
             try {
                 await deleteAlbaran(albaranToDelete);
             } catch (error: any) {
-                alert(`No se pudo eliminar la entrada:\n${error.message}`);
+                alert(`No se pudo eliminar la entrada:\n${getErrorMessage(error)}`);
             } finally {
                 setAlbaranToDelete(null);
             }

@@ -8,6 +8,7 @@ import UserModal from './users/UserModal';
 import RoleModal from './users/RoleModal';
 import ConfirmationModal from './ui/ConfirmationModal';
 import { SuperUserIcon } from '../constants';
+import { getErrorMessage } from '../utils/helpers';
 
 const PlusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>;
 const TrashIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>;
@@ -26,10 +27,16 @@ const Users: React.FC = () => {
     const [selectedRole, setSelectedRole] = useState<Role | null>(null);
     const [itemToDelete, setItemToDelete] = useState<{ type: 'user' | 'role', id: string, name: string } | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     const showSuccessMessage = (message: string) => {
         setSuccessMessage(message);
         setTimeout(() => setSuccessMessage(null), 3000);
+    };
+
+    const showErrorMessage = (message: string) => {
+        setErrorMessage(message);
+        setTimeout(() => setErrorMessage(null), 5000);
     };
 
     const handleEditUser = (user: User) => {
@@ -59,28 +66,36 @@ const Users: React.FC = () => {
     };
     
     const handleSaveRole = async (role: Role | Omit<Role, 'id' | 'created_at'>) => {
-        if ('id' in role) {
-            await updateRole(role);
-            showSuccessMessage(`Rol "${role.name}" actualizado correctamente.`);
-        } else {
-            await addRole(role);
-            showSuccessMessage(`Rol "${role.name}" creado correctamente.`);
+        try {
+            if ('id' in role) {
+                await updateRole(role);
+                showSuccessMessage(`Rol "${role.name}" actualizado correctamente.`);
+            } else {
+                await addRole(role);
+                showSuccessMessage(`Rol "${role.name}" creado correctamente.`);
+            }
+            setRoleModalOpen(false);
+            setSelectedRole(null);
+        } catch (e) {
+            showErrorMessage(getErrorMessage(e));
         }
-        setRoleModalOpen(false);
-        setSelectedRole(null);
     };
     
     const handleConfirmDelete = async () => {
         if (!itemToDelete) return;
         const { type, id, name } = itemToDelete;
-        if (type === 'user') {
-            await deleteUser(id, name);
-            showSuccessMessage(`Usuario "${name}" eliminado.`);
-        } else {
-            await deleteRole(id, name);
-            showSuccessMessage(`Rol "${name}" eliminado.`);
+        try {
+            if (type === 'user') {
+                await deleteUser(id, name);
+                showSuccessMessage(`Usuario "${name}" eliminado.`);
+            } else {
+                await deleteRole(id, name);
+                showSuccessMessage(`Rol "${name}" eliminado.`);
+            }
+            setItemToDelete(null);
+        } catch (e) {
+            showErrorMessage(getErrorMessage(e));
         }
-        setItemToDelete(null);
     };
 
     const TabButton: React.FC<{ label: string; count: number; isActive: boolean; onClick: () => void; }> = ({ label, count, isActive, onClick }) => (
@@ -103,6 +118,7 @@ const Users: React.FC = () => {
             </div>
             
             {successMessage && <div className="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">{successMessage}</div>}
+            {errorMessage && <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">{errorMessage}</div>}
 
             <div className="mb-4 border-b border-gray-200">
                 <TabButton label="Usuarios" count={users.length} isActive={activeTab === 'users'} onClick={() => setActiveTab('users')} />
