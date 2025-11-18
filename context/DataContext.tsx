@@ -135,10 +135,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             if (userProfilesResult.error) throw userProfilesResult.error;
             if (rolesResult.error) throw rolesResult.error;
 
-            const fetchedRoles = rolesResult.data || [];
+            const fetchedRoles = (rolesResult.data || []).filter(Boolean);
             setRoles(fetchedRoles);
 
-            const mappedUsers: User[] = (userProfilesResult.data || []).map((u: any) => ({
+            const mappedUsers: User[] = (userProfilesResult.data || []).filter(Boolean).map((u: any) => ({
                 id: u.id,
                 name: u.full_name,
                 email: u.email,
@@ -214,18 +214,18 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             if (errors.length > 0) throw errors[0];
 
             const fetchedAlbaranesRaw = (remainingDataResults[0].data as any[]) || [];
-            const fetchedSupplies = remainingDataResults[1].data || [];
-            const fetchedPackModels = remainingDataResults[2].data || [];
-            const fetchedPacks = remainingDataResults[3].data || [];
-            const fetchedSalidas = remainingDataResults[4].data || [];
-            const fetchedIncidents = remainingDataResults[5].data || [];
-            const fetchedMermas = remainingDataResults[6].data || [];
-            const fetchedAuditLogsRaw = remainingDataResults[7].data || [];
+            const fetchedSupplies = (remainingDataResults[1].data || []).filter(Boolean);
+            const fetchedPackModels = (remainingDataResults[2].data || []).filter(Boolean);
+            const fetchedPacks = (remainingDataResults[3].data || []).filter(Boolean);
+            const fetchedSalidas = (remainingDataResults[4].data || []).filter(Boolean);
+            const fetchedIncidents = (remainingDataResults[5].data || []).filter(Boolean);
+            const fetchedMermas = (remainingDataResults[6].data || []).filter(Boolean);
+            const fetchedAuditLogsRaw = (remainingDataResults[7].data as any[]) || [];
             
             const supplyNames = new Set(fetchedSupplies.map(s => s.name));
             
-            const fetchedAlbaranes = fetchedAlbaranesRaw.map((albaran): Albaran => {
-                const processedPallets = (albaran.pallets || []).map((p: any): Pallet => {
+            const fetchedAlbaranes = fetchedAlbaranesRaw.filter(Boolean).map((albaran): Albaran => {
+                 const processedPallets = (Array.isArray(albaran.pallets) ? albaran.pallets : []).filter(Boolean).map((p: any): Pallet => {
                     const basePallet = {
                         id: p.id,
                         palletNumber: p.palletNumber,
@@ -234,31 +234,42 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                         incident: p.incidentDescription ? { description: p.incidentDescription, images: p.incidentImages || [] } : undefined,
                         created_at: p.created_at,
                     };
-
-                    const isProductLike = (p.boxesPerPallet != null && p.boxesPerPallet > 0) || (p.bottlesPerBox != null && p.bottlesPerBox > 0);
-                    const matchesSupplyName = p.productName && supplyNames.has(p.productName);
                     
-                    // A pallet is a consumable ONLY if its name matches a known supply AND it doesn't have product-like attributes.
-                    if (matchesSupplyName && !isProductLike) {
+                    const hasProductQuantities = (p.boxesPerPallet != null && p.boxesPerPallet > 0) || (p.bottlesPerBox != null && p.bottlesPerBox > 0);
+                    const matchesSupplyName = p.productName && supplyNames.has(p.productName);
+
+                    // Robust classification: if it has boxes/bottles, it's ALWAYS a product.
+                    if (hasProductQuantities) {
+                        return {
+                            ...basePallet,
+                            type: 'product',
+                            product: { name: p.productName || '', lot: p.productLot || '' },
+                            boxesPerPallet: p.boxesPerPallet,
+                            bottlesPerBox: p.bottlesPerBox,
+                            totalBottles: p.totalBottles,
+                            eanBottle: p.eanBottle,
+                            eanBox: p.eanBox,
+                        };
+                    }
+                    
+                    // If it does not have product quantities, THEN check if it's a known consumable.
+                    if (matchesSupplyName) {
                         return {
                             ...basePallet,
                             type: 'consumable',
                             supplyName: p.productName,
-                            supplyQuantity: p.totalBottles, // Consumable quantity is stored in total_bottles
+                            supplyQuantity: p.totalBottles, // Consumable quantity is stored in total_bottles column
                             supplyLot: p.productLot,
                         };
-                    } 
+                    }
                     
-                    // Otherwise, it's always treated as a product.
+                    // Fallback: Treat as a product, but with missing quantity data.
                     return {
                         ...basePallet,
                         type: 'product',
-                        product: {
-                            name: p.productName || '', // Ensure product object always exists for type 'product'
-                            lot: p.productLot || '',
-                        },
-                        boxesPerPallet: p.boxesPerPallet,
-                        bottlesPerBox: p.bottlesPerBox,
+                        product: { name: p.productName || '', lot: p.productLot || '' },
+                        boxesPerPallet: p.boxesPerPallet, // will be 0 or null
+                        bottlesPerBox: p.bottlesPerBox,   // will be 0 or null
                         totalBottles: p.totalBottles,
                         eanBottle: p.eanBottle,
                         eanBox: p.eanBox,
@@ -267,7 +278,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 return { ...albaran, pallets: processedPallets };
             });
 
-            const fetchedAuditLogs = fetchedAuditLogsRaw.map((log: any) => ({
+            const fetchedAuditLogs = fetchedAuditLogsRaw.filter(Boolean).map((log: any) => ({
                 id: log.id,
                 userName: log.username,
                 action: log.action,
@@ -333,7 +344,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
         // Step 1: Aggregate all stock entries from albaranes (lotted consumables and products)
         albaranes.forEach(albaran => {
-            albaran.pallets?.forEach(pallet => {
+            (Array.isArray(albaran.pallets) ? albaran.pallets : []).filter(Boolean).forEach(pallet => {
                 if (pallet.type === 'product' && pallet.product?.name && pallet.product?.lot) {
                     const key = `product-${pallet.product.name}-${pallet.product.lot}`;
                     if (!stockMap.has(key)) {
@@ -361,54 +372,74 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                  if (!stockMap.has(key)) {
                     stockMap.set(key, { name: supply.name, type: 'Consumible', lot: 'SIN LOTE', unit: supply.unit, total: 0, inPacks: 0, inMerma: 0, available: 0, minStock: supply.minStock });
                 }
-                stockMap.get(key)!.total += supply.quantity;
+                stockMap.get(key)!.total += supply.quantity || 0;
             }
         });
 
         // Step 3: Deduct quantities used in assembled packs
         packs.forEach(pack => {
-            pack.contents?.forEach(content => {
-                const key = `product-${content.productName}-${content.lot}`;
-                if (stockMap.has(key)) {
-                    stockMap.get(key)!.inPacks += content.quantity;
-                }
-            });
-            pack.suppliesUsed?.forEach(supplyUsed => {
-                const supplyInfo = supplies.find(s => s.id === supplyUsed.supplyId);
-                if (supplyInfo) {
-                    // Find a stock item to attribute the usage to.
-                    // Prioritize deducting from a lot-less stock item first.
-                    const sinLoteKey = `supply-${supplyInfo.name}-SIN LOTE`;
-                    let stockItemToUpdate = stockMap.get(sinLoteKey);
-        
-                    // If no lot-less item exists, find the first available lotted item for that supply.
-                    if (!stockItemToUpdate) {
-                        for (const item of stockMap.values()) {
-                            if (item.type === 'Consumible' && item.name === supplyInfo.name) {
-                                stockItemToUpdate = item;
-                                break;
+            if (Array.isArray(pack.contents)) {
+                pack.contents.forEach(content => {
+                    // FIX: Robustly validate the content object to prevent crashes from malformed data.
+                    if (!content || !content.productName || !content.lot) {
+                        return;
+                    }
+                    const key = `product-${content.productName}-${content.lot}`;
+                    if (stockMap.has(key)) {
+                        stockMap.get(key)!.inPacks += content.quantity || 0;
+                    }
+                });
+            }
+            if (Array.isArray(pack.suppliesUsed)) {
+                pack.suppliesUsed.forEach(supplyUsed => {
+                    if (!supplyUsed) return; // Guard against null/malformed entries in the suppliesUsed array
+                    const supplyInfo = supplies.find(s => s.id === supplyUsed.supplyId);
+                    if (supplyInfo) {
+                        const sinLoteKey = `supply-${supplyInfo.name}-SIN LOTE`;
+                        let stockItemToUpdate = stockMap.get(sinLoteKey);
+            
+                        if (!stockItemToUpdate) {
+                            for (const item of stockMap.values()) {
+                                if (item.type === 'Consumible' && item.name === supplyInfo.name) {
+                                    stockItemToUpdate = item;
+                                    break;
+                                }
                             }
                         }
+                        
+                        if (stockItemToUpdate) {
+                            stockItemToUpdate.inPacks += supplyUsed.quantity || 0;
+                        } else {
+                            console.warn(`Pack ${pack.id} uses supply "${supplyInfo.name}" but no stock was found to deduct from.`);
+                        }
                     }
-                    
-                    if (stockItemToUpdate) {
-                        stockItemToUpdate.inPacks += supplyUsed.quantity;
-                    } else {
-                        console.warn(`Pack ${pack.id} uses supply "${supplyInfo.name}" but no stock was found to deduct from.`);
-                    }
-                }
-            });
+                });
+            }
         });
 
         // Step 4: Deduct quantities lost to merma
         mermas.forEach(merma => {
-            const key = merma.itemType === 'product' ? `product-${merma.itemName}-${merma.lot}` : `supply-${merma.itemName}-${merma.lot || 'SIN LOTE'}`;
-            if (stockMap.has(key)) stockMap.get(key)!.inMerma += merma.quantity;
+            if (!merma || !merma.itemName) return;
+            let key: string | null = null;
+            if (merma.itemType === 'product' && merma.lot) {
+                key = `product-${merma.itemName}-${merma.lot}`;
+            } else if (merma.itemType === 'supply') {
+                key = `supply-${merma.itemName}-${merma.lot || 'SIN LOTE'}`;
+            }
+
+            if (key && stockMap.has(key)) {
+                 stockMap.get(key)!.inMerma += merma.quantity || 0;
+            }
         });
 
         // Step 5: Calculate final available quantities
         const result = Array.from(stockMap.values());
-        result.forEach(item => { item.available = item.total - item.inPacks - item.inMerma; });
+        result.forEach(item => {
+            const total = Number(item.total || 0);
+            const inPacks = Number(item.inPacks || 0);
+            const inMerma = Number(item.inMerma || 0);
+            item.available = total - inPacks - inMerma;
+        });
 
         return result.sort((a, b) => a.name.localeCompare(b.name) || (a.lot || '').localeCompare(b.lot || ''));
     }, [albaranes, supplies, packs, mermas]);
