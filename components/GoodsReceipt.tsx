@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Albaran, Pallet, Supply } from '../types';
@@ -5,7 +6,7 @@ import Card from './ui/Card';
 import Button from './ui/Button';
 import Spinner from './ui/Spinner';
 import { useData } from '../context/DataContext';
-import { toDateTimeLocalInput, fileToBase64, capitalizeWords, getErrorMessage } from '../utils/helpers';
+import { toDateTimeLocalInput, fileToBase64, capitalizeWords, getErrorMessage, generateUUID } from '../utils/helpers';
 import ConfirmationModal from './ui/ConfirmationModal';
 
 interface PalletGroup {
@@ -24,8 +25,6 @@ interface PalletGroup {
     pallets: Partial<Pallet>[];
     isCollapsed: boolean;
 }
-
-const generateUniqueId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 // Moved outside the component to prevent re-definition on every render, fixing the input bug.
 const HeaderInput: React.FC<{label:string, id:string, value:string, onChange:(e: React.ChangeEvent<HTMLInputElement>)=>void, required?:boolean, errorField?:string, validationErrors: Record<string, string[]>}> = ({label, id, value, onChange, required, errorField, validationErrors}) => (
@@ -100,7 +99,7 @@ const GoodsReceipt: React.FC = () => {
                 
                     if (!groups[groupKey]) {
                         groups[groupKey] = {
-                            id: generateUniqueId(),
+                            id: generateUUID(),
                             type: p.type,
                             productName: p.type === 'product' ? p.product!.name : '',
                             productLot: p.type === 'product' ? p.product!.lot : '',
@@ -126,7 +125,7 @@ const GoodsReceipt: React.FC = () => {
         setPalletGroups(currentGroups => 
             currentGroups.map(group => {
                 const newPallets: Partial<Pallet>[] = Array.from({ length: group.palletCount }, (_, i) => ({
-                    id: group.pallets[i]?.id || generateUniqueId(),
+                    id: group.pallets[i]?.id || generateUUID(),
                     palletNumber: group.pallets[i]?.palletNumber || '',
                     sscc: group.pallets[i]?.sscc || '',
                     type: group.type,
@@ -189,7 +188,7 @@ const GoodsReceipt: React.FC = () => {
 
     const handleAddGroup = () => {
         setPalletGroups(prev => [...prev, {
-            id: generateUniqueId(),
+            id: generateUUID(),
             type: 'product',
             productName: '',
             productLot: '',
