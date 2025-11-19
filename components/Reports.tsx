@@ -4,6 +4,8 @@ import Card from './ui/Card';
 import Button from './ui/Button';
 import { useData } from '../context/DataContext';
 import { formatDateTimeSafe, formatDateSafe } from '../utils/helpers';
+import { jsPDF } from "jspdf";
+import autoTable from 'jspdf-autotable';
 
 const ReportsIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>;
 const CsvIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>;
@@ -46,6 +48,63 @@ const Reports: React.FC = () => {
         setGeneratedReport({ headers, data });
     };
 
+    const handleExportPDF = () => {
+        if (!generatedReport) return;
+
+        const doc = new jsPDF();
+        
+        // Título del reporte
+        let title = "Reporte";
+        switch (reportFilters.type) {
+            case 'entries': title = "Reporte de Entradas"; break;
+            case 'dispatches': title = "Reporte de Salidas"; break;
+            case 'incidents': title = "Reporte de Incidencias"; break;
+            case 'supplies': title = "Reporte de Inventario de Consumibles"; break;
+        }
+
+        // Añadir fecha de generación
+        const dateStr = new Date().toLocaleDateString('es-ES');
+        
+        doc.setFontSize(18);
+        doc.text(title, 14, 20);
+        
+        doc.setFontSize(10);
+        doc.text(`Generado el: ${dateStr}`, 14, 28);
+        if (reportFilters.startDate || reportFilters.endDate) {
+            doc.text(`Filtro de fecha: ${reportFilters.startDate || 'Inicio'} - ${reportFilters.endDate || 'Fin'}`, 14, 34);
+        }
+
+        // Generar tabla
+        autoTable(doc, {
+            startY: 40,
+            head: [generatedReport.headers],
+            body: generatedReport.data,
+            headStyles: { fillColor: [251, 191, 36], textColor: [17, 24, 39] }, // Brand yellow and dark
+            styles: { fontSize: 8 },
+        });
+
+        // Guardar archivo
+        const fileName = `reporte_${reportFilters.type}_${new Date().toISOString().slice(0, 10)}.pdf`;
+        doc.save(fileName);
+    };
+
+    const handleExportCSV = () => {
+        if (!generatedReport) return;
+        const csvContent = [
+            generatedReport.headers.join(','),
+            ...generatedReport.data.map(row => row.join(','))
+        ].join('\n');
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `reporte_${reportFilters.type}_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     const uniqueCarriers = [...new Set(albaranes.map(a => a.carrier).concat(salidas.map(s => s.carrier)))];
     const uniqueCustomers = [...new Set(salidas.map(s => s.customer))];
     
@@ -67,7 +126,7 @@ const Reports: React.FC = () => {
                 <Card>
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="text-lg font-semibold">Resultados del Reporte</h3>
-                        {generatedReport && <div className="space-x-2"><Button variant="secondary"><CsvIcon/>Exportar a CSV</Button><Button variant="secondary"><PdfIcon/>Exportar a PDF</Button></div>}
+                        {generatedReport && <div className="space-x-2"><Button variant="secondary" onClick={handleExportCSV}><CsvIcon/>Exportar a CSV</Button><Button variant="secondary" onClick={handleExportPDF}><PdfIcon/>Exportar a PDF</Button></div>}
                     </div>
                     <div className="overflow-x-auto">
                         {generatedReport ? (
