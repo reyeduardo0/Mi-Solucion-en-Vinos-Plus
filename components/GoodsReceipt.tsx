@@ -19,7 +19,8 @@ interface PalletGroup {
     // Consumable fields
     supplyId: string;
     supplyLot: string;
-    ean: string; // Added for Consumables
+    supplyQuantity: number; // Added field for inventory control
+    ean: string;
     // Common
     palletCount: number;
     pallets: Partial<Pallet>[];
@@ -86,6 +87,7 @@ const GoodsReceipt: React.FC = () => {
                 bottlesPerBox: 0,
                 supplyId: '',
                 supplyLot: '',
+                supplyQuantity: 0,
                 ean: '',
                 palletCount: 1,
                 pallets: [],
@@ -131,6 +133,7 @@ const GoodsReceipt: React.FC = () => {
                             bottlesPerBox: p.type === 'product' ? (p.bottlesPerBox || 0) : 0,
                             supplyId: p.type === 'consumable' ? (supplyForGroup?.id || '') : '',
                             supplyLot: p.type === 'consumable' ? (p.supplyLot || '') : '',
+                            supplyQuantity: p.type === 'consumable' ? (p.supplyQuantity || 0) : 0,
                             ean: p.eanBox || '', // Capture EAN from pallet
                             palletCount: 0,
                             pallets: [],
@@ -161,13 +164,13 @@ const GoodsReceipt: React.FC = () => {
                     supplyId: group.type === 'consumable' ? group.supplyId : undefined,
                     supplyName: group.type === 'consumable' ? supplies.find(s => s.id === group.supplyId)?.name : undefined,
                     supplyLot: group.type === 'consumable' ? group.supplyLot : undefined,
-                    supplyQuantity: group.pallets[i]?.supplyQuantity || undefined,
+                    supplyQuantity: group.type === 'consumable' ? group.supplyQuantity : undefined,
                     eanBox: group.ean || undefined, // Propagate EAN to pallets
                 }));
                 return { ...group, pallets: newPallets };
             })
         );
-    }, [palletGroups.map(g => `${g.id}-${g.palletCount}-${g.productName}-${g.productLot}-${g.boxesPerPallet}-${g.bottlesPerBox}-${g.supplyId}-${g.supplyLot}-${g.ean}`).join(), supplies]);
+    }, [palletGroups.map(g => `${g.id}-${g.palletCount}-${g.productName}-${g.productLot}-${g.boxesPerPallet}-${g.bottlesPerBox}-${g.supplyId}-${g.supplyLot}-${g.supplyQuantity}-${g.ean}`).join(), supplies]);
 
     const validate = useCallback(() => {
         const errors: Record<string, string[]> = {};
@@ -199,7 +202,7 @@ const GoodsReceipt: React.FC = () => {
                 if (!p.product?.lot?.trim()) palletErrors.push('productLot');
             } else if (p.type === 'consumable') {
                 if (!p.supplyId) palletErrors.push('supplyId');
-                // Quantity validation for consumables is not needed here as it's defined at group level now.
+                if (!p.supplyQuantity || p.supplyQuantity <= 0) palletErrors.push('supplyQuantity');
             }
 
             if (palletErrors.length > 0) {
@@ -222,6 +225,7 @@ const GoodsReceipt: React.FC = () => {
             bottlesPerBox: 0,
             supplyId: '',
             supplyLot: '',
+            supplyQuantity: 0,
             ean: '',
             palletCount: 1,
             pallets: [],
@@ -354,7 +358,7 @@ const GoodsReceipt: React.FC = () => {
             
 
              <Card title="Incidencia General (Opcional)" className="mt-6">
-                <div className="flex items-center"><input type="checkbox" id="general-incident-check" checked={status === 'incident'} onChange={(e) => setStatus(e.target.checked ? 'incident' : 'verified')} className="h-4 w-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500" /><label htmlFor="general-incident-check" className="ml-2 block text-sm text-gray-900">Reportar una incidencia general para toda la entrada</label></div>
+                <div className="flex items-center"><input type="checkbox" id="general-incident-check" checked={status === 'incident'} onChange={(e) => setStatus(e.target.checked ? 'incident' : 'verified')} className="h-4 w-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500" /><label htmlFor="general-incident-check" className="ml-2 block text-sm text-gray-900">Reportar incidencia general para toda la entrada</label></div>
                 {status === 'incident' && (<div className="mt-4 p-4 border-l-4 border-red-400 bg-red-50"><textarea placeholder="Describe la incidencia general de la entrada..." value={incidentDetails} onChange={(e) => setIncidentDetails(e.target.value)} className="w-full border-gray-300 rounded-md p-2 mb-2" /><input type="file" multiple onChange={handleGeneralIncidentImagesChange} className="block w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-100 file:text-red-700 hover:file:bg-red-200" /><div className="flex flex-wrap gap-2 mt-2">{imagePreviews.map((src, i) => <img key={i} src={src} alt={`preview ${i}`} className="h-20 w-20 object-cover rounded" />)}</div></div>)}
              </Card>
 
@@ -386,7 +390,7 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
             ...g,
             type: newType,
             productName: '', productLot: '', boxesPerPallet: 0, bottlesPerBox: 0,
-            supplyId: '', supplyLot: '', ean: ''
+            supplyId: '', supplyLot: '', supplyQuantity: 0, ean: ''
         }));
     };
 
@@ -400,7 +404,10 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
         });
     };
     
-    const totalUnits = group.palletCount * group.boxesPerPallet * group.bottlesPerBox;
+    const totalUnits = group.type === 'product' 
+        ? group.palletCount * group.boxesPerPallet * group.bottlesPerBox
+        : group.palletCount * group.supplyQuantity;
+
     const toggleCollapse = () => onUpdate(g => ({ ...g, isCollapsed: !g.isCollapsed }));
 
     return (
@@ -446,9 +453,6 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
                             <label className="text-xs font-medium text-gray-600">Botellas/Caja</label>
                             <input type="number" value={group.bottlesPerBox} onChange={e => handleFieldChange('bottlesPerBox', parseInt(e.target.value, 10) || 0)} min="0" className="w-full p-2 border rounded-md text-sm"/>
                         </div>
-                        <div className="sm:col-span-2 lg:col-span-2 flex items-end">
-                            <p className="text-sm font-semibold text-gray-700 w-full text-right pr-2">Total Unidades para este Grupo: <span className="text-lg text-blue-600">{totalUnits.toLocaleString('es-ES')}</span></p>
-                        </div>
                     </>
                 ) : (
                     <>
@@ -482,8 +486,22 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
                             <label className="text-xs font-medium text-gray-600">Lote</label>
                             <input type="text" value={group.supplyLot || ''} onChange={e => handleFieldChange('supplyLot', e.target.value.toUpperCase())} className="w-full p-2 border rounded-md text-sm"/>
                         </div>
+                         <div className="sm:col-span-1">
+                            <label className="text-xs font-medium text-gray-600">Cant. / Pallet</label>
+                            <input 
+                                type="number" 
+                                value={group.supplyQuantity || ''} 
+                                onChange={e => handleFieldChange('supplyQuantity', parseInt(e.target.value, 10) || 0)} 
+                                min="0" 
+                                className="w-full p-2 border rounded-md text-sm"
+                                placeholder="Cant."
+                            />
+                        </div>
                     </>
                 )}
+                 <div className="sm:col-span-2 lg:col-span-2 flex items-end">
+                    <p className="text-sm font-semibold text-gray-700 w-full text-right pr-2">Total Unidades para este Grupo: <span className="text-lg text-blue-600">{totalUnits.toLocaleString('es-ES')}</span></p>
+                </div>
             </div>
              <div className="mt-3 text-center">
                 <button type="button" onClick={toggleCollapse} className="text-sm text-blue-600 hover:underline">
