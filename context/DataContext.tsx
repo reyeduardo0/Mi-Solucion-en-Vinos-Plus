@@ -639,21 +639,21 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     const addUser = async (userData: Omit<User, 'id'> & { password?: string }) => {
         if (!userData.password) throw new Error("La contraseña es obligatoria para nuevos usuarios.");
         
-        // TRICK: Create a temporary client to create the user WITHOUT logging out the current admin.
-        // This works because this client is isolated in memory.
+        // TRUCO: Usar un cliente temporal para crear usuario SIN cerrar la sesión del admin actual.
+        // Esto es crucial porque supabase.auth.signUp cierra la sesión actual por defecto.
         const tempSupabase = createClient(
             window.SUPABASE_CONFIG!.URL,
             window.SUPABASE_CONFIG!.ANON_KEY,
             {
                 auth: {
-                    persistSession: false, // Don't save session to storage
+                    persistSession: false, // No guardar sesión
                     autoRefreshToken: false,
                     detectSessionInUrl: false
                 }
             }
         );
 
-        // 1. Create user in Auth using the temp client
+        // 1. Crear usuario en Auth usando el cliente temporal
         const { data: authData, error: authError } = await tempSupabase.auth.signUp({
             email: userData.email,
             password: userData.password,
@@ -663,9 +663,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         if (authError) throw authError;
         if (!authData.user) throw new Error("No se pudo crear el usuario en Supabase Auth.");
 
-        // 2. Insert manually into public 'users' table using the MAIN authenticated client (admin)
-        // We do this because the new user might not have permissions to write to public.users immediately
-        // or we want to ensure it's done by the admin.
+        // 2. Insertar manualmente en tabla pública 'users' usando el cliente PRINCIPAL (admin)
         const { error: profileError } = await supabase!.from('users').insert({
             id: authData.user.id,
             full_name: userData.name,
@@ -675,9 +673,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
         if (profileError) {
             console.error("Error creando perfil público:", profileError);
-            // Optional: Try to cleanup auth user if profile fails? 
-            // For now, we throw. The auth user exists but won't appear in the app list until fixed.
-            throw new Error("Usuario de autenticación creado, pero falló la creación del perfil público: " + profileError.message);
+            throw new Error("Usuario creado, pero falló el perfil público: " + profileError.message);
         }
 
         await addAuditLog(`Creó el usuario "${userData.name}" (${userData.email})`);
@@ -692,7 +688,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     };
 
     const deleteUser = async (userId: string, userName: string) => {
-        // Use the custom RPC function to delete safely as admin
+        // Usar la función RPC segura de admin para borrar
         const { error } = await supabase!.rpc('delete_user_by_admin', { target_user_id: userId });
         
         if (error) throw error;
@@ -707,14 +703,14 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     };
 
     const updateUserPasswordByAdmin = async (userId: string, newPassword: string) => {
-        // Use the custom RPC function to update password as admin
+        // Usar la función RPC segura de admin para cambiar contraseña ajena
         const { error } = await supabase!.rpc('update_password_by_admin', { 
             target_user_id: userId, 
             new_password: newPassword 
         });
         
         if (error) throw error;
-        await addAuditLog(`Actualizó la contraseña del usuario ${userId}`);
+        await addAuditLog(`Actualizó la contraseña del usuario ${userId} (Admin Reset)`);
     };
     
     const addRole = async (roleData: Omit<Role, 'id' | 'created_at'>) => {

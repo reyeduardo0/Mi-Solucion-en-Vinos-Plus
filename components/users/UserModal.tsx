@@ -33,7 +33,7 @@ const UserModal: React.FC<UserModalProps> = ({ user, roles, onSave, onClose }) =
     // Lógica de permisos para editar contraseña:
     // 1. Si es nuevo usuario: SI
     // 2. Si soy yo mismo: SI
-    // 3. Si soy Super Usuario: SI (gracias a las nuevas funciones RPC)
+    // 3. Si soy Super Usuario: SI (incluso si no soy yo, gracias a las funciones RPC)
     const canChangePassword = !user || (currentUser?.id === user.id) || amISuperUser;
 
     const isProtectedField = isEditingSuperUser;

@@ -60,11 +60,11 @@ const Users: React.FC = () => {
                 if (data.id === currentUser?.id) {
                     // Si me edito a mí mismo, uso la función estándar
                     await updateCurrentUserPassword(newPassword);
-                    showSuccessMessage(`Usuario "${data.name}" y tu contraseña fueron actualizados.`);
+                    showSuccessMessage(`Usuario "${data.name}" y contraseña actualizados.`);
                 } else if (amISuperUser) {
-                    // Si soy Super Usuario editando a otro, uso la nueva función RPC
+                    // Si soy Super Usuario editando a otro, uso la nueva función RPC segura
                     await updateUserPasswordByAdmin(data.id, newPassword);
-                    showSuccessMessage(`Usuario "${data.name}" actualizado y su contraseña restablecida.`);
+                    showSuccessMessage(`Usuario "${data.name}" actualizado y contraseña restablecida por Admin.`);
                 }
             } else {
                 showSuccessMessage(`Usuario "${data.name}" actualizado correctamente.`);
