@@ -8,6 +8,7 @@ import Spinner from './ui/Spinner';
 import { useData } from '../context/DataContext';
 import { toDateTimeLocalInput, fileToBase64, capitalizeWords, getErrorMessage, generateUUID } from '../utils/helpers';
 import ConfirmationModal from './ui/ConfirmationModal';
+import { extractDataFromImage } from '../services/geminiService';
 
 interface PalletGroup {
     id: string; // for react key
@@ -68,6 +69,11 @@ const GoodsReceipt: React.FC = () => {
     const [incidentImages, setIncidentImages] = useState<File[]>([]);
     const [imagePreviews, setImagePreviews] = useState<string[]>([]);
 
+    // AI Analysis State for Header
+    const [albaranImageFile, setAlbaranImageFile] = useState<File | null>(null);
+    const [albaranImagePreview, setAlbaranImagePreview] = useState<string | null>(null);
+    const [isAnalyzingAlbaran, setIsAnalyzingAlbaran] = useState(false);
+
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
@@ -75,6 +81,7 @@ const GoodsReceipt: React.FC = () => {
     
     const isEditing = !!albaranIdFromParams;
     const initialType = searchParams.get('type') === 'consumable' ? 'consumable' : 'product';
+    const isAIAvailable = useMemo(() => !!(window as any).process?.env?.API_KEY, []);
 
     const assignedPalletsCount = useMemo(() => palletGroups.reduce((acc, group) => acc + (group.palletCount || 0), 0), [palletGroups]);
     const isPalletCountMismatch = totalPallets > 0 && totalPallets !== assignedPalletsCount;
@@ -260,6 +267,122 @@ const GoodsReceipt: React.FC = () => {
             setImagePreviews(previews);
         }
     };
+
+    // --- AI Header Extraction Logic ---
+    const handleAlbaranImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setAlbaranImageFile(file);
+            setAlbaranImagePreview(URL.createObjectURL(file));
+        }
+    };
+
+    const removeAlbaranImage = () => {
+        setAlbaranImageFile(null);
+        if (albaranImagePreview) URL.revokeObjectURL(albaranImagePreview);
+        setAlbaranImagePreview(null);
+        const input = document.getElementById('albaran-image-input') as HTMLInputElement;
+        if(input) input.value = '';
+    };
+
+    const handleAnalyzeAlbaran = async () => {
+        if (!albaranImageFile) return;
+        setIsAnalyzingAlbaran(true);
+        setError(null);
+
+        try {
+            // Updated Prompt to include Line Items extraction
+            const prompt = `
+                Analiza esta imagen de un albarán de entrega. Extrae los datos en formato JSON con la siguiente estructura:
+                {
+                    "header": {
+                        "albaranId": "Número de albarán",
+                        "orderId": "Número de pedido/PO",
+                        "entryDate": "Fecha en formato ISO",
+                        "truckPlate": "Matrícula",
+                        "carrier": "Transportista",
+                        "driver": "Conductor",
+                        "origin": "Origen",
+                        "totalPalletsHeader": "Total de bultos/palets indicado en cabecera (número)"
+                    },
+                    "items": [
+                        {
+                            "description": "Nombre del producto o artículo",
+                            "lot": "Lote",
+                            "quantity": "Cantidad numérica total",
+                            "unit": "Unidad (cajas, botellas, unidades)",
+                            "pallets": "Número de palets para esta línea (si no se especifica, asume 1)",
+                            "type": "Clasifica como 'product' (si es VINO/BEBIDA) o 'consumable' (si es material seco, cajas vacías, etiquetas, corchos, etc)"
+                        }
+                    ]
+                }
+                Devuelve solo el JSON limpio.
+            `;
+            
+            const result = await extractDataFromImage(albaranImageFile, prompt);
+            
+            if (result) {
+                // 1. Fill Header Data
+                const h = result.header || result; // Fallback if header key is missing but fields are at root
+                if (h.albaranId) setAlbaranId(String(h.albaranId));
+                if (h.orderId) setOrderId(String(h.orderId));
+                if (h.entryDate) setEntryDate(toDateTimeLocalInput(h.entryDate));
+                if (h.truckPlate) setTruckPlate(String(h.truckPlate));
+                if (h.carrier) setCarrier(String(h.carrier));
+                if (h.driver) setDriver(String(h.driver));
+                if (h.origin) setOrigin(String(h.origin));
+                
+                // 2. Fill Line Items (Pallet Groups)
+                if (result.items && Array.isArray(result.items) && result.items.length > 0) {
+                    const newGroups: PalletGroup[] = result.items.map((item: any) => {
+                        const isProduct = item.type === 'product' || (item.description && item.description.toLowerCase().includes('vino'));
+                        const qty = Number(item.quantity) || 0;
+                        const pallets = Number(item.pallets) || 1;
+
+                        // Simple estimation for products if boxes/bottles unknown: 
+                        // If isProduct, we leave boxes/bottles as 0 for user to check, but we fill the lot/name.
+                        
+                        return {
+                            id: generateUUID(),
+                            type: isProduct ? 'product' : 'consumable',
+                            
+                            // Product Fields
+                            productName: isProduct ? capitalizeWords(item.description) : '',
+                            productLot: isProduct ? String(item.lot || '').toUpperCase() : '',
+                            boxesPerPallet: 0, // User must verify/calculate
+                            bottlesPerBox: 0, // User must verify/calculate
+                            
+                            // Consumable Fields
+                            supplyId: '', // Will be matched by name or created as new
+                            supplyName: !isProduct ? capitalizeWords(item.description) : '',
+                            supplyLot: !isProduct ? String(item.lot || '').toUpperCase() : '',
+                            supplyQuantity: !isProduct ? qty : 0,
+                            supplyUnit: 'unidades',
+                            supplyType: 'Contable',
+                            
+                            ean: '',
+                            palletCount: pallets,
+                            pallets: [], // Will be auto-generated by effect
+                            isCollapsed: false
+                        };
+                    });
+                    setPalletGroups(newGroups);
+
+                    // Update total pallets count
+                    const calculatedTotalPallets = newGroups.reduce((acc, g) => acc + g.palletCount, 0);
+                    // Use header total if provided and larger (safe bet), otherwise calculated
+                    setTotalPallets(Math.max(Number(h.totalPalletsHeader) || 0, calculatedTotalPallets));
+                } else {
+                    // If only header was found, just update the total pallets from header
+                    if (h.totalPallets || h.totalPalletsHeader) setTotalPallets(Number(h.totalPallets || h.totalPalletsHeader) || 0);
+                }
+            }
+        } catch (e: any) {
+            setError(e.message || "Error al analizar la imagen del albarán.");
+        } finally {
+            setIsAnalyzingAlbaran(false);
+        }
+    };
     
     const handleSave = async () => {
         setError(null);
@@ -283,12 +406,19 @@ const GoodsReceipt: React.FC = () => {
                     let newId = createdSupplyMap.get(group.supplyName);
 
                     if (!newId) {
-                        // It's a truly new supply, create it
-                        newId = await addNewSupply({
-                            name: group.supplyName,
-                            type: group.supplyType || 'Contable',
-                            unit: group.supplyUnit || 'unidades',
-                        });
+                        // Check if it exists in existing supplies (fuzzy match case insensitive)
+                        const existingSupply = supplies.find(s => s.name.toLowerCase() === group.supplyName.toLowerCase());
+                        
+                        if (existingSupply) {
+                            newId = existingSupply.id;
+                        } else {
+                            // It's a truly new supply, create it
+                            newId = await addNewSupply({
+                                name: group.supplyName,
+                                type: group.supplyType || 'Contable',
+                                unit: group.supplyUnit || 'unidades',
+                            });
+                        }
                         createdSupplyMap.set(group.supplyName, newId);
                     }
                     
@@ -355,6 +485,42 @@ const GoodsReceipt: React.FC = () => {
             <h1 className="text-3xl font-bold text-gray-800 mb-6">{isEditing ? 'Editar Entrada' : 'Registrar Nueva Entrada'}</h1>
             
             <Card title="Datos Generales del Albarán" className="mb-6">
+                {/* AI Extraction Section */}
+                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex flex-col sm:flex-row gap-4 items-start">
+                        <div className="flex-grow">
+                            <h4 className="text-sm font-bold text-blue-800 mb-1">Autocompletar con IA</h4>
+                            <p className="text-xs text-blue-600 mb-2">Sube una foto del albarán para rellenar cabecera y líneas automáticamente.</p>
+                            {!isAIAvailable && <p className="text-xs text-red-600 font-bold">API KEY no configurada. La IA no funcionará.</p>}
+                            <div className="flex items-center gap-2">
+                                <input 
+                                    type="file" 
+                                    id="albaran-image-input" 
+                                    accept="image/*" 
+                                    onChange={handleAlbaranImageChange}
+                                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 disabled:opacity-50"
+                                    disabled={!isAIAvailable || isAnalyzingAlbaran}
+                                />
+                                {albaranImageFile && (
+                                    <Button 
+                                        onClick={handleAnalyzeAlbaran} 
+                                        disabled={isAnalyzingAlbaran || !isAIAvailable}
+                                        className="whitespace-nowrap"
+                                    >
+                                        {isAnalyzingAlbaran ? <Spinner /> : 'Analizar Albarán Completo'}
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                        {albaranImagePreview && (
+                            <div className="relative w-24 h-24 flex-shrink-0">
+                                <img src={albaranImagePreview} alt="Albarán Preview" className="w-full h-full object-cover rounded border" />
+                                <button onClick={removeAlbaranImage} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">&times;</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {!isEditing && <HeaderInput label="Nº Albarán de Entrada" id="albaranId" value={albaranId} onChange={e => setAlbaranId(e.target.value)} required errorField="albaranId" validationErrors={validationErrors}/>}
                     {isEditing && <div><label className="block text-sm font-medium text-gray-700">Nº Albarán de Entrada</label><p className="mt-1 block w-full sm:text-sm p-2 bg-gray-100 rounded-md">{albaranId}</p></div>}

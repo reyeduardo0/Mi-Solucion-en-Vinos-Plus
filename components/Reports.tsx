@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Albaran, Incident, WinePack, DispatchNote, Supply } from '../types';
 import Card from './ui/Card';
@@ -12,7 +13,7 @@ const CsvIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5
 const PdfIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
 
 const Reports: React.FC = () => {
-    const { albaranes, incidents, salidas, supplies } = useData();
+    const { albaranes, incidents, salidas, supplies, inventoryStock } = useData();
     const [reportFilters, setReportFilters] = useState({ type: 'entries', startDate: '', endDate: '', carrier: '', customer: '', status: 'all' });
     const [generatedReport, setGeneratedReport] = useState<{ headers: string[], data: (string|number)[][] } | null>(null);
 
@@ -40,9 +41,21 @@ const Reports: React.FC = () => {
                  data = incidents.filter(i => dateFilter(i.date) && (reportFilters.status === 'all' || (reportFilters.status === 'resolved' ? i.resolved : !i.resolved))).map(i => [i.id, formatDateTimeSafe(i.date), i.type, i.relatedId, i.resolved ? 'Resuelta' : 'Pendiente', i.description]);
                 break;
             case 'supplies':
-                headers = ['ID Consumible', 'Nombre', 'Tipo', 'Stock Actual', 'Unidad', 'Stock Mínimo'];
-                // FIX: Use nullish coalescing operator (??) to correctly handle minStock of 0.
-                data = supplies.map(s => [s.id, s.name, s.type, s.quantity, s.unit, s.minStock ?? 'N/A']);
+                headers = ['Nombre', 'Tipo', 'Stock Actual', 'Unidad', 'Stock Mínimo'];
+                data = supplies.map(s => {
+                    // Calculate real available stock from inventoryStock context
+                    const calculatedStock = inventoryStock
+                        .filter(item => item.type === 'Consumible' && item.name === s.name)
+                        .reduce((acc, item) => acc + item.available, 0);
+                    
+                    return [
+                        s.name, 
+                        s.type, 
+                        calculatedStock, 
+                        s.unit, 
+                        s.minStock ?? 'N/A'
+                    ];
+                });
                 break;
         }
         setGeneratedReport({ headers, data });
