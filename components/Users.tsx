@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { User, Role } from '../types';
 import { useData } from '../context/DataContext';
@@ -18,7 +19,7 @@ const SUPER_USER_EMAIL = 'reyeduardo0@gmail.com';
 const SUPER_USER_ROLE_NAME = 'Super Usuario';
 
 const Users: React.FC = () => {
-    const { users, roles, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, currentUser, updateUserPasswordByAdmin } = useData();
+    const { users, roles, addUser, updateUser, deleteUser, addRole, updateRole, deleteRole, currentUser, updateCurrentUserPassword, updateUserPasswordByAdmin } = useData();
     const { can } = usePermissions();
     const [activeTab, setActiveTab] = useState<'users' | 'roles'>('users');
     const [isUserModalOpen, setUserModalOpen] = useState(false);
@@ -52,16 +53,23 @@ const Users: React.FC = () => {
     };
 
     const handleSaveUser = async (data: (Omit<User, 'id'> & { password?: string }) | User, newPassword?: string) => {
-        if ('id' in data) { // Editing
+        if ('id' in data) { // Editing existing user
             await updateUser(data);
-            if (newPassword && newPassword.trim() !== '' && currentUser?.email === SUPER_USER_EMAIL && data.id !== currentUser.id) {
-                // The error from updateUserPasswordByAdmin will now propagate up to the modal's catch block.
-                await updateUserPasswordByAdmin(data.id, newPassword);
-                showSuccessMessage(`Usuario "${data.name}" y su contraseña fueron actualizados.`);
+            
+            if (newPassword && newPassword.trim() !== '') {
+                if (data.id === currentUser?.id) {
+                    // Si me edito a mí mismo, uso la función estándar
+                    await updateCurrentUserPassword(newPassword);
+                    showSuccessMessage(`Usuario "${data.name}" y tu contraseña fueron actualizados.`);
+                } else if (amISuperUser) {
+                    // Si soy Super Usuario editando a otro, uso la nueva función RPC
+                    await updateUserPasswordByAdmin(data.id, newPassword);
+                    showSuccessMessage(`Usuario "${data.name}" actualizado y su contraseña restablecida.`);
+                }
             } else {
                 showSuccessMessage(`Usuario "${data.name}" actualizado correctamente.`);
             }
-        } else { // Creating
+        } else { // Creating new user
             await addUser(data);
             showSuccessMessage(`Usuario "${data.name}" creado correctamente.`);
         }
@@ -134,10 +142,17 @@ const Users: React.FC = () => {
                         <tbody className="bg-white divide-y divide-gray-200">{users.map(user => {
                             const isSuperUser = user.email === SUPER_USER_EMAIL;
                             const isCurrentUser = user.id === currentUser?.id;
-                            const canDelete = !isSuperUser && !isCurrentUser;
-                            // Only disable editing if it's the Super User row AND I am not the Super User.
-                            // Actually, Super User row is special. Let's just allow editing if we are super user, but UserModal handles restrictions.
-                            const canEdit = !isSuperUser || amISuperUser;
+                            
+                            // Reglas de borrado: 
+                            // - No se puede borrar al Super Usuario.
+                            // - No me puedo borrar a mí mismo.
+                            // - Si soy Super Usuario, puedo borrar a cualquiera (menos a mí).
+                            const canDelete = !isSuperUser && !isCurrentUser && amISuperUser;
+                            
+                            // Reglas de edición:
+                            // - Solo el Super Usuario puede editar al Super Usuario (aunque está protegido).
+                            // - Si soy Super Usuario, puedo editar a todos.
+                            const canEdit = amISuperUser || (!isSuperUser);
 
                             return (<tr key={user.id}>
                                 <td className="px-6 py-4">
@@ -149,8 +164,8 @@ const Users: React.FC = () => {
                                 <td className="px-6 py-4">{user.email}</td>
                                 <td className="px-6 py-4">{roles.find(r => r.id === user.roleId)?.name || 'N/A'}</td>
                                 <td className="px-6 py-4 text-right space-x-2">
-                                    <Button variant="secondary" className="p-2" onClick={() => handleEditUser(user)} disabled={!canEdit} title={!canEdit ? "El Super Usuario no puede ser modificado." : "Editar Usuario"}><PencilIcon/></Button>
-                                    <Button variant="danger" className="p-2" onClick={() => setItemToDelete({type: 'user', id: user.id, name: user.name})} disabled={!canDelete} title={isSuperUser ? "El Super Usuario no puede ser eliminado." : (isCurrentUser ? "No puedes eliminar tu propia cuenta." : "Eliminar Usuario")}><TrashIcon/></Button>
+                                    <Button variant="secondary" className="p-2" onClick={() => handleEditUser(user)} disabled={!canEdit} title={!canEdit ? "Solo el Super Usuario puede modificar esto." : "Editar Usuario"}><PencilIcon/></Button>
+                                    <Button variant="danger" className="p-2" onClick={() => setItemToDelete({type: 'user', id: user.id, name: user.name})} disabled={!canDelete} title={!canDelete ? "No tienes permisos para eliminar este usuario." : "Eliminar Usuario"}><TrashIcon/></Button>
                                 </td>
                             </tr>
                         )})}</tbody>
@@ -163,8 +178,7 @@ const Users: React.FC = () => {
                                 const isRoleInUse = users.some(u => u.roleId === role.id);
                                 const isSuperUserRole = role.name === SUPER_USER_ROLE_NAME;
                                 const isAdminRole = role.name.toLowerCase() === 'admin';
-                                // Super User can delete 'Admin' role if it's not in use.
-                                // Nobody can delete 'Super Usuario' role.
+                                
                                 const isDeletable = !isRoleInUse && !isSuperUserRole && (!isAdminRole || amISuperUser);
                                 
                                 let tooltipMessage = 'Eliminar Rol';

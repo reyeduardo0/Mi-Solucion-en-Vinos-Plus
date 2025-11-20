@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, Role } from '../../types';
 import Modal from '../ui/Modal';
@@ -27,15 +28,14 @@ const UserModal: React.FC<UserModalProps> = ({ user, roles, onSave, onClose }) =
     const [error, setError] = useState<string | null>(null);
 
     const isEditingSuperUser = user?.email === SUPER_USER_EMAIL;
-    const isSuperUserSession = currentUser?.email === SUPER_USER_EMAIL;
-    const isEditingSelf = user?.id === currentUser?.id;
+    const amISuperUser = currentUser?.email === SUPER_USER_EMAIL;
     
-    // Logic: If I am Super User editing myself, I can change password.
-    // If I am Super User editing another, I can change their password.
-    // If I am Admin editing another, I can change their password (handled by backend perms/logic).
-    const canChangePassword = (isSuperUserSession && user && !isEditingSelf) || (isEditingSuperUser && isEditingSelf);
+    // Lógica de permisos para editar contraseña:
+    // 1. Si es nuevo usuario: SI
+    // 2. Si soy yo mismo: SI
+    // 3. Si soy Super Usuario: SI (gracias a las nuevas funciones RPC)
+    const canChangePassword = !user || (currentUser?.id === user.id) || amISuperUser;
 
-    // We protect critical fields of Super User (Email, Role) to prevent lockout.
     const isProtectedField = isEditingSuperUser;
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -79,8 +79,10 @@ const UserModal: React.FC<UserModalProps> = ({ user, roles, onSave, onClose }) =
                 )}
                 <div><label className="block text-sm font-medium">Nombre Completo</label><input type="text" value={name} onChange={e => setName(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
                 <div><label className="block text-sm font-medium">Correo Electrónico</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={!!user || isProtectedField} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 disabled:bg-gray-100" /></div>
+                
                 {!user && (<div><label className="block text-sm font-medium">Contraseña</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} required={!user} placeholder="Mínimo 6 caracteres" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>)}
-                {user && (
+                
+                {user && canChangePassword && (
                     <div>
                         <label className="block text-sm font-medium">Nueva Contraseña (Opcional)</label>
                         <input 
@@ -90,8 +92,18 @@ const UserModal: React.FC<UserModalProps> = ({ user, roles, onSave, onClose }) =
                             placeholder="Dejar en blanco para no cambiar" 
                             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" 
                         />
+                        {amISuperUser && user.id !== currentUser?.id && (
+                            <p className="text-xs text-blue-600 mt-1">Como Super Usuario, puedes sobrescribir la contraseña de este usuario.</p>
+                        )}
                     </div>
                 )}
+                
+                {user && !canChangePassword && (
+                    <div className="bg-gray-100 p-3 rounded text-sm text-gray-600 italic">
+                        No tienes permisos para cambiar la contraseña de este usuario.
+                    </div>
+                )}
+
                 <div><label className="block text-sm font-medium">Rol</label><select value={roleId} onChange={e => setRoleId(e.target.value)} required disabled={isProtectedField} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 disabled:bg-gray-100"><option value="">Seleccionar un rol...</option>{roles.map(r => <option key={r.id} value={r.id} disabled={r.name === 'Super Usuario' && !isEditingSuperUser}>{r.name}</option>)}</select></div>
                 
                 {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">{error}</div>}

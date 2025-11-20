@@ -8,7 +8,7 @@ import React, {
   ReactNode,
   useMemo,
 } from 'react';
-import { Session } from '@supabase/supabase-js';
+import { Session, createClient } from '@supabase/supabase-js';
 import { supabase } from '../services/supabaseClient';
 import {
   User,
@@ -41,7 +41,7 @@ interface DataContextType {
     salidas: DispatchNote[];
     incidents: Incident[];
     mermas: Merma[];
-    auditLogs: any[]; // Changed to any[] as AuditLog type is removed
+    auditLogs: any[]; 
     inventoryStock: InventoryStockItem[];
     loading: boolean;
     error: string | null;
@@ -148,7 +148,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
             // Step 2: If user profile is missing from the public table, construct it from auth metadata.
             if (!finalCurrentUser) {
-                console.warn("User profile not found in 'users' table. Constructing from auth metadata.");
                 const authUser = session.user;
                 const userRoleId = authUser.user_metadata.role_id;
                 const defaultRole = fetchedRoles.find(r => r.name.toLowerCase() !== 'admin' && r.name.toLowerCase() !== SUPER_USER_ROLE_NAME.toLowerCase()) || fetchedRoles[0];
@@ -226,7 +225,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             ]);
             if (incidentsResult.error) throw incidentsResult.error;
             if (mermasResult.error) throw mermasResult.error;
-            // Audit logs might fail if table doesn't exist yet, handle gracefully if needed, but for now throwing is safer to detect issues.
             if (auditLogsResult.error) throw auditLogsResult.error;
 
             const fetchedAlbaranesRaw = (albaranesResult.data as any[]) || [];
@@ -254,7 +252,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                     const hasProductQuantities = (p.boxesPerPallet != null && p.boxesPerPallet > 0) || (p.bottlesPerBox != null && p.bottlesPerBox > 0);
                     const matchesSupplyName = p.productName && supplyNames.has(p.productName);
 
-                    // Robust classification
                     if (hasProductQuantities) {
                         return {
                             ...basePallet,
@@ -309,12 +306,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             setMermas(fetchedMermas);
             setAuditLogs(fetchedAuditLogs);
 
-            // Check for potential RLS issue
-            const hasAnyCoreData = fetchedAlbaranes.length > 0 || fetchedSupplies.length > 0 || fetchedPacks.length > 0;
-            if (fetchedRoles.length > 0 && !hasAnyCoreData && error === null) {
-                 setError("No se han cargado datos. Si has añadido datos directamente en Supabase, asegúrate de haber configurado las políticas de Seguridad a Nivel de Fila (RLS) para permitir el acceso de lectura (SELECT) a los usuarios autenticados.");
-            }
-
         } catch (e: any) {
             setError(getErrorMessage(e));
         } finally {
@@ -356,7 +347,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     const inventoryStock = useMemo((): InventoryStockItem[] => {
         const stockMap = new Map<string, InventoryStockItem>();
 
-        // Step 1: Aggregate all stock entries from albaranes
         albaranes.forEach(albaran => {
             (Array.isArray(albaran.pallets) ? albaran.pallets : []).filter(Boolean).forEach(pallet => {
                 if (pallet.type === 'product' && pallet.product?.name && pallet.product?.lot) {
@@ -379,7 +369,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             });
         });
         
-        // Step 2: Add non-lotted stock from the supplies table itself.
         supplies.forEach(supply => {
             if (supply.quantity > 0) {
                  const key = `supply-${supply.name}-SIN LOTE`;
@@ -390,7 +379,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             }
         });
 
-        // Step 3: Deduct quantities used in assembled packs
         packs.forEach(pack => {
             if (Array.isArray(pack.contents)) {
                 pack.contents.forEach(content => {
@@ -428,7 +416,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             }
         });
 
-        // Step 4: Deduct quantities lost to merma
         mermas.forEach(merma => {
             if (!merma || !merma.itemName) return;
             let key: string | null = null;
@@ -443,7 +430,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             }
         });
 
-        // Step 5: Calculate final available quantities
         const result = Array.from(stockMap.values());
         result.forEach(item => {
             const total = Number(item.total || 0);
@@ -455,13 +441,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         return result.sort((a, b) => a.name.localeCompare(b.name) || (a.lot || '').localeCompare(b.lot || ''));
     }, [albaranes, supplies, packs, mermas]);
 
-    // Data modification functions
     const addAlbaran = async (albaran: Albaran) => {
         const { pallets, ...albaranData } = albaran;
         const dbAlbaran = {
             id: albaranData.id,
-            // TEMPORARY FIX: Removed order_id because the column does not exist in DB yet.
-            // order_id: albaranData.orderId,
             entry_date: albaranData.entryDate,
             truck_plate: albaranData.truckPlate,
             origin: albaranData.origin,
@@ -492,10 +475,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 incident_images: p.incident?.images,
             }));
             const { error: palletsError } = await supabase!.from('pallets').insert(dbPallets);
-            if (palletsError) {
-                console.error("Error inserting pallets for new albaran:", palletsError);
-                throw palletsError;
-            }
+            if (palletsError) throw palletsError;
         }
         await addAuditLog(`Registró la entrada "${albaran.id}"`);
     };
@@ -505,8 +485,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const { id, orderId, entryDate, truckPlate, origin, carrier, driver, status, incidentDetails, incidentImages } = albaranData;
         
         const dbAlbaranUpdate = {
-            // TEMPORARY FIX: Removed order_id mapping
-            // order_id: orderId,
             entry_date: entryDate,
             truck_plate: truckPlate,
             origin: origin,
@@ -547,7 +525,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     };
 
     const deleteAlbaran = async (albaran: Albaran) => {
-        // Assuming ON DELETE CASCADE is set for pallets.albaran_id -> albaranes.id
         const { error } = await supabase!.from('albaranes').delete().eq('id', albaran.id);
         if (error) throw error;
         await addAuditLog(`Eliminó la entrada "${albaran.id}"`);
@@ -662,16 +639,33 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     const addUser = async (userData: Omit<User, 'id'> & { password?: string }) => {
         if (!userData.password) throw new Error("La contraseña es obligatoria para nuevos usuarios.");
         
-        // 1. Crear usuario en Supabase Auth
-        const { data: authData, error: authError } = await supabase!.auth.signUp({
+        // TRICK: Create a temporary client to create the user WITHOUT logging out the current admin.
+        // This works because this client is isolated in memory.
+        const tempSupabase = createClient(
+            window.SUPABASE_CONFIG!.URL,
+            window.SUPABASE_CONFIG!.ANON_KEY,
+            {
+                auth: {
+                    persistSession: false, // Don't save session to storage
+                    autoRefreshToken: false,
+                    detectSessionInUrl: false
+                }
+            }
+        );
+
+        // 1. Create user in Auth using the temp client
+        const { data: authData, error: authError } = await tempSupabase.auth.signUp({
             email: userData.email,
             password: userData.password,
             options: { data: { full_name: userData.name, role_id: userData.roleId } }
         });
+
         if (authError) throw authError;
         if (!authData.user) throw new Error("No se pudo crear el usuario en Supabase Auth.");
 
-        // 2. Insertar MANUALMENTE en la tabla pública 'users'
+        // 2. Insert manually into public 'users' table using the MAIN authenticated client (admin)
+        // We do this because the new user might not have permissions to write to public.users immediately
+        // or we want to ensure it's done by the admin.
         const { error: profileError } = await supabase!.from('users').insert({
             id: authData.user.id,
             full_name: userData.name,
@@ -681,46 +675,65 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
         if (profileError) {
             console.error("Error creando perfil público:", profileError);
+            // Optional: Try to cleanup auth user if profile fails? 
+            // For now, we throw. The auth user exists but won't appear in the app list until fixed.
             throw new Error("Usuario de autenticación creado, pero falló la creación del perfil público: " + profileError.message);
         }
 
         await addAuditLog(`Creó el usuario "${userData.name}" (${userData.email})`);
         await fetchData();
     };
+
     const updateUser = async (user: User) => {
         const { error } = await supabase!.from('users').update({ full_name: user.name, role_id: user.roleId }).eq('id', user.id);
         if (error) throw error;
         await addAuditLog(`Actualizó los datos del usuario "${user.name}"`);
+        await fetchData();
     };
+
     const deleteUser = async (userId: string, userName: string) => {
-        const { error } = await supabase!.auth.admin.deleteUser(userId);
+        // Use the custom RPC function to delete safely as admin
+        const { error } = await supabase!.rpc('delete_user_by_admin', { target_user_id: userId });
+        
         if (error) throw error;
         await addAuditLog(`Eliminó al usuario "${userName}"`);
+        await fetchData();
     };
+
     const updateCurrentUserPassword = async (newPassword: string) => {
         const { error } = await supabase!.auth.updateUser({ password: newPassword });
         if (error) throw error;
         await addAuditLog("Actualizó su propia contraseña");
     };
+
     const updateUserPasswordByAdmin = async (userId: string, newPassword: string) => {
-        const { error } = await supabase!.auth.admin.updateUserById(userId, { password: newPassword });
+        // Use the custom RPC function to update password as admin
+        const { error } = await supabase!.rpc('update_password_by_admin', { 
+            target_user_id: userId, 
+            new_password: newPassword 
+        });
+        
         if (error) throw error;
+        await addAuditLog(`Actualizó la contraseña del usuario ${userId}`);
     };
     
     const addRole = async (roleData: Omit<Role, 'id' | 'created_at'>) => {
         const { error } = await supabase!.from('roles').insert(roleData);
         if (error) throw error;
         await addAuditLog(`Creó el rol "${roleData.name}"`);
+        await fetchData();
     };
     const updateRole = async (role: Role) => {
         const { error } = await supabase!.from('roles').update({ name: role.name, permissions: role.permissions }).eq('id', role.id);
         if (error) throw error;
         await addAuditLog(`Actualizó el rol "${role.name}"`);
+        await fetchData();
     };
     const deleteRole = async (roleId: string, roleName: string) => {
         const { error } = await supabase!.from('roles').delete().eq('id', roleId);
         if (error) throw error;
         await addAuditLog(`Eliminó el rol "${roleName}"`);
+        await fetchData();
     };
 
     const value = {
