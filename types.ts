@@ -101,6 +101,7 @@ export interface Pallet {
 
 export interface Albaran {
   id: string; // User-provided delivery note number
+  orderId?: string; // Purchase Order Number
   entryDate: string;
   truckPlate: string;
   origin?: string;

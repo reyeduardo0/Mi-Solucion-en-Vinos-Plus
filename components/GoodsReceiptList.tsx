@@ -10,6 +10,7 @@ import ConfirmationModal from './ui/ConfirmationModal';
 import StatusBadge from './ui/StatusBadge';
 
 const PlusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>;
+const SupplyIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14L4 7m0 0v10l8 4m0-14L4 7" /></svg>;
 
 const GoodsReceiptList: React.FC = () => {
     const navigate = useNavigate();
@@ -58,9 +59,14 @@ const GoodsReceiptList: React.FC = () => {
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold text-gray-800">Historial de Entradas</h1>
                 {can('entries:create') && (
-                    <Button onClick={() => navigate('/entradas/nueva')}>
-                        <PlusIcon /> <span className="ml-2 hidden sm:inline">Nueva Entrada</span>
-                    </Button>
+                    <div className="flex space-x-3">
+                        <Button onClick={() => navigate('/entradas/nueva?type=consumable')} className="bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500">
+                            <SupplyIcon /> <span className="ml-2 hidden sm:inline">Entrada Consumibles</span>
+                        </Button>
+                        <Button onClick={() => navigate('/entradas/nueva')}>
+                            <PlusIcon /> <span className="ml-2 hidden sm:inline">Nueva Entrada</span>
+                        </Button>
+                    </div>
                 )}
             </div>
             

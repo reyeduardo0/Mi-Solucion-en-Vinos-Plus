@@ -29,6 +29,8 @@ const Users: React.FC = () => {
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+    const amISuperUser = currentUser?.email === SUPER_USER_EMAIL;
+
     const showSuccessMessage = (message: string) => {
         setSuccessMessage(message);
         setTimeout(() => setSuccessMessage(null), 3000);
@@ -133,6 +135,9 @@ const Users: React.FC = () => {
                             const isSuperUser = user.email === SUPER_USER_EMAIL;
                             const isCurrentUser = user.id === currentUser?.id;
                             const canDelete = !isSuperUser && !isCurrentUser;
+                            // Only disable editing if it's the Super User row AND I am not the Super User.
+                            // Actually, Super User row is special. Let's just allow editing if we are super user, but UserModal handles restrictions.
+                            const canEdit = !isSuperUser || amISuperUser;
 
                             return (<tr key={user.id}>
                                 <td className="px-6 py-4">
@@ -144,7 +149,7 @@ const Users: React.FC = () => {
                                 <td className="px-6 py-4">{user.email}</td>
                                 <td className="px-6 py-4">{roles.find(r => r.id === user.roleId)?.name || 'N/A'}</td>
                                 <td className="px-6 py-4 text-right space-x-2">
-                                    <Button variant="secondary" className="p-2" onClick={() => handleEditUser(user)} disabled={isSuperUser} title={isSuperUser ? "El Super Usuario no puede ser modificado." : "Editar Usuario"}><PencilIcon/></Button>
+                                    <Button variant="secondary" className="p-2" onClick={() => handleEditUser(user)} disabled={!canEdit} title={!canEdit ? "El Super Usuario no puede ser modificado." : "Editar Usuario"}><PencilIcon/></Button>
                                     <Button variant="danger" className="p-2" onClick={() => setItemToDelete({type: 'user', id: user.id, name: user.name})} disabled={!canDelete} title={isSuperUser ? "El Super Usuario no puede ser eliminado." : (isCurrentUser ? "No puedes eliminar tu propia cuenta." : "Eliminar Usuario")}><TrashIcon/></Button>
                                 </td>
                             </tr>
@@ -158,11 +163,13 @@ const Users: React.FC = () => {
                                 const isRoleInUse = users.some(u => u.roleId === role.id);
                                 const isSuperUserRole = role.name === SUPER_USER_ROLE_NAME;
                                 const isAdminRole = role.name.toLowerCase() === 'admin';
-                                const isDeletable = !isRoleInUse && !isAdminRole && !isSuperUserRole;
+                                // Super User can delete 'Admin' role if it's not in use.
+                                // Nobody can delete 'Super Usuario' role.
+                                const isDeletable = !isRoleInUse && !isSuperUserRole && (!isAdminRole || amISuperUser);
                                 
                                 let tooltipMessage = 'Eliminar Rol';
                                 if(isSuperUserRole) tooltipMessage = 'El rol de Super Usuario no se puede eliminar.';
-                                else if(isAdminRole) tooltipMessage = 'El rol de Administrador por defecto no se puede eliminar.';
+                                else if(isAdminRole && !amISuperUser) tooltipMessage = 'El rol de Administrador por defecto no se puede eliminar.';
                                 else if(isRoleInUse) tooltipMessage = 'No se puede eliminar: Hay usuarios asignados a este rol.';
 
                                 return (

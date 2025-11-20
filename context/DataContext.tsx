@@ -1,3 +1,4 @@
+
 import React, {
   createContext,
   useContext,
@@ -115,8 +116,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         };
         const { error } = await supabase!.from('audit_logs').insert(log);
         if (error) {
-            // FIX: Replaced direct property access on the error object with the robust `getErrorMessage` helper
-            // to prevent potential "[object Object]" errors from being logged to the console if the error format is unexpected.
             console.error(`Error adding audit log: ${getErrorMessage(error)}`, { failedLog: log });
         }
     }, [currentUser]);
@@ -148,7 +147,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             let finalCurrentUser = mappedUsers.find(u => u.id === session.user.id);
 
             // Step 2: If user profile is missing from the public table, construct it from auth metadata.
-            // This makes the app resilient to DB trigger delays or failures.
             if (!finalCurrentUser) {
                 console.warn("User profile not found in 'users' table. Constructing from auth metadata.");
                 const authUser = session.user;
@@ -164,7 +162,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                     name: authUser.user_metadata.full_name || authUser.email!.split('@')[0],
                     roleId: roleIdToUse,
                 };
-                mappedUsers.push(finalCurrentUser); // Add the constructed user to the list
+                mappedUsers.push(finalCurrentUser);
             }
             
             setUsers(mappedUsers);
@@ -174,9 +172,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 throw new Error("Could not determine current user. Please log out and log back in.");
             }
 
-            // Step 3: Fetch the rest of the application data in parallel
-            const remainingDataResults = await Promise.all([
-                supabase!.from('albaranes').select(`
+            // Step 3: Fetch the rest of the application data SEQUENTIALLY to avoid "Failed to fetch" (network congestion)
+            
+            // Group A: Albaranes (Heavy Query)
+            const albaranesResult = await supabase!.from('albaranes').select(`
                     id, 
                     entryDate:entry_date, 
                     truckPlate:truck_plate, 
@@ -200,27 +199,44 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                         incidentImages:incident_images,
                         created_at
                     )
-                `).order('created_at', { ascending: false }),
+                `).order('created_at', { ascending: false });
+            if (albaranesResult.error) throw albaranesResult.error;
+
+            // Group B: Supplies and Models
+            const [suppliesResult, packModelsResult] = await Promise.all([
                 supabase!.from('supplies').select('id, name, type, unit, quantity, minStock:min_stock, created_at').order('name'),
-                supabase!.from('pack_models').select('id, name, description, productRequirements:product_requirements, supplyRequirements:supply_requirements, created_at').order('name'),
+                supabase!.from('pack_models').select('id, name, description, productRequirements:product_requirements, supplyRequirements:supply_requirements, created_at').order('name')
+            ]);
+            if (suppliesResult.error) throw suppliesResult.error;
+            if (packModelsResult.error) throw packModelsResult.error;
+
+            // Group C: Packs and Dispatch
+            const [packsResult, salidasResult] = await Promise.all([
                 supabase!.from('wine_packs').select('id, modelId:model_id, modelName:model_name, orderId:order_id, creationDate:creation_date, contents, suppliesUsed:supplies_used, additionalComponents:additional_components, packImage:pack_image, status, created_at').order('created_at', { ascending: false }),
-                supabase!.from('dispatch_notes').select('id, dispatchDate:dispatch_date, customer, destination, carrier, truckPlate:truck_plate, driver, packIds:pack_ids, status, created_at').order('created_at', { ascending: false }),
+                supabase!.from('dispatch_notes').select('id, dispatchDate:dispatch_date, customer, destination, carrier, truckPlate:truck_plate, driver, packIds:pack_ids, status, created_at').order('created_at', { ascending: false })
+            ]);
+            if (packsResult.error) throw packsResult.error;
+            if (salidasResult.error) throw salidasResult.error;
+
+            // Group D: Incidents, Mermas, Logs
+            const [incidentsResult, mermasResult, auditLogsResult] = await Promise.all([
                 supabase!.from('incidents').select('id, type, description, images, date, resolved, relatedId:related_id, created_at').order('created_at', { ascending: false }),
                 supabase!.from('mermas').select('id, itemName:item_name, itemType:item_type, lot, quantity, reason, created_at').order('created_at', { ascending: false }),
                 supabase!.from('audit_logs').select('id, username, action, timestamp').order('timestamp', { ascending: false }).limit(200),
             ]);
-            
-            const errors = remainingDataResults.map(r => r.error).filter(Boolean);
-            if (errors.length > 0) throw errors[0];
+            if (incidentsResult.error) throw incidentsResult.error;
+            if (mermasResult.error) throw mermasResult.error;
+            // Audit logs might fail if table doesn't exist yet, handle gracefully if needed, but for now throwing is safer to detect issues.
+            if (auditLogsResult.error) throw auditLogsResult.error;
 
-            const fetchedAlbaranesRaw = (remainingDataResults[0].data as any[]) || [];
-            const fetchedSupplies = (remainingDataResults[1].data || []).filter(Boolean);
-            const fetchedPackModels = (remainingDataResults[2].data || []).filter(Boolean);
-            const fetchedPacks = (remainingDataResults[3].data || []).filter(Boolean);
-            const fetchedSalidas = (remainingDataResults[4].data || []).filter(Boolean);
-            const fetchedIncidents = (remainingDataResults[5].data || []).filter(Boolean);
-            const fetchedMermas = (remainingDataResults[6].data || []).filter(Boolean);
-            const fetchedAuditLogsRaw = (remainingDataResults[7].data as any[]) || [];
+            const fetchedAlbaranesRaw = (albaranesResult.data as any[]) || [];
+            const fetchedSupplies = (suppliesResult.data || []).filter(Boolean);
+            const fetchedPackModels = (packModelsResult.data || []).filter(Boolean);
+            const fetchedPacks = (packsResult.data || []).filter(Boolean);
+            const fetchedSalidas = (salidasResult.data || []).filter(Boolean);
+            const fetchedIncidents = (incidentsResult.data || []).filter(Boolean);
+            const fetchedMermas = (mermasResult.data || []).filter(Boolean);
+            const fetchedAuditLogsRaw = (auditLogsResult.data as any[]) || [];
             
             const supplyNames = new Set(fetchedSupplies.map(s => s.name));
             
@@ -238,7 +254,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                     const hasProductQuantities = (p.boxesPerPallet != null && p.boxesPerPallet > 0) || (p.bottlesPerBox != null && p.bottlesPerBox > 0);
                     const matchesSupplyName = p.productName && supplyNames.has(p.productName);
 
-                    // Robust classification: if it has boxes/bottles, it's ALWAYS a product.
+                    // Robust classification
                     if (hasProductQuantities) {
                         return {
                             ...basePallet,
@@ -252,24 +268,23 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                         };
                     }
                     
-                    // If it does not have product quantities, THEN check if it's a known consumable.
                     if (matchesSupplyName) {
                         return {
                             ...basePallet,
                             type: 'consumable',
                             supplyName: p.productName,
-                            supplyQuantity: p.totalBottles, // Consumable quantity is stored in total_bottles column
+                            supplyQuantity: p.totalBottles, 
                             supplyLot: p.productLot,
+                            eanBox: p.eanBox,
                         };
                     }
                     
-                    // Fallback: Treat as a product, but with missing quantity data.
                     return {
                         ...basePallet,
                         type: 'product',
                         product: { name: p.productName || '', lot: p.productLot || '' },
-                        boxesPerPallet: p.boxesPerPallet, // will be 0 or null
-                        bottlesPerBox: p.bottlesPerBox,   // will be 0 or null
+                        boxesPerPallet: p.boxesPerPallet,
+                        bottlesPerBox: p.bottlesPerBox,
                         totalBottles: p.totalBottles,
                         eanBottle: p.eanBottle,
                         eanBox: p.eanBox,
@@ -294,9 +309,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             setMermas(fetchedMermas);
             setAuditLogs(fetchedAuditLogs);
 
-            // Check for potential RLS issue: data fetch is successful but returns no items.
+            // Check for potential RLS issue
             const hasAnyCoreData = fetchedAlbaranes.length > 0 || fetchedSupplies.length > 0 || fetchedPacks.length > 0;
-            // Avoid false positives on a completely new DB. Roles should always exist for the app to function.
             if (fetchedRoles.length > 0 && !hasAnyCoreData && error === null) {
                  setError("No se han cargado datos. Si has añadido datos directamente en Supabase, asegúrate de haber configurado las políticas de Seguridad a Nivel de Fila (RLS) para permitir el acceso de lectura (SELECT) a los usuarios autenticados.");
             }
@@ -342,7 +356,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     const inventoryStock = useMemo((): InventoryStockItem[] => {
         const stockMap = new Map<string, InventoryStockItem>();
 
-        // Step 1: Aggregate all stock entries from albaranes (lotted consumables and products)
+        // Step 1: Aggregate all stock entries from albaranes
         albaranes.forEach(albaran => {
             (Array.isArray(albaran.pallets) ? albaran.pallets : []).filter(Boolean).forEach(pallet => {
                 if (pallet.type === 'product' && pallet.product?.name && pallet.product?.lot) {
@@ -380,7 +394,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         packs.forEach(pack => {
             if (Array.isArray(pack.contents)) {
                 pack.contents.forEach(content => {
-                    // FIX: Robustly validate the content object to prevent crashes from malformed data.
                     if (!content || !content.productName || !content.lot) {
                         return;
                     }
@@ -392,7 +405,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             }
             if (Array.isArray(pack.suppliesUsed)) {
                 pack.suppliesUsed.forEach(supplyUsed => {
-                    if (!supplyUsed) return; // Guard against null/malformed entries in the suppliesUsed array
+                    if (!supplyUsed) return;
                     const supplyInfo = supplies.find(s => s.id === supplyUsed.supplyId);
                     if (supplyInfo) {
                         const sinLoteKey = `supply-${supplyInfo.name}-SIN LOTE`;
@@ -409,8 +422,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                         
                         if (stockItemToUpdate) {
                             stockItemToUpdate.inPacks += supplyUsed.quantity || 0;
-                        } else {
-                            console.warn(`Pack ${pack.id} uses supply "${supplyInfo.name}" but no stock was found to deduct from.`);
                         }
                     }
                 });
@@ -449,6 +460,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const { pallets, ...albaranData } = albaran;
         const dbAlbaran = {
             id: albaranData.id,
+            // TEMPORARY FIX: Removed order_id because the column does not exist in DB yet.
+            // order_id: albaranData.orderId,
             entry_date: albaranData.entryDate,
             truck_plate: albaranData.truckPlate,
             origin: albaranData.origin,
@@ -489,9 +502,11 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     
     const updateAlbaran = async (albaran: Albaran) => {
         const { pallets, ...albaranData } = albaran;
-        const { id, entryDate, truckPlate, origin, carrier, driver, status, incidentDetails, incidentImages } = albaranData;
+        const { id, orderId, entryDate, truckPlate, origin, carrier, driver, status, incidentDetails, incidentImages } = albaranData;
         
         const dbAlbaranUpdate = {
+            // TEMPORARY FIX: Removed order_id mapping
+            // order_id: orderId,
             entry_date: entryDate,
             truck_plate: truckPlate,
             origin: origin,
@@ -646,6 +661,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     
     const addUser = async (userData: Omit<User, 'id'> & { password?: string }) => {
         if (!userData.password) throw new Error("La contraseña es obligatoria para nuevos usuarios.");
+        
+        // 1. Crear usuario en Supabase Auth
         const { data: authData, error: authError } = await supabase!.auth.signUp({
             email: userData.email,
             password: userData.password,
@@ -653,7 +670,22 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         });
         if (authError) throw authError;
         if (!authData.user) throw new Error("No se pudo crear el usuario en Supabase Auth.");
+
+        // 2. Insertar MANUALMENTE en la tabla pública 'users'
+        const { error: profileError } = await supabase!.from('users').insert({
+            id: authData.user.id,
+            full_name: userData.name,
+            email: userData.email,
+            role_id: userData.roleId
+        });
+
+        if (profileError) {
+            console.error("Error creando perfil público:", profileError);
+            throw new Error("Usuario de autenticación creado, pero falló la creación del perfil público: " + profileError.message);
+        }
+
         await addAuditLog(`Creó el usuario "${userData.name}" (${userData.email})`);
+        await fetchData();
     };
     const updateUser = async (user: User) => {
         const { error } = await supabase!.from('users').update({ full_name: user.name, role_id: user.roleId }).eq('id', user.id);

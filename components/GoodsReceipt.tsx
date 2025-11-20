@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Albaran, Pallet, Supply } from '../types';
 import Card from './ui/Card';
 import Button from './ui/Button';
@@ -20,6 +19,7 @@ interface PalletGroup {
     // Consumable fields
     supplyId: string;
     supplyLot: string;
+    ean: string; // Added for Consumables
     // Common
     palletCount: number;
     pallets: Partial<Pallet>[];
@@ -44,10 +44,12 @@ const HeaderInput: React.FC<{label:string, id:string, value:string, onChange:(e:
 
 const GoodsReceipt: React.FC = () => {
     const { albaranId: albaranIdFromParams } = useParams<{ albaranId: string }>();
+    const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { albaranes, supplies, addAlbaran, updateAlbaran, products } = useData();
     
     const [albaranId, setAlbaranId] = useState('');
+    const [orderId, setOrderId] = useState(''); // Added Order ID
     const [entryDate, setEntryDate] = useState(toDateTimeLocalInput());
     const [truckPlate, setTruckPlate] = useState('');
     const [carrier, setCarrier] = useState('');
@@ -67,15 +69,37 @@ const GoodsReceipt: React.FC = () => {
     const [showCancelModal, setShowCancelModal] = useState(false);
     
     const isEditing = !!albaranIdFromParams;
+    const initialType = searchParams.get('type') === 'consumable' ? 'consumable' : 'product';
 
     const assignedPalletsCount = useMemo(() => palletGroups.reduce((acc, group) => acc + (group.palletCount || 0), 0), [palletGroups]);
     const isPalletCountMismatch = totalPallets > 0 && totalPallets !== assignedPalletsCount;
+
+    // Initialize with a group if new entry
+    useEffect(() => {
+        if (!isEditing && palletGroups.length === 0) {
+             setPalletGroups([{
+                id: generateUUID(),
+                type: initialType,
+                productName: '',
+                productLot: '',
+                boxesPerPallet: 0,
+                bottlesPerBox: 0,
+                supplyId: '',
+                supplyLot: '',
+                ean: '',
+                palletCount: 1,
+                pallets: [],
+                isCollapsed: false,
+            }]);
+        }
+    }, [isEditing, initialType]);
 
     useEffect(() => {
         if (isEditing) {
             const existingAlbaran = albaranes.find(a => a.id === albaranIdFromParams);
             if (existingAlbaran) {
                 setAlbaranId(existingAlbaran.id);
+                setOrderId(existingAlbaran.orderId || '');
                 setEntryDate(toDateTimeLocalInput(existingAlbaran.entryDate));
                 setTruckPlate(existingAlbaran.truckPlate);
                 setCarrier(existingAlbaran.carrier);
@@ -107,6 +131,7 @@ const GoodsReceipt: React.FC = () => {
                             bottlesPerBox: p.type === 'product' ? (p.bottlesPerBox || 0) : 0,
                             supplyId: p.type === 'consumable' ? (supplyForGroup?.id || '') : '',
                             supplyLot: p.type === 'consumable' ? (p.supplyLot || '') : '',
+                            ean: p.eanBox || '', // Capture EAN from pallet
                             palletCount: 0,
                             pallets: [],
                             isCollapsed: true,
@@ -137,11 +162,12 @@ const GoodsReceipt: React.FC = () => {
                     supplyName: group.type === 'consumable' ? supplies.find(s => s.id === group.supplyId)?.name : undefined,
                     supplyLot: group.type === 'consumable' ? group.supplyLot : undefined,
                     supplyQuantity: group.pallets[i]?.supplyQuantity || undefined,
+                    eanBox: group.ean || undefined, // Propagate EAN to pallets
                 }));
                 return { ...group, pallets: newPallets };
             })
         );
-    }, [palletGroups.map(g => `${g.id}-${g.palletCount}-${g.productName}-${g.productLot}-${g.boxesPerPallet}-${g.bottlesPerBox}-${g.supplyId}-${g.supplyLot}`).join(), supplies]);
+    }, [palletGroups.map(g => `${g.id}-${g.palletCount}-${g.productName}-${g.productLot}-${g.boxesPerPallet}-${g.bottlesPerBox}-${g.supplyId}-${g.supplyLot}-${g.ean}`).join(), supplies]);
 
     const validate = useCallback(() => {
         const errors: Record<string, string[]> = {};
@@ -196,6 +222,7 @@ const GoodsReceipt: React.FC = () => {
             bottlesPerBox: 0,
             supplyId: '',
             supplyLot: '',
+            ean: '',
             palletCount: 1,
             pallets: [],
             isCollapsed: false,
@@ -248,6 +275,7 @@ const GoodsReceipt: React.FC = () => {
         
         const albaranData: Albaran = {
             id: isEditing ? albaranId : albaranId.trim(),
+            orderId: orderId.trim(), // Include Order ID
             entryDate, truckPlate, carrier, driver, origin,
             pallets: allPallets,
             status: finalStatus,
@@ -277,6 +305,7 @@ const GoodsReceipt: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {!isEditing && <HeaderInput label="Nº Albarán de Entrada" id="albaranId" value={albaranId} onChange={e => setAlbaranId(e.target.value)} required errorField="albaranId" validationErrors={validationErrors}/>}
                     {isEditing && <div><label className="block text-sm font-medium text-gray-700">Nº Albarán de Entrada</label><p className="mt-1 block w-full sm:text-sm p-2 bg-gray-100 rounded-md">{albaranId}</p></div>}
+                    <HeaderInput label="Nº Pedido" id="orderId" value={orderId} onChange={e => setOrderId(e.target.value)} validationErrors={validationErrors} />
                     <div>
                         <label htmlFor="entryDate" className="block text-sm font-medium text-gray-700">Fecha y Hora de Entrada*</label>
                         <input type="datetime-local" id="entryDate" value={entryDate} onChange={e => setEntryDate(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" />
@@ -357,7 +386,7 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
             ...g,
             type: newType,
             productName: '', productLot: '', boxesPerPallet: 0, bottlesPerBox: 0,
-            supplyId: '', supplyLot: ''
+            supplyId: '', supplyLot: '', ean: ''
         }));
     };
 
@@ -423,12 +452,12 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
                     </>
                 ) : (
                     <>
-                        <div className="sm:col-span-2">
-                            <label className="text-xs font-medium text-gray-600">Consumible</label>
+                        <div className="sm:col-span-1">
+                            <label className="text-xs font-medium text-gray-600">Artículo (Consumible)</label>
                             <input
                                 type="text"
                                 list="supply-list"
-                                placeholder="Escriba o seleccione un consumible"
+                                placeholder="Escriba o seleccione"
                                 onBlur={(e) => {
                                     const selectedSupply = supplies.find(s => s.name === e.target.value);
                                     if (selectedSupply) {
@@ -445,8 +474,12 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
                                 {supplies.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                             </datalist>
                         </div>
+                        <div className="sm:col-span-1">
+                             <label className="text-xs font-medium text-gray-600">Código EAN</label>
+                             <input type="text" value={group.ean || ''} onChange={e => handleFieldChange('ean', e.target.value)} className="w-full p-2 border rounded-md text-sm" placeholder="Opcional"/>
+                        </div>
                          <div className="sm:col-span-1">
-                            <label className="text-xs font-medium text-gray-600">Lote (Opcional)</label>
+                            <label className="text-xs font-medium text-gray-600">Lote</label>
                             <input type="text" value={group.supplyLot || ''} onChange={e => handleFieldChange('supplyLot', e.target.value.toUpperCase())} className="w-full p-2 border rounded-md text-sm"/>
                         </div>
                     </>
@@ -478,6 +511,22 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
                                     onChange={e => handlePalletFieldChange(idx, 'sscc', e.target.value)}
                                     className="w-full p-1.5 border rounded-md text-xs"
                                 />
+                                {group.type === 'consumable' && (
+                                     <input
+                                        type="number"
+                                        placeholder={`Cantidad`}
+                                        value={p.supplyQuantity || ''}
+                                        // Note: We don't have a handler for individual qty in this compacted view, relying on group defaults usually, 
+                                        // but `GoodsReceipt` auto-generation doesn't set individual qty by default for consumables unless logic changes.
+                                        // For now, we assume users enter quantity in the individual pallet input view (PalletInput component) 
+                                        // or we add a 'Quantity per Pallet' field to the group definition for consumables.
+                                        // Adding a Quantity/Pallet field to group definition is better UX.
+                                        // Let's keep it simple here and assume batch entry.
+                                        disabled
+                                        className="w-full p-1.5 border rounded-md text-xs bg-gray-100"
+                                        title="Edite la cantidad en la vista detallada si es necesario"
+                                    />
+                                )}
                              </div>
                         ))}
                     </div>

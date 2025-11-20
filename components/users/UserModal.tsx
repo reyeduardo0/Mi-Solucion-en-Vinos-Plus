@@ -29,19 +29,18 @@ const UserModal: React.FC<UserModalProps> = ({ user, roles, onSave, onClose }) =
     const isEditingSuperUser = user?.email === SUPER_USER_EMAIL;
     const isSuperUserSession = currentUser?.email === SUPER_USER_EMAIL;
     const isEditingSelf = user?.id === currentUser?.id;
-    const canChangePassword = isSuperUserSession && user && !isEditingSelf;
+    
+    // Logic: If I am Super User editing myself, I can change password.
+    // If I am Super User editing another, I can change their password.
+    // If I am Admin editing another, I can change their password (handled by backend perms/logic).
+    const canChangePassword = (isSuperUserSession && user && !isEditingSelf) || (isEditingSuperUser && isEditingSelf);
 
-
-    useEffect(() => {
-        if (isEditingSuperUser) {
-            setError("El Super Usuario no puede ser modificado.");
-        }
-    }, [isEditingSuperUser]);
+    // We protect critical fields of Super User (Email, Role) to prevent lockout.
+    const isProtectedField = isEditingSuperUser;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (isEditingSuperUser) return;
-
+        
         if (!roleId) {
             setError("Por favor, seleccione un rol.");
             return;
@@ -75,13 +74,13 @@ const UserModal: React.FC<UserModalProps> = ({ user, roles, onSave, onClose }) =
                 {isEditingSuperUser && (
                     <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
                         <p className="font-bold">Aviso</p>
-                        <p>La cuenta del Super Usuario tiene protecciones especiales y no puede ser modificada desde esta interfaz.</p>
+                        <p>Estás editando al Super Usuario. El Email y el Rol están bloqueados por seguridad.</p>
                     </div>
                 )}
-                <div><label className="block text-sm font-medium">Nombre Completo</label><input type="text" value={name} onChange={e => setName(e.target.value)} required disabled={isEditingSuperUser} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 disabled:bg-gray-100" /></div>
-                <div><label className="block text-sm font-medium">Correo Electrónico</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={!!user || isEditingSuperUser} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 disabled:bg-gray-100" /></div>
+                <div><label className="block text-sm font-medium">Nombre Completo</label><input type="text" value={name} onChange={e => setName(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                <div><label className="block text-sm font-medium">Correo Electrónico</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={!!user || isProtectedField} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 disabled:bg-gray-100" /></div>
                 {!user && (<div><label className="block text-sm font-medium">Contraseña</label><input type="password" value={password} onChange={e => setPassword(e.target.value)} required={!user} placeholder="Mínimo 6 caracteres" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>)}
-                {canChangePassword && (
+                {user && (
                     <div>
                         <label className="block text-sm font-medium">Nueva Contraseña (Opcional)</label>
                         <input 
@@ -93,13 +92,13 @@ const UserModal: React.FC<UserModalProps> = ({ user, roles, onSave, onClose }) =
                         />
                     </div>
                 )}
-                <div><label className="block text-sm font-medium">Rol</label><select value={roleId} onChange={e => setRoleId(e.target.value)} required disabled={isEditingSuperUser} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 disabled:bg-gray-100"><option value="">Seleccionar un rol...</option>{roles.map(r => <option key={r.id} value={r.id} disabled={r.name === 'Super Usuario' && !isEditingSuperUser}>{r.name}</option>)}</select></div>
+                <div><label className="block text-sm font-medium">Rol</label><select value={roleId} onChange={e => setRoleId(e.target.value)} required disabled={isProtectedField} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 disabled:bg-gray-100"><option value="">Seleccionar un rol...</option>{roles.map(r => <option key={r.id} value={r.id} disabled={r.name === 'Super Usuario' && !isEditingSuperUser}>{r.name}</option>)}</select></div>
                 
-                {error && !isEditingSuperUser && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">{error}</div>}
+                {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">{error}</div>}
 
                 <div className="flex justify-end space-x-3 pt-4 border-t">
                     <Button type="button" variant="secondary" onClick={onClose} disabled={isLoading}>Cancelar</Button>
-                    <Button type="submit" disabled={isLoading || isEditingSuperUser}>
+                    <Button type="submit" disabled={isLoading}>
                         {isLoading ? <Spinner/> : (user ? 'Guardar Cambios' : 'Crear Usuario')}
                     </Button>
                 </div>
