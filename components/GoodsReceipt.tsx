@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Albaran, Pallet, Supply } from '../types';
@@ -18,8 +19,11 @@ interface PalletGroup {
     bottlesPerBox: number;
     // Consumable fields
     supplyId: string;
+    supplyName: string; // Added explicit field for free text
     supplyLot: string;
     supplyQuantity: number; // Added field for inventory control
+    supplyUnit?: 'unidades' | 'cajas' | 'rollos' | 'metros'; // For new items
+    supplyType?: 'Contable' | 'No Contable'; // For new items
     ean: string;
     // Common
     palletCount: number;
@@ -47,7 +51,7 @@ const GoodsReceipt: React.FC = () => {
     const { albaranId: albaranIdFromParams } = useParams<{ albaranId: string }>();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
-    const { albaranes, supplies, addAlbaran, updateAlbaran, products } = useData();
+    const { albaranes, supplies, addAlbaran, updateAlbaran, products, addNewSupply } = useData();
     
     const [albaranId, setAlbaranId] = useState('');
     const [orderId, setOrderId] = useState(''); // Added Order ID
@@ -86,6 +90,7 @@ const GoodsReceipt: React.FC = () => {
                 boxesPerPallet: 0,
                 bottlesPerBox: 0,
                 supplyId: '',
+                supplyName: '',
                 supplyLot: '',
                 supplyQuantity: 0,
                 ean: '',
@@ -115,12 +120,14 @@ const GoodsReceipt: React.FC = () => {
                 existingAlbaran.pallets?.forEach(p => {
                     let groupKey: string;
                     let supplyForGroup: Supply | undefined;
+                    let supplyNameStr = '';
 
                     if (p.type === 'product') {
                         groupKey = `prod-${p.product!.name}-${p.product!.lot}`;
                     } else { // Consumable
-                        supplyForGroup = supplies.find(s => s.name === p.supplyName);
-                        groupKey = `supp-${supplyForGroup ? supplyForGroup.id : p.supplyName!}-${p.supplyLot}`;
+                        supplyNameStr = p.supplyName || '';
+                        supplyForGroup = supplies.find(s => s.name === supplyNameStr);
+                        groupKey = `supp-${supplyForGroup ? supplyForGroup.id : supplyNameStr}-${p.supplyLot}`;
                     }
                 
                     if (!groups[groupKey]) {
@@ -132,6 +139,7 @@ const GoodsReceipt: React.FC = () => {
                             boxesPerPallet: p.type === 'product' ? (p.boxesPerPallet || 0) : 0,
                             bottlesPerBox: p.type === 'product' ? (p.bottlesPerBox || 0) : 0,
                             supplyId: p.type === 'consumable' ? (supplyForGroup?.id || '') : '',
+                            supplyName: p.type === 'consumable' ? supplyNameStr : '',
                             supplyLot: p.type === 'consumable' ? (p.supplyLot || '') : '',
                             supplyQuantity: p.type === 'consumable' ? (p.supplyQuantity || 0) : 0,
                             ean: p.eanBox || '', // Capture EAN from pallet
@@ -162,7 +170,7 @@ const GoodsReceipt: React.FC = () => {
                     bottlesPerBox: group.type === 'product' ? group.bottlesPerBox : undefined,
                     totalBottles: group.type === 'product' ? group.boxesPerPallet * group.bottlesPerBox : undefined,
                     supplyId: group.type === 'consumable' ? group.supplyId : undefined,
-                    supplyName: group.type === 'consumable' ? supplies.find(s => s.id === group.supplyId)?.name : undefined,
+                    supplyName: group.type === 'consumable' ? group.supplyName : undefined,
                     supplyLot: group.type === 'consumable' ? group.supplyLot : undefined,
                     supplyQuantity: group.type === 'consumable' ? group.supplyQuantity : undefined,
                     eanBox: group.ean || undefined, // Propagate EAN to pallets
@@ -170,7 +178,7 @@ const GoodsReceipt: React.FC = () => {
                 return { ...group, pallets: newPallets };
             })
         );
-    }, [palletGroups.map(g => `${g.id}-${g.palletCount}-${g.productName}-${g.productLot}-${g.boxesPerPallet}-${g.bottlesPerBox}-${g.supplyId}-${g.supplyLot}-${g.supplyQuantity}-${g.ean}`).join(), supplies]);
+    }, [palletGroups.map(g => `${g.id}-${g.palletCount}-${g.productName}-${g.productLot}-${g.boxesPerPallet}-${g.bottlesPerBox}-${g.supplyId}-${g.supplyName}-${g.supplyLot}-${g.supplyQuantity}-${g.ean}`).join(), supplies]);
 
     const validate = useCallback(() => {
         const errors: Record<string, string[]> = {};
@@ -201,7 +209,8 @@ const GoodsReceipt: React.FC = () => {
                 if (!p.product?.name?.trim()) palletErrors.push('productName');
                 if (!p.product?.lot?.trim()) palletErrors.push('productLot');
             } else if (p.type === 'consumable') {
-                if (!p.supplyId) palletErrors.push('supplyId');
+                // If creating a new supply, supplyId might be empty initially but supplyName must be present
+                if (!p.supplyName) palletErrors.push('supplyId'); 
                 if (!p.supplyQuantity || p.supplyQuantity <= 0) palletErrors.push('supplyQuantity');
             }
 
@@ -218,12 +227,13 @@ const GoodsReceipt: React.FC = () => {
     const handleAddGroup = () => {
         setPalletGroups(prev => [...prev, {
             id: generateUUID(),
-            type: 'product',
+            type: 'consumable', // Default to consumable for current workflow ease
             productName: '',
             productLot: '',
             boxesPerPallet: 0,
             bottlesPerBox: 0,
             supplyId: '',
+            supplyName: '',
             supplyLot: '',
             supplyQuantity: 0,
             ean: '',
@@ -261,33 +271,72 @@ const GoodsReceipt: React.FC = () => {
 
         setIsLoading(true);
 
-        const allPallets = palletGroups.flatMap((g, groupIndex) => g.pallets.map((p, palletIndex) => {
-            const basePallet = { ...p };
-            // FIX: Auto-generate a unique pallet number if one wasn't provided manually.
-            if (!basePallet.palletNumber?.trim()) {
-                basePallet.palletNumber = `${albaranId.trim()}-G${groupIndex + 1}-P${palletIndex + 1}`;
-            }
-            if (basePallet.type === 'product') {
-                basePallet.totalBottles = (p.boxesPerPallet || 0) * (p.bottlesPerBox || 0);
-            }
-            return basePallet as Pallet;
-        }));
-
-        const finalStatus = status === 'incident' || allPallets.some(p => p.incident) ? 'incident' : 'verified';
-        
-        const incidentImagesBase64 = await Promise.all(incidentImages.map(fileToBase64));
-        
-        const albaranData: Albaran = {
-            id: isEditing ? albaranId : albaranId.trim(),
-            orderId: orderId.trim(), // Include Order ID
-            entryDate, truckPlate, carrier, driver, origin,
-            pallets: allPallets,
-            status: finalStatus,
-            incidentDetails: status === 'incident' ? incidentDetails : undefined,
-            incidentImages: status === 'incident' ? incidentImagesBase64 : undefined,
-        };
-
         try {
+            // 1. Identify and Create New Supplies if necessary
+            const processedGroups = [...palletGroups];
+            const createdSupplyMap = new Map<string, string>(); // Name -> ID
+
+            for (let i = 0; i < processedGroups.length; i++) {
+                const group = processedGroups[i];
+                if (group.type === 'consumable' && group.supplyName && !group.supplyId) {
+                    // Check if we already created this supply in this very session loop (e.g. 2 groups for same new item)
+                    let newId = createdSupplyMap.get(group.supplyName);
+
+                    if (!newId) {
+                        // It's a truly new supply, create it
+                        newId = await addNewSupply({
+                            name: group.supplyName,
+                            type: group.supplyType || 'Contable',
+                            unit: group.supplyUnit || 'unidades',
+                        });
+                        createdSupplyMap.set(group.supplyName, newId);
+                    }
+                    
+                    // Update the group with the new ID
+                    processedGroups[i] = { ...group, supplyId: newId };
+                }
+            }
+
+            // 2. Generate Pallets with correct IDs
+            const allPallets = processedGroups.flatMap((g, groupIndex) => {
+                 // Generate updated pallets for the group with the potential new ID
+                 const palletsWithIds = Array.from({ length: g.palletCount }, (_, i) => {
+                    const existingPallet = g.pallets[i] || {};
+                    return {
+                        ...existingPallet,
+                        id: existingPallet.id || generateUUID(),
+                        type: g.type,
+                        product: g.type === 'product' ? { name: g.productName, lot: g.productLot } : undefined,
+                        boxesPerPallet: g.type === 'product' ? g.boxesPerPallet : undefined,
+                        bottlesPerBox: g.type === 'product' ? g.bottlesPerBox : undefined,
+                        totalBottles: g.type === 'product' ? (g.boxesPerPallet * g.bottlesPerBox) : undefined,
+                        supplyId: g.type === 'consumable' ? g.supplyId : undefined,
+                        supplyName: g.type === 'consumable' ? g.supplyName : undefined,
+                        supplyLot: g.type === 'consumable' ? g.supplyLot : undefined,
+                        supplyQuantity: g.type === 'consumable' ? g.supplyQuantity : undefined,
+                        eanBox: g.ean || undefined,
+                        // Generate number if missing
+                        palletNumber: existingPallet.palletNumber?.trim() 
+                            ? existingPallet.palletNumber 
+                            : `${albaranId.trim()}-G${groupIndex + 1}-P${i + 1}`
+                    } as Pallet;
+                 });
+                 return palletsWithIds;
+            });
+
+            const finalStatus = status === 'incident' || allPallets.some(p => p.incident) ? 'incident' : 'verified';
+            const incidentImagesBase64 = await Promise.all(incidentImages.map(fileToBase64));
+            
+            const albaranData: Albaran = {
+                id: isEditing ? albaranId : albaranId.trim(),
+                orderId: orderId.trim(), // Include Order ID
+                entryDate, truckPlate, carrier, driver, origin,
+                pallets: allPallets,
+                status: finalStatus,
+                incidentDetails: status === 'incident' ? incidentDetails : undefined,
+                incidentImages: status === 'incident' ? incidentImagesBase64 : undefined,
+            };
+
             if (isEditing) {
                 await updateAlbaran(albaranData);
             } else {
@@ -336,7 +385,9 @@ const GoodsReceipt: React.FC = () => {
 
                 <div className="p-4 border-l-4 border-gray-300 bg-gray-50 mb-4">
                     <h3 className="text-md font-semibold text-gray-800 mb-2">Definir Grupos de Pallets</h3>
-                    <p className="text-sm text-gray-600 mb-4">Define los diferentes productos o consumibles que vienen en el albarán y cuántos pallets corresponden a cada uno.</p>
+                    <p className="text-sm text-gray-600 mb-4">
+                        Define los productos o consumibles. Para un mismo artículo con lotes diferentes, añade un grupo para cada lote.
+                    </p>
                     {palletGroups.map((group) => (
                         <PalletGroupDefinition 
                             key={group.id} 
@@ -390,7 +441,7 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
             ...g,
             type: newType,
             productName: '', productLot: '', boxesPerPallet: 0, bottlesPerBox: 0,
-            supplyId: '', supplyLot: '', supplyQuantity: 0, ean: ''
+            supplyId: '', supplyName: '', supplyLot: '', supplyQuantity: 0, ean: ''
         }));
     };
 
@@ -404,11 +455,24 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
         });
     };
     
+    // Logic for handling free-text supply input and creating new ones
+    const handleSupplyNameChange = (name: string) => {
+        const existing = supplies.find(s => s.name.toLowerCase() === name.toLowerCase());
+        onUpdate(g => ({
+            ...g,
+            supplyName: name,
+            supplyId: existing ? existing.id : '', // Clear ID if name is new
+            supplyUnit: existing ? existing.unit : (g.supplyUnit || 'unidades'), // keep existing if set, else default
+        }));
+    };
+
     const totalUnits = group.type === 'product' 
         ? group.palletCount * group.boxesPerPallet * group.bottlesPerBox
         : group.palletCount * group.supplyQuantity;
 
     const toggleCollapse = () => onUpdate(g => ({ ...g, isCollapsed: !g.isCollapsed }));
+
+    const isNewSupply = group.type === 'consumable' && group.supplyName && !group.supplyId;
 
     return (
         <div className="border border-gray-300 rounded-lg p-3 mb-3 bg-white relative">
@@ -458,27 +522,43 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
                     <>
                         <div className="sm:col-span-1">
                             <label className="text-xs font-medium text-gray-600">Artículo (Consumible)</label>
-                            <input
-                                type="text"
-                                list="supply-list"
-                                placeholder="Escriba o seleccione"
-                                onBlur={(e) => {
-                                    const selectedSupply = supplies.find(s => s.name === e.target.value);
-                                    if (selectedSupply) {
-                                        handleFieldChange('supplyId', selectedSupply.id);
-                                    } else {
-                                        e.target.value = '';
-                                        handleFieldChange('supplyId', '');
-                                    }
-                                }}
-                                defaultValue={supplies.find(s => s.id === group.supplyId)?.name || ''}
-                                className="w-full p-2 border rounded-md text-sm"
-                            />
-                            <datalist id="supply-list">
-                                {supplies.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                            </datalist>
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    list="supply-list"
+                                    placeholder="Buscar o Crear Nuevo"
+                                    value={group.supplyName || ''}
+                                    onChange={(e) => handleSupplyNameChange(e.target.value)}
+                                    className={`w-full p-2 border rounded-md text-sm ${isNewSupply ? 'border-blue-400 ring-1 ring-blue-200' : ''}`}
+                                />
+                                <datalist id="supply-list">
+                                    {supplies.map(s => <option key={s.id} value={s.name} />)}
+                                </datalist>
+                                {isNewSupply && <span className="absolute right-2 top-2 text-xs text-blue-600 font-bold">NUEVO</span>}
+                            </div>
                         </div>
-                        <div className="sm:col-span-1">
+                        {isNewSupply && (
+                            <>
+                                <div className="sm:col-span-1">
+                                    <label className="text-xs font-medium text-gray-600">Unidad (Nuevo)</label>
+                                    <select value={group.supplyUnit || 'unidades'} onChange={e => handleFieldChange('supplyUnit', e.target.value)} className="w-full p-2 border rounded-md text-sm bg-blue-50">
+                                        <option value="unidades">Unidades</option>
+                                        <option value="cajas">Cajas</option>
+                                        <option value="rollos">Rollos</option>
+                                        <option value="metros">Metros</option>
+                                    </select>
+                                </div>
+                                <div className="sm:col-span-1">
+                                    <label className="text-xs font-medium text-gray-600">Tipo (Nuevo)</label>
+                                    <select value={group.supplyType || 'Contable'} onChange={e => handleFieldChange('supplyType', e.target.value)} className="w-full p-2 border rounded-md text-sm bg-blue-50">
+                                        <option value="Contable">Contable</option>
+                                        <option value="No Contable">No Contable</option>
+                                    </select>
+                                </div>
+                            </>
+                        )}
+
+                         <div className="sm:col-span-1">
                              <label className="text-xs font-medium text-gray-600">Código EAN</label>
                              <input type="text" value={group.ean || ''} onChange={e => handleFieldChange('ean', e.target.value)} className="w-full p-2 border rounded-md text-sm" placeholder="Opcional"/>
                         </div>
@@ -533,16 +613,10 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
                                      <input
                                         type="number"
                                         placeholder={`Cantidad`}
-                                        value={p.supplyQuantity || ''}
-                                        // Note: We don't have a handler for individual qty in this compacted view, relying on group defaults usually, 
-                                        // but `GoodsReceipt` auto-generation doesn't set individual qty by default for consumables unless logic changes.
-                                        // For now, we assume users enter quantity in the individual pallet input view (PalletInput component) 
-                                        // or we add a 'Quantity per Pallet' field to the group definition for consumables.
-                                        // Adding a Quantity/Pallet field to group definition is better UX.
-                                        // Let's keep it simple here and assume batch entry.
+                                        value={p.supplyQuantity || group.supplyQuantity || ''}
                                         disabled
                                         className="w-full p-1.5 border rounded-md text-xs bg-gray-100"
-                                        title="Edite la cantidad en la vista detallada si es necesario"
+                                        title="Cantidad heredada del grupo"
                                     />
                                 )}
                              </div>

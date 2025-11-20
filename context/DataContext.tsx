@@ -50,7 +50,7 @@ interface DataContextType {
     updateAlbaran: (albaran: Albaran) => Promise<void>;
     deleteAlbaran: (albaran: Albaran) => Promise<void>;
 
-    addNewSupply: (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }) => Promise<void>;
+    addNewSupply: (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }) => Promise<string>;
     addSupplyStock: (supplyId: string, quantity: number, lot: string) => Promise<void>;
     updateSupply: (supply: Supply) => Promise<void>;
     deleteSupply: (supplyId: string, supplyName: string) => Promise<void>;
@@ -530,7 +530,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await addAuditLog(`Eliminó la entrada "${albaran.id}"`);
     };
     
-    const addNewSupply = async (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }) => {
+    const addNewSupply = async (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }): Promise<string> => {
         const { name, type, unit, minStock } = supplyData;
         const dbData = { name, type, unit, min_stock: minStock, quantity: 0 };
         const { data, error } = await supabase!.from('supplies').insert(dbData).select().single();
@@ -539,7 +539,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         if (initialData?.quantity && initialData.quantity > 0) {
             await addSupplyStock(data.id, initialData.quantity, initialData.lot);
         }
+        await fetchData(); // Refresh list
+        return data.id;
     };
+
     const addSupplyStock = async (supplyId: string, quantity: number, lot: string) => {
         const supply = supplies.find(s => s.id === supplyId);
         if (!supply) throw new Error('Consumible no encontrado');
