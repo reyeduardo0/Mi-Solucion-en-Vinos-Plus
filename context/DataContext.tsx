@@ -663,7 +663,16 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         if (authError) throw authError;
         if (!authData.user) throw new Error("No se pudo crear el usuario en Supabase Auth.");
 
-        // 2. Insertar manualmente en tabla pública 'users' usando el cliente PRINCIPAL (admin)
+        // 2. Forzar confirmación de email mediante RPC (para evitar errores de 'Email not confirmed')
+        // Esto se ejecuta como el Super Usuario actual (admin), por lo que debe tener permisos.
+        const { error: confirmError } = await supabase!.rpc('confirm_user_by_admin', { target_user_id: authData.user.id });
+        
+        if (confirmError) {
+             console.error("Error al confirmar usuario automáticamente (RPC):", confirmError);
+             // No lanzamos error fatal, pero advertimos. El trigger de BD debería encargarse si esto falla.
+        }
+
+        // 3. Insertar manualmente en tabla pública 'users' usando el cliente PRINCIPAL (admin)
         const { error: profileError } = await supabase!.from('users').insert({
             id: authData.user.id,
             full_name: userData.name,

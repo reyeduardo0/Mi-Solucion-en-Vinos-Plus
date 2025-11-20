@@ -37,6 +37,8 @@ const Login: React.FC = () => {
         } catch (error: any) {
             if (error.message.includes("Invalid login credentials")) {
                 setError("Correo o contraseña incorrectos.");
+            } else if (error.message.includes("Email not confirmed")) {
+                setError("El correo electrónico no ha sido confirmado. Pida al administrador que confirme su cuenta o ejecute el script SQL.");
             } else {
                 setError(error.error_description || error.message);
             }
