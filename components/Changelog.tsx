@@ -4,6 +4,15 @@ import Card from './ui/Card';
 
 const changelogData = [
     {
+        version: '1.3.3',
+        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'fix', text: 'Actualización forzada de componentes para asegurar sincronización con repositorio Git.' },
+            { type: 'improvement', text: 'Mejoras visuales (tooltips) en botón de creación de packs para indicar estado deshabilitado.' },
+            { type: 'fix', text: 'Lógica de "Max" en asignación de lotes ajustada para recálculo dinámico.' },
+        ]
+    },
+    {
         version: '1.3.2',
         date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
         changes: [

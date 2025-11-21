@@ -354,7 +354,12 @@ const CreatePack: React.FC = () => {
                                </div>
 
                                <div className="pt-4">
-                                   <Button className="w-full" onClick={handleCreatePack} disabled={!canCreatePack}>
+                                   <Button 
+                                        className="w-full" 
+                                        onClick={handleCreatePack} 
+                                        disabled={!canCreatePack}
+                                        title={!canCreatePack ? "Complete todos los campos requeridos y asigne lotes para habilitar." : "Crear producción"}
+                                   >
                                        Confirmar y Crear Producción
                                    </Button>
                                    {!canCreatePack && (
