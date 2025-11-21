@@ -1,6 +1,7 @@
 
+
 import React, { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import Card from './ui/Card';
 import Button from './ui/Button';
@@ -9,24 +10,45 @@ import { generateUUID, formatDateSafe } from '../utils/helpers';
 
 const CreateProductionReport: React.FC = () => {
     const navigate = useNavigate();
-    const { packs, supplies, addProductionReport, productionReports, products } = useData();
+    const { id } = useParams<{ id: string }>(); // Get ID if in edit mode
+    const { packs, supplies, addProductionReport, updateProductionReport, productionReports, products } = useData();
     
+    const isEditing = !!id;
+
     const [selectedPackId, setSelectedPackId] = useState('');
     const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
     const [producedQuantity, setProducedQuantity] = useState<number>(0);
     const [consumptions, setConsumptions] = useState<ProductionConsumption[]>([]);
     
-    // Filtrar packs que YA están completados (Ensamblados) pero NO tienen reporte aún
+    // If editing, we load the existing report data
+    useEffect(() => {
+        if (isEditing && id) {
+            const existingReport = productionReports.find(r => r.id === id);
+            if (existingReport) {
+                setSelectedPackId(existingReport.packId);
+                setReportDate(existingReport.reportDate.split('T')[0]);
+                setProducedQuantity(existingReport.producedQuantity);
+                setConsumptions(existingReport.consumptions);
+            }
+        }
+    }, [isEditing, id, productionReports]);
+
+    // Filtrar packs disponibles. Si editamos, DEBEMOS incluir el pack actual aunque tenga reporte.
     const availablePacks = useMemo(() => {
         const reportedPackIds = new Set(productionReports.map(r => r.packId));
-        return packs.filter(p => p.status === 'Ensamblado' && !reportedPackIds.has(p.id));
-    }, [packs, productionReports]);
+        return packs.filter(p => {
+            // Mostrar si el pack está ensamblado Y (no tiene reporte O es el pack que estamos editando)
+            return p.status === 'Ensamblado' && (!reportedPackIds.has(p.id) || (isEditing && p.id === selectedPackId));
+        });
+    }, [packs, productionReports, isEditing, selectedPackId]);
 
     const selectedPack = useMemo(() => packs.find(p => p.id === selectedPackId), [selectedPackId, packs]);
 
-    // Auto-rellenar datos al seleccionar pack
+    // Auto-rellenar datos al seleccionar pack (SOLO si NO estamos editando o si cambiamos de pack manualmente)
+    // Importante: Si estamos editando, el useEffect inicial ya cargó los datos, no queremos sobreescribirlos
+    // a menos que el usuario cambie el pack en el dropdown explícitamente.
     useEffect(() => {
-        if (selectedPack) {
+        if (!isEditing && selectedPack) {
             // Si el pack tiene cantidad guardada, usarla. Si no, 1.
             setProducedQuantity(selectedPack.quantity || 1); 
 
@@ -61,11 +83,10 @@ const CreateProductionReport: React.FC = () => {
             }
 
             setConsumptions(newConsumptions);
-        } else {
-            setConsumptions([]);
-            setProducedQuantity(0);
-        }
-    }, [selectedPack]);
+        } 
+        // En modo edición, NO reseteamos consumos automáticamente al cargar la página, 
+        // solo si el usuario CAMBIA el pack en el dropdown (lo cual es raro pero posible).
+    }, [selectedPack, isEditing]);
 
     const handleConsumptionChange = (index: number, field: keyof ProductionConsumption, value: any) => {
         const updated = [...consumptions];
@@ -94,28 +115,51 @@ const CreateProductionReport: React.FC = () => {
             return;
         }
 
-        const reportId = `REP-${Date.now()}`;
-        const report: Omit<ProductionReport, 'created_at'> = {
-            id: reportId,
-            packId: selectedPackId,
-            reportDate,
-            producedQuantity,
-            consumptions
-        };
+        if (isEditing && id) {
+            // UPDATE MODE
+            const updatedReport: ProductionReport = {
+                id, // Keep existing ID
+                packId: selectedPackId,
+                reportDate,
+                producedQuantity,
+                consumptions
+            };
 
-        try {
-            await addProductionReport(report);
-            navigate('/partes-montaje');
-        } catch (error) {
-            console.error(error);
-            alert("Error al guardar el parte.");
+            try {
+                await updateProductionReport(updatedReport);
+                navigate('/partes-montaje');
+            } catch(error) {
+                console.error(error);
+                alert("Error al actualizar el parte.");
+            }
+
+        } else {
+            // CREATE MODE
+            const reportId = `REP-${Date.now()}`;
+            const report: Omit<ProductionReport, 'created_at'> = {
+                id: reportId,
+                packId: selectedPackId,
+                reportDate,
+                producedQuantity,
+                consumptions
+            };
+
+            try {
+                await addProductionReport(report);
+                navigate('/partes-montaje');
+            } catch (error) {
+                console.error(error);
+                alert("Error al guardar el parte.");
+            }
         }
     };
 
     return (
         <div className="p-4 sm:p-6 lg:p-8">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold text-gray-800">Nuevo Parte de Montaje</h1>
+                <h1 className="text-3xl font-bold text-gray-800">
+                    {isEditing ? 'Editar Parte de Montaje' : 'Nuevo Parte de Montaje'}
+                </h1>
                 <Button variant="secondary" onClick={() => navigate('/partes-montaje')}>Cancelar</Button>
             </div>
 
@@ -129,12 +173,14 @@ const CreateProductionReport: React.FC = () => {
                                 value={selectedPackId} 
                                 onChange={e => setSelectedPackId(e.target.value)} 
                                 className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500"
+                                disabled={isEditing} // Lock pack selection on edit to avoid confusion
                             >
-                                <option value="">-- Seleccionar Pack Pendiente --</option>
+                                <option value="">-- Seleccionar Pack --</option>
                                 {availablePacks.map(p => (
                                     <option key={p.id} value={p.id}>{p.orderId} - {p.modelName} ({formatDateSafe(p.creationDate)})</option>
                                 ))}
                             </select>
+                             {isEditing && <p className="text-xs text-gray-500 mt-1">* El pack no se puede cambiar en modo edición.</p>}
                         </div>
                         {selectedPack && (
                             <>
@@ -264,7 +310,7 @@ const CreateProductionReport: React.FC = () => {
 
                         <div className="flex justify-end mt-6">
                             <Button onClick={handleSubmit} className="w-full md:w-auto text-lg px-8">
-                                Guardar Parte y Descontar Mermas
+                                {isEditing ? 'Actualizar Parte de Montaje' : 'Guardar Parte y Descontar Mermas'}
                             </Button>
                         </div>
                     </>

@@ -66,6 +66,7 @@ interface DataContextType {
     addMerma: (merma: Omit<Merma, 'id' | 'created_at'>) => Promise<void>;
     
     addProductionReport: (report: Omit<ProductionReport, 'created_at'>) => Promise<void>;
+    updateProductionReport: (report: ProductionReport) => Promise<void>;
     deleteProductionReport: (id: string, packId: string) => Promise<void>;
 
     addIncident: (incidentData: Omit<Incident, 'id'|'date'|'resolved'|'created_at'>) => Promise<void>;
@@ -524,6 +525,16 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await addAuditLog(`Creó parte de montaje para pack "${packId}"`);
         await fetchData();
     };
+    
+    const updateProductionReport = async (report: ProductionReport) => {
+        const { id, producedQuantity, consumptions, reportDate, notes } = report;
+        const dbReport = { produced_quantity: producedQuantity, consumptions, report_date: reportDate, notes };
+        const { error } = await supabase!.from('production_reports').update(dbReport).eq('id', id);
+        if (error) throw error;
+        
+        await addAuditLog(`Actualizó parte de montaje "${id}"`);
+        await fetchData();
+    };
 
     const deleteProductionReport = async (id: string, packId: string) => {
         const { error } = await supabase!.from('production_reports').delete().eq('id', id);
@@ -609,7 +620,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         addAlbaran, updateAlbaran, deleteAlbaran,
         addNewSupply, addSupplyStock, updateSupply, deleteSupply, updateSupplyLot,
         addPackModel,
-        addPack, handleDispatch, addMerma, addProductionReport, deleteProductionReport,
+        addPack, handleDispatch, addMerma, addProductionReport, updateProductionReport, deleteProductionReport,
         addIncident, resolveIncident,
         addUser, updateUser, deleteUser, updateCurrentUserPassword, updateUserPasswordByAdmin,
         addRole, updateRole, deleteRole

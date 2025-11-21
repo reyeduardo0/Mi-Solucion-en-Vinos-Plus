@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 // FIX: Changed to a type-only import for Session.
@@ -170,6 +171,7 @@ const AppLayout: React.FC = () => {
                             <Route path="modelos-pack" element={<PackModels />} />
                             <Route path="partes-montaje" element={<ProductionReports />} />
                             <Route path="partes-montaje/nuevo" element={<CreateProductionReport />} />
+                            <Route path="partes-montaje/editar/:id" element={<CreateProductionReport />} />
                             <Route path="salidas" element={<Dispatch />} />
                             <Route path="etiquetas" element={<GenerateLabels />} />
                             <Route path="incidencias" element={<Incidents />} />
