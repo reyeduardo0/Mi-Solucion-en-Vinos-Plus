@@ -9,6 +9,7 @@ export type Permission =
   | 'stock:view'
   | 'packs:create'
   | 'packs:manage_models'
+  | 'production:manage'
   | 'labels:generate'
   | 'dispatch:create'
   | 'incidents:manage'
@@ -208,4 +209,25 @@ export interface InventoryStockItem {
   inMerma: number;
   available: number;
   minStock?: number;
+}
+
+// --- NUEVO: Parte de Montaje ---
+
+export interface ProductionConsumption {
+    itemId: string; // Supply ID or Product Name
+    name: string;
+    type: 'product' | 'supply';
+    lot: string;
+    quantityConsumed: number; // Theoretical + Extras
+    quantityWaste: number; // Mermas
+}
+
+export interface ProductionReport {
+    id: string;
+    packId: string; // Link to WinePack
+    reportDate: string;
+    producedQuantity: number; // Actual good packs produced
+    consumptions: ProductionConsumption[];
+    notes?: string;
+    created_at?: string;
 }

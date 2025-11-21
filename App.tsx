@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 // FIX: Changed to a type-only import for Session.
@@ -26,6 +27,8 @@ import ProfileModal from './components/users/ProfileModal';
 import Traceability from './components/Traceability';
 import Audit from './components/Audit';
 import Changelog from './components/Changelog';
+import ProductionReports from './components/ProductionReports';
+import CreateProductionReport from './components/CreateProductionReport';
 
 // --- Hooks and Context ---
 import { PermissionsProvider } from './hooks/usePermissions';
@@ -165,6 +168,8 @@ const AppLayout: React.FC = () => {
                             <Route path="inventario" element={<Inventory />} />
                             <Route path="packing" element={<CreatePack />} />
                             <Route path="modelos-pack" element={<PackModels />} />
+                            <Route path="partes-montaje" element={<ProductionReports />} />
+                            <Route path="partes-montaje/nuevo" element={<CreateProductionReport />} />
                             <Route path="salidas" element={<Dispatch />} />
                             <Route path="etiquetas" element={<GenerateLabels />} />
                             <Route path="incidencias" element={<Incidents />} />

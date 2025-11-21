@@ -14,6 +14,7 @@ import {
   TraceabilityIcon,
   AuditIcon,
   ChangelogIcon,
+  ProductionIcon,
 } from '../../constants';
 import { usePermissions } from '../../hooks/usePermissions';
 
@@ -30,6 +31,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onLinkClick }) => {
         { path: '/inventario', label: 'Inventario', icon: <StockIcon />, permission: can('stock:view') },
         { path: '/packing', label: 'Crear Pack', icon: <CreatePackIcon />, permission: can('packs:create') },
         { path: '/modelos-pack', label: 'Modelos de Pack', icon: <PackModelIcon />, permission: can('packs:manage_models') },
+        { path: '/partes-montaje', label: 'Partes de Montaje', icon: <ProductionIcon />, permission: can('production:manage') },
         { path: '/etiquetas', label: 'Generar Etiquetas', icon: <GenerateLabelIcon />, permission: can('labels:generate') },
         { path: '/salidas', label: 'Salidas', icon: <ExitIcon />, permission: can('dispatch:create') },
         { path: '/incidencias', label: 'Incidencias', icon: <IncidentIcon />, permission: can('incidents:manage') },
