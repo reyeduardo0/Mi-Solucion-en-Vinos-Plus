@@ -1,7 +1,17 @@
+
 import React from 'react';
 import Card from './ui/Card';
 
 const changelogData = [
+    {
+        version: '1.3.2',
+        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'fix', text: 'Sincronización con GitHub y mejoras en UX de asignación de lotes para grandes volúmenes.' },
+            { type: 'improvement', text: 'Visualización mejorada de cantidades restantes en modal de creación de packs.' },
+            { type: 'new', text: 'Integración de IA (Gemini) en Entradas: Lectura automática de albaranes completa.' },
+        ]
+    },
     {
         version: '1.2.0',
         date: '05 de Agosto, 2024',

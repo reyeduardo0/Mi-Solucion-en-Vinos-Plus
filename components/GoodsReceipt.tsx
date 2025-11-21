@@ -9,6 +9,7 @@ import { useData } from '../context/DataContext';
 import { toDateTimeLocalInput, fileToBase64, capitalizeWords, getErrorMessage, generateUUID } from '../utils/helpers';
 import ConfirmationModal from './ui/ConfirmationModal';
 import { extractDataFromImage } from '../services/geminiService';
+import PalletInput from './goods-receipt/PalletInput';
 
 interface PalletGroup {
     id: string; // for react key
@@ -760,31 +761,36 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {group.pallets.map((p, idx) => (
                              <div key={p.id} className="bg-gray-50 p-2 rounded-md">
-                                <label className="text-xs font-medium text-gray-500 block mb-1">Pallet {idx + 1}</label>
-                                <input
-                                    type="text"
-                                    placeholder={`Nº Pallet`}
-                                    value={p.palletNumber || ''}
-                                    onChange={e => handlePalletFieldChange(idx, 'palletNumber', e.target.value)}
-                                    className="w-full p-1.5 border rounded-md text-xs mb-1"
+                                <PalletInput 
+                                    pallet={p} 
+                                    index={idx} 
+                                    totalPallets={group.palletCount} 
+                                    isCollapsed={false} 
+                                    supplies={supplies} 
+                                    updatePallet={(i, u) => {
+                                        const newPallets = [...group.pallets];
+                                        newPallets[i] = u(newPallets[i]);
+                                        handleFieldChange('pallets', newPallets);
+                                    }}
+                                    onToggleCollapse={() => {}}
+                                    onCopyToGroup={() => {
+                                        // Simple copy to group logic for critical fields
+                                        const source = p;
+                                        const updatedPallets = group.pallets.map(target => ({
+                                            ...target,
+                                            boxesPerPallet: source.boxesPerPallet,
+                                            bottlesPerBox: source.bottlesPerBox,
+                                            totalBottles: (source.boxesPerPallet || 0) * (source.bottlesPerBox || 0),
+                                            product: { ...target.product, lot: source.product?.lot || '' }
+                                        }));
+                                        handleFieldChange('pallets', updatedPallets);
+                                        // Update group level defaults too
+                                        handleFieldChange('boxesPerPallet', source.boxesPerPallet);
+                                        handleFieldChange('bottlesPerBox', source.bottlesPerBox);
+                                        handleFieldChange('productLot', source.product?.lot);
+                                    }}
+                                    validationErrors={[]} 
                                 />
-                                <input
-                                    type="text"
-                                    placeholder={`SSCC (Opcional)`}
-                                    value={p.sscc || ''}
-                                    onChange={e => handlePalletFieldChange(idx, 'sscc', e.target.value)}
-                                    className="w-full p-1.5 border rounded-md text-xs"
-                                />
-                                {group.type === 'consumable' && (
-                                     <input
-                                        type="number"
-                                        placeholder={`Cantidad`}
-                                        value={p.supplyQuantity || group.supplyQuantity || ''}
-                                        disabled
-                                        className="w-full p-1.5 border rounded-md text-xs bg-gray-100"
-                                        title="Cantidad heredada del grupo"
-                                    />
-                                )}
                              </div>
                         ))}
                     </div>
