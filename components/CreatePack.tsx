@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { WinePack, PackModel, Merma, Supply, InventoryStockItem } from '../types';
@@ -210,6 +211,7 @@ const CreatePack: React.FC = () => {
             modelId: selectedModel.id,
             modelName: selectedModel.name,
             orderId: orderId.trim(),
+            quantity: packCount, // Store planned quantity
             creationDate: new Date().toISOString(),
             contents: assignedContents,
             suppliesUsed: selectedModel.supplyRequirements.map(s => ({

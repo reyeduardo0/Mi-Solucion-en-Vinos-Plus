@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { Albaran, Incident, WinePack, DispatchNote, Supply } from '../types';
 import Card from './ui/Card';
@@ -13,7 +14,7 @@ const CsvIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5
 const PdfIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
 
 const Reports: React.FC = () => {
-    const { albaranes, incidents, salidas, supplies, inventoryStock } = useData();
+    const { albaranes, incidents, salidas, supplies, inventoryStock, productionReports, packs } = useData();
     const [reportFilters, setReportFilters] = useState({ type: 'entries', startDate: '', endDate: '', carrier: '', customer: '', status: 'all' });
     const [generatedReport, setGeneratedReport] = useState<{ headers: string[], data: (string|number)[][] } | null>(null);
 
@@ -57,6 +58,20 @@ const Reports: React.FC = () => {
                     ];
                 });
                 break;
+            case 'production':
+                headers = ['Fecha', 'Nº Lanzamiento', 'Modelo', 'Cant. Producida', 'Total Mermas (Items)'];
+                data = productionReports.filter(r => dateFilter(r.reportDate)).map(r => {
+                    const pack = packs.find(p => p.id === r.packId);
+                    const mermasCount = r.consumptions.filter(c => c.quantityWaste > 0).length;
+                    return [
+                        formatDateSafe(r.reportDate),
+                        pack ? pack.orderId : r.packId,
+                        pack ? pack.modelName : '---',
+                        r.producedQuantity,
+                        mermasCount > 0 ? `${mermasCount} items` : '0'
+                    ];
+                });
+                break;
         }
         setGeneratedReport({ headers, data });
     };
@@ -73,6 +88,7 @@ const Reports: React.FC = () => {
             case 'dispatches': title = "Reporte de Salidas"; break;
             case 'incidents': title = "Reporte de Incidencias"; break;
             case 'supplies': title = "Reporte de Inventario de Consumibles"; break;
+            case 'production': title = "Reporte de Rendimiento de Producción"; break;
         }
 
         // Añadir fecha de generación
@@ -127,7 +143,7 @@ const Reports: React.FC = () => {
             <div className="space-y-6">
                 <Card title="Configurar Reporte">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                        <div><label className="block text-sm font-medium mb-1">Tipo de Reporte</label><select name="type" value={reportFilters.type} onChange={handleFilterChange} className="w-full p-2 border rounded-md"><option value="entries">Historial de Entradas</option><option value="dispatches">Detalle de Salidas</option><option value="incidents">Resumen de Incidencias</option><option value="supplies">Inventario de Consumibles</option></select></div>
+                        <div><label className="block text-sm font-medium mb-1">Tipo de Reporte</label><select name="type" value={reportFilters.type} onChange={handleFilterChange} className="w-full p-2 border rounded-md"><option value="entries">Historial de Entradas</option><option value="dispatches">Detalle de Salidas</option><option value="incidents">Resumen de Incidencias</option><option value="supplies">Inventario de Consumibles</option><option value="production">Rendimiento de Producción</option></select></div>
                         <div><label className="block text-sm font-medium mb-1">Fecha Desde</label><input type="date" name="startDate" value={reportFilters.startDate} onChange={handleFilterChange} className="w-full p-2 border rounded-md"/></div>
                         <div><label className="block text-sm font-medium mb-1">Fecha Hasta</label><input type="date" name="endDate" value={reportFilters.endDate} onChange={handleFilterChange} className="w-full p-2 border rounded-md"/></div>
                         {(reportFilters.type === 'entries' || reportFilters.type === 'dispatches') && <div><label className="block text-sm font-medium mb-1">Transportista</label><select name="carrier" value={reportFilters.carrier} onChange={handleFilterChange} className="w-full p-2 border rounded-md"><option value="">Todos</option>{uniqueCarriers.map(c => <option key={c} value={c}>{c}</option>)}</select></div>}

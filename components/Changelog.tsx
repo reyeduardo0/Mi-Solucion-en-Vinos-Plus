@@ -1,11 +1,21 @@
 
+
 import React from 'react';
 import Card from './ui/Card';
 
 const changelogData = [
     {
-        version: '1.3.3',
+        version: '1.4.0',
         date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'new', text: 'Reportes de Rendimiento de Producción añadidos.' },
+            { type: 'new', text: 'Funcionalidad para imprimir "Parte de Montaje" en PDF (diseño Excel).' },
+            { type: 'fix', text: 'Asegurada la persistencia de la tabla de partes de montaje.' },
+        ]
+    },
+    {
+        version: '1.3.3',
+        date: '10 de Agosto, 2024',
         changes: [
             { type: 'fix', text: 'Actualización forzada de componentes para asegurar sincronización con repositorio Git.' },
             { type: 'improvement', text: 'Mejoras visuales (tooltips) en botón de creación de packs para indicar estado deshabilitado.' },
@@ -14,7 +24,7 @@ const changelogData = [
     },
     {
         version: '1.3.2',
-        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        date: '08 de Agosto, 2024',
         changes: [
             { type: 'fix', text: 'Sincronización con GitHub y mejoras en UX de asignación de lotes para grandes volúmenes.' },
             { type: 'improvement', text: 'Visualización mejorada de cantidades restantes en modal de creación de packs.' },

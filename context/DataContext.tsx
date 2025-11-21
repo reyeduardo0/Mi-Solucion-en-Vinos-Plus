@@ -1,4 +1,5 @@
 
+
 import React, {
   createContext,
   useContext,
@@ -189,22 +190,31 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             if (packModelsResult.error) throw packModelsResult.error;
 
             const [packsResult, salidasResult] = await Promise.all([
-                supabase!.from('wine_packs').select('id, modelId:model_id, modelName:model_name, orderId:order_id, creationDate:creation_date, contents, suppliesUsed:supplies_used, additionalComponents:additional_components, packImage:pack_image, status, created_at').order('created_at', { ascending: false }),
+                supabase!.from('wine_packs').select('id, modelId:model_id, modelName:model_name, orderId:order_id, quantity, creationDate:creation_date, contents, suppliesUsed:supplies_used, additionalComponents:additional_components, packImage:pack_image, status, created_at').order('created_at', { ascending: false }),
                 supabase!.from('dispatch_notes').select('id, dispatchDate:dispatch_date, customer, destination, carrier, truckPlate:truck_plate, driver, packIds:pack_ids, status, created_at').order('created_at', { ascending: false })
             ]);
             if (packsResult.error) throw packsResult.error;
             if (salidasResult.error) throw salidasResult.error;
 
-            const [incidentsResult, mermasResult, auditLogsResult, prodReportsResult] = await Promise.all([
+            const [incidentsResult, mermasResult, auditLogsResult] = await Promise.all([
                 supabase!.from('incidents').select('id, type, description, images, date, resolved, relatedId:related_id, created_at').order('created_at', { ascending: false }),
                 supabase!.from('mermas').select('id, itemName:item_name, itemType:item_type, lot, quantity, reason, created_at').order('created_at', { ascending: false }),
                 supabase!.from('audit_logs').select('id, username, action, timestamp').order('timestamp', { ascending: false }).limit(200),
-                supabase!.from('production_reports').select('id, packId:pack_id, reportDate:report_date, producedQuantity:produced_quantity, consumptions, notes, created_at').order('created_at', { ascending: false }),
             ]);
             if (incidentsResult.error) throw incidentsResult.error;
             if (mermasResult.error) throw mermasResult.error;
             if (auditLogsResult.error) throw auditLogsResult.error;
-            if (prodReportsResult.error) throw prodReportsResult.error;
+
+            // --- TRY CATCH for Production Reports (Fail-safe) ---
+            let fetchedProdReports: any[] = [];
+            try {
+                const prodReportsResult = await supabase!.from('production_reports').select('id, packId:pack_id, reportDate:report_date, producedQuantity:produced_quantity, consumptions, notes, created_at').order('created_at', { ascending: false });
+                if (!prodReportsResult.error) {
+                    fetchedProdReports = prodReportsResult.data || [];
+                }
+            } catch (e) {
+                console.warn("Could not fetch production reports, table might be missing:", e);
+            }
 
             const fetchedAlbaranesRaw = (albaranesResult.data as any[]) || [];
             const fetchedSupplies = (suppliesResult.data || []).filter(Boolean);
@@ -213,7 +223,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             const fetchedSalidas = (salidasResult.data || []).filter(Boolean);
             const fetchedIncidents = (incidentsResult.data || []).filter(Boolean);
             const fetchedMermas = (mermasResult.data || []).filter(Boolean);
-            const fetchedProdReports = (prodReportsResult.data || []).filter(Boolean);
             const fetchedAuditLogsRaw = (auditLogsResult.data as any[]) || [];
             
             const supplyNames = new Set(fetchedSupplies.map(s => s.name));
@@ -464,8 +473,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     };
 
     const addPack = async (pack: WinePack) => {
-        const { id, modelId, modelName, orderId, creationDate, contents, suppliesUsed, additionalComponents, packImage, status } = pack;
-        const dbPack = { id, model_id: modelId, model_name: modelName, order_id: orderId, creation_date: creationDate, contents, supplies_used: suppliesUsed, additional_components: additionalComponents, pack_image: packImage, status };
+        const { id, modelId, modelName, orderId, quantity, creationDate, contents, suppliesUsed, additionalComponents, packImage, status } = pack;
+        const dbPack = { id, model_id: modelId, model_name: modelName, order_id: orderId, quantity, creation_date: creationDate, contents, supplies_used: suppliesUsed, additional_components: additionalComponents, pack_image: packImage, status };
         const { error } = await supabase!.from('wine_packs').insert(dbPack);
         if (error) throw error;
         await addAuditLog(`Ensambló el pack "${pack.id}" para la orden "${pack.orderId}"`);

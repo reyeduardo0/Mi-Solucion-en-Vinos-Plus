@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
@@ -7,10 +8,12 @@ import Button from './ui/Button';
 import { formatDateSafe, formatDateTimeSafe } from '../utils/helpers';
 import { ProductionIcon } from '../constants';
 import ConfirmationModal from './ui/ConfirmationModal';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const PlusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>;
-const EyeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>;
 const TrashIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>;
+const PrinterIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm7-8V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>;
 
 const ProductionReports: React.FC = () => {
     const navigate = useNavigate();
@@ -30,6 +33,91 @@ const ProductionReports: React.FC = () => {
         }
     };
 
+    const handlePrintPDF = (report: any, pack: any) => {
+        const doc = new jsPDF();
+
+        // CABECERA ESTILO EXCEL
+        // Nº LANZAMIENTO
+        doc.setFillColor(220, 252, 231); // Light green like the excel header
+        doc.rect(14, 15, 182, 8, 'F'); // Background rect
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text("Nº LANZAMIENTO:", 16, 20);
+        doc.text(pack ? pack.orderId : report.packId, 60, 20);
+
+        // TABLA DE ARTICULO
+        autoTable(doc, {
+            startY: 25,
+            head: [['Nº Artículo', 'Descripción Artículo', 'Lote', 'Cantidad Lanzada']],
+            body: [
+                [
+                    pack?.modelId || '---', 
+                    pack?.modelName || '---', 
+                    pack?.contents?.[0]?.lot || '---', 
+                    `${pack?.quantity || 0} ${pack?.quantity > 1 ? 'PACKS' : 'PACK'}` 
+                ]
+            ],
+            theme: 'grid',
+            headStyles: { fillColor: [220, 252, 231], textColor: [0, 0, 0], fontStyle: 'bold', lineColor: [0,0,0], lineWidth: 0.1 },
+            bodyStyles: { textColor: [0, 0, 0], lineColor: [0,0,0], lineWidth: 0.1 },
+            styles: { fontSize: 9, cellPadding: 2 }
+        });
+
+        // BLOQUE CANTIDAD PRODUCIDA
+        let finalY = (doc as any).lastAutoTable.finalY + 5;
+        
+        // Draw manual rects for "Cantidad Producida" and "Fecha" to mimic excel
+        doc.setDrawColor(0);
+        doc.rect(14, finalY, 182, 10); // Outer box
+        
+        doc.line(90, finalY, 90, finalY + 10); // Middle split
+        doc.line(140, finalY, 140, finalY + 10); // Date split
+        
+        doc.setFontSize(9);
+        doc.text("CANTIDAD PRODUCIDA:", 16, finalY + 6);
+        doc.setFontSize(11);
+        doc.text(`${report.producedQuantity}`, 92, finalY + 6);
+        
+        doc.setFontSize(9);
+        doc.text("FECHA REALIZACIÓN:", 142, finalY + 6);
+        doc.setFillColor(255, 255, 200); // Yellowish
+        doc.rect(175, finalY + 1, 20, 8, 'F'); // Input area highlight
+        doc.text(formatDateSafe(report.reportDate), 176, finalY + 6);
+
+        // TABLA DE CONSUMOS
+        finalY += 15;
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bolditalic");
+        doc.text("CONSUMOS REALIZADOS:", 14, finalY - 2);
+
+        const tableBody = report.consumptions.map((c: any) => [
+            c.name,
+            c.lot || '',
+            c.quantityConsumed,
+            c.quantityWaste || ''
+        ]);
+
+        // Fill empty rows to look like the excel sheet
+        for(let i=0; i < 10 - tableBody.length; i++) {
+            tableBody.push(['', '', '', '']);
+        }
+
+        autoTable(doc, {
+            startY: finalY,
+            head: [['Nº Artículo / Descripción', 'Lote', 'Cantidad Consumidas', 'Cantidad mermas']],
+            body: tableBody,
+            theme: 'grid',
+            headStyles: { fillColor: [220, 252, 231], textColor: [0, 0, 0], fontStyle: 'bold', lineColor: [0,0,0], lineWidth: 0.1 },
+            bodyStyles: { textColor: [0, 0, 0], lineColor: [0,0,0], lineWidth: 0.1 },
+            styles: { fontSize: 9, cellPadding: 2 },
+            columnStyles: {
+                3: { fillColor: [255, 255, 224] } // Yellowish background for waste column
+            }
+        });
+
+        doc.save(`Parte_Montaje_${report.id}.pdf`);
+    };
+
     return (
         <div className="p-4 sm:p-6 lg:p-8">
             {reportToDelete && <ConfirmationModal title="Eliminar Parte" message="¿Estás seguro? Esto no revertirá las mermas ya descontadas." onConfirm={handleDelete} onCancel={() => setReportToDelete(null)} />}
@@ -46,7 +134,7 @@ const ProductionReports: React.FC = () => {
                     productionReports.map(report => {
                         const pack = packs.find(p => p.id === report.packId);
                         return (
-                            <Card key={report.id} className="hover:shadow-md transition-shadow">
+                            <Card key={report.id} className="hover:shadow-md transition-shadow border border-gray-200">
                                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
                                     <div>
                                         <div className="flex items-center space-x-2 mb-1">
@@ -61,18 +149,21 @@ const ProductionReports: React.FC = () => {
                                         </p>
                                     </div>
                                     <div className="mt-4 md:mt-0 flex space-x-2">
-                                        {/* Visualizar detalle (pendiente de implementar vista detalle) */}
-                                        {/* <Button variant="secondary" className="p-2"><EyeIcon/></Button> */}
-                                        <Button variant="danger" className="p-2" onClick={() => setReportToDelete(report.id)}><TrashIcon/></Button>
+                                        <Button onClick={() => handlePrintPDF(report, pack)} className="bg-green-600 hover:bg-green-700 text-white p-2" title="Imprimir PDF">
+                                            <PrinterIcon /> <span className="ml-2 hidden sm:inline">Imprimir</span>
+                                        </Button>
+                                        <Button variant="danger" className="p-2" onClick={() => setReportToDelete(report.id)} title="Eliminar">
+                                            <TrashIcon/>
+                                        </Button>
                                     </div>
                                 </div>
                                 
                                 {/* Resumen rápido de mermas */}
-                                {report.consumptions.some(c => c.quantityWaste > 0) && (
-                                    <div className="mt-4 bg-red-50 border-l-4 border-red-400 p-2">
+                                {report.consumptions.some((c: any) => c.quantityWaste > 0) && (
+                                    <div className="mt-4 bg-red-50 border-l-4 border-red-400 p-2 rounded-r">
                                         <p className="text-xs font-bold text-red-800 uppercase mb-1">Mermas Registradas:</p>
                                         <ul className="list-disc list-inside text-xs text-red-700">
-                                            {report.consumptions.filter(c => c.quantityWaste > 0).map((c, idx) => (
+                                            {report.consumptions.filter((c: any) => c.quantityWaste > 0).map((c: any, idx: number) => (
                                                 <li key={idx}>{c.name} ({c.lot}): {c.quantityWaste}</li>
                                             ))}
                                         </ul>
@@ -82,7 +173,7 @@ const ProductionReports: React.FC = () => {
                         );
                     })
                 ) : (
-                    <div className="text-center py-12 bg-white rounded-lg shadow">
+                    <div className="text-center py-12 bg-white rounded-lg shadow border border-gray-200">
                         <ProductionIcon />
                         <h3 className="text-xl font-semibold text-gray-700 mt-4">No hay partes de montaje</h3>
                         <p className="text-gray-500 mt-2">Crea un nuevo parte para finalizar la producción de un pack y registrar mermas.</p>

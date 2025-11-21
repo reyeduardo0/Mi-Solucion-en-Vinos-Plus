@@ -157,6 +157,7 @@ export interface WinePack {
     modelId: string; // Link to the PackModel
     modelName: string; // Denormalized for display
     orderId: string; // Customer PO
+    quantity?: number; // Quantity of packs produced/planned
     creationDate: string;
     // Specific lots assigned to this instance of the pack
     contents: {

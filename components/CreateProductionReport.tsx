@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
@@ -26,13 +27,8 @@ const CreateProductionReport: React.FC = () => {
     // Auto-rellenar datos al seleccionar pack
     useEffect(() => {
         if (selectedPack) {
-            // Cantidad producida por defecto = cantidad de packs (asumiendo 1 pack = 1 unidad de producción en este contexto, 
-            // pero si el packCount se guardara en el pack sería mejor. 
-            // REVISIÓN: El WinePack tiene 'contents' con cantidades totales.
-            // Podemos estimar la cantidad de packs dividiendo el contenido por lo que requiere el modelo, 
-            // pero simplificaremos asumiendo que el usuario rellena la "Cantidad Producida" real.
-            // Inicializaremos en 0 o 1.
-            setProducedQuantity(1); 
+            // Si el pack tiene cantidad guardada, usarla. Si no, 1.
+            setProducedQuantity(selectedPack.quantity || 1); 
 
             const newConsumptions: ProductionConsumption[] = [];
 
@@ -53,9 +49,6 @@ const CreateProductionReport: React.FC = () => {
             // 2. Consumibles (Supplies)
             if (selectedPack.suppliesUsed) {
                 selectedPack.suppliesUsed.forEach(s => {
-                    // Intentar buscar el lote usado. En la estructura actual de WinePack, suppliesUsed no guarda lote explícito
-                    // a menos que se haya modificado. Asumiremos "SIN LOTE" o lo dejaremos vacío para que el usuario lo confirme si es crítico.
-                    // Sin embargo, para facilitar, usaremos SIN LOTE por defecto si no hay info.
                     newConsumptions.push({
                         itemId: s.supplyId,
                         name: s.name,
@@ -153,48 +146,50 @@ const CreateProductionReport: React.FC = () => {
                     </div>
                 </Card>
 
-                {/* CUERPO */}
+                {/* CUERPO ESTILO EXCEL */}
                 {selectedPack && (
                     <>
-                        <Card title="Producción Realizada">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700">Cantidad Producida (Packs)</label>
+                        <div className="bg-white shadow rounded-lg overflow-hidden border border-gray-300">
+                            <div className="grid grid-cols-2 border-b border-gray-300">
+                                <div className="p-4 border-r border-gray-300">
+                                    <label className="block text-sm font-bold text-gray-700 uppercase">Cantidad Producida:</label>
                                     <input 
                                         type="number" 
                                         value={producedQuantity} 
                                         onChange={e => setProducedQuantity(Number(e.target.value))} 
-                                        className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm font-bold text-lg"
+                                        className="mt-1 block w-full p-2 border border-gray-300 rounded bg-yellow-50 font-bold text-lg text-center"
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700">Fecha Realización</label>
+                                <div className="p-4">
+                                    <label className="block text-sm font-bold text-gray-700 uppercase">Fecha Realización:</label>
                                     <input 
                                         type="date" 
                                         value={reportDate} 
                                         onChange={e => setReportDate(e.target.value)} 
-                                        className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                                        className="mt-1 block w-full p-2 border border-gray-300 rounded bg-yellow-50 text-center"
                                     />
                                 </div>
                             </div>
-                        </Card>
 
-                        <Card title="Consumos Realizados" className="overflow-hidden">
+                            <div className="p-2 bg-gray-100 border-b border-gray-300 font-bold text-gray-700 uppercase">
+                                Consumos Realizados:
+                            </div>
+
                             <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200 border">
-                                    <thead className="bg-yellow-100">
+                                <table className="min-w-full divide-y divide-gray-300">
+                                    <thead className="bg-green-100">
                                         <tr>
-                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-r border-yellow-200">Artículo</th>
-                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider border-r border-yellow-200">Lote</th>
-                                            <th className="px-3 py-2 text-right text-xs font-medium text-gray-700 uppercase tracking-wider border-r border-yellow-200">Cant. Consumida (Teórica)</th>
-                                            <th className="px-3 py-2 text-right text-xs font-medium text-gray-700 uppercase tracking-wider border-r border-yellow-200 w-32">Cant. Mermas</th>
-                                            <th className="px-3 py-2 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">Acciones</th>
+                                            <th className="px-3 py-2 text-left text-xs font-bold text-gray-800 uppercase border-r border-green-200">Nº Artículo / Descripción</th>
+                                            <th className="px-3 py-2 text-left text-xs font-bold text-gray-800 uppercase border-r border-green-200 w-32">Lote</th>
+                                            <th className="px-3 py-2 text-right text-xs font-bold text-gray-800 uppercase border-r border-green-200 w-32">Cant. Consumidas</th>
+                                            <th className="px-3 py-2 text-right text-xs font-bold text-gray-800 uppercase border-r border-green-200 w-32 bg-yellow-200">Cant. Mermas</th>
+                                            <th className="px-3 py-2 w-10"></th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
                                         {consumptions.map((item, index) => (
-                                            <tr key={index}>
-                                                <td className="px-3 py-2 border-r">
+                                            <tr key={index} className="hover:bg-gray-50">
+                                                <td className="px-3 py-2 border-r border-gray-200">
                                                     {item.type === 'supply' && !item.itemId ? (
                                                          <input 
                                                             type="text" 
@@ -210,41 +205,41 @@ const CreateProductionReport: React.FC = () => {
                                                                     handleConsumptionChange(index, 'type', 'supply');
                                                                 }
                                                             }}
-                                                            className="w-full p-1 border rounded text-sm"
+                                                            className="w-full p-1 border border-gray-300 rounded text-sm"
                                                          />
                                                     ) : (
-                                                        <span className="text-sm text-gray-800">{item.name}</span>
+                                                        <span className="text-sm font-medium text-gray-900">{item.name}</span>
                                                     )}
                                                 </td>
-                                                <td className="px-3 py-2 border-r">
+                                                <td className="px-3 py-2 border-r border-gray-200">
                                                     <input 
                                                         type="text" 
                                                         value={item.lot} 
                                                         onChange={e => handleConsumptionChange(index, 'lot', e.target.value)}
-                                                        className="w-full p-1 border-0 bg-transparent text-sm text-gray-600"
+                                                        className="w-full p-1 border border-gray-300 rounded text-sm"
                                                     />
                                                 </td>
-                                                <td className="px-3 py-2 border-r text-right">
+                                                <td className="px-3 py-2 border-r border-gray-200 text-right">
                                                      <input 
                                                         type="number" 
                                                         value={item.quantityConsumed} 
                                                         onChange={e => handleConsumptionChange(index, 'quantityConsumed', Number(e.target.value))}
-                                                        className="w-full p-1 border rounded text-sm text-right"
+                                                        className="w-full p-1 border border-gray-300 rounded text-sm text-right bg-gray-50"
                                                     />
                                                 </td>
-                                                <td className="px-3 py-2 border-r text-right bg-red-50">
+                                                <td className="px-3 py-2 border-r border-gray-200 text-right bg-yellow-50">
                                                     <input 
                                                         type="number" 
                                                         value={item.quantityWaste} 
                                                         onChange={e => handleConsumptionChange(index, 'quantityWaste', Number(e.target.value))}
-                                                        className="w-full p-1 border border-red-200 rounded text-sm text-right focus:ring-red-500 focus:border-red-500"
+                                                        className="w-full p-1 border border-yellow-300 rounded text-sm text-right focus:ring-yellow-500 font-bold"
                                                         min="0"
                                                     />
                                                 </td>
-                                                <td className="px-3 py-2 text-right">
+                                                <td className="px-3 py-2 text-center">
                                                     <button 
                                                         onClick={() => handleRemoveRow(index)}
-                                                        className="text-red-500 hover:text-red-700 font-bold px-2"
+                                                        className="text-red-500 hover:text-red-700 font-bold"
                                                         title="Eliminar fila"
                                                     >
                                                         &times;
@@ -252,30 +247,25 @@ const CreateProductionReport: React.FC = () => {
                                                 </td>
                                             </tr>
                                         ))}
-                                    </tbody>
-                                    <tfoot className="bg-gray-50">
                                         <tr>
-                                            <td colSpan={5} className="px-3 py-2">
-                                                <button onClick={handleAddRow} className="text-sm text-blue-600 font-semibold hover:underline">
-                                                    + Agregar Fila (Extra)
+                                            <td colSpan={5} className="px-3 py-2 bg-gray-50 border-t border-gray-200">
+                                                <button onClick={handleAddRow} className="text-sm text-blue-600 font-bold hover:underline">
+                                                    + Añadir Fila Manualmente
                                                 </button>
                                                 <datalist id="supply-list">
                                                     {supplies.map(s => <option key={s.id} value={s.name} />)}
                                                 </datalist>
                                             </td>
                                         </tr>
-                                    </tfoot>
+                                    </tbody>
                                 </table>
                             </div>
-                            <p className="mt-2 text-xs text-gray-500">
-                                * La "Cant. Consumida" es lo que se ha usado para la producción buena. 
-                                <br/>
-                                * Las "Mermas" se descontarán adicionalmente del stock al guardar.
-                            </p>
-                        </Card>
+                        </div>
 
                         <div className="flex justify-end mt-6">
-                            <Button onClick={handleSubmit} className="w-full md:w-auto">Guardar Parte y Descontar Mermas</Button>
+                            <Button onClick={handleSubmit} className="w-full md:w-auto text-lg px-8">
+                                Guardar Parte y Descontar Mermas
+                            </Button>
                         </div>
                     </>
                 )}
