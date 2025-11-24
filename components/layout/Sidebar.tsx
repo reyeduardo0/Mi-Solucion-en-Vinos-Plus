@@ -1,3 +1,5 @@
+
+
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
@@ -15,6 +17,7 @@ import {
   AuditIcon,
   ChangelogIcon,
   ProductionIcon,
+  AdjustmentsIcon
 } from '../../constants';
 import { usePermissions } from '../../hooks/usePermissions';
 
@@ -42,6 +45,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onLinkClick }) => {
     const adminLinks = [
         { path: '/usuarios', label: 'Usuarios y Roles', icon: <UsersIcon />, permission: can('users:manage') },
         { path: '/auditoria', label: 'Auditoría', icon: <AuditIcon />, permission: can('audit:view') },
+        { path: '/ajustes-inventario', label: 'Ajustes de Inventario', icon: <AdjustmentsIcon />, permission: can('inventory:adjust') },
     ]
 
     const systemLinks = [

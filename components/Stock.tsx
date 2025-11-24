@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Supply, InventoryStockItem } from '../types';
 import Card from './ui/Card';
@@ -27,6 +28,7 @@ interface AddSupplyModalProps {
 
 const AddSupplyModal: React.FC<AddSupplyModalProps> = ({ supply, onSave, onClose, inventoryStock }) => {
     const [name, setName] = useState(supply?.name || '');
+    const [code, setCode] = useState(supply?.code || '');
     const [type, setType] = useState<'Contable' | 'No Contable'>(supply?.type || 'Contable');
     const [unit, setUnit] = useState<'unidades' | 'cajas' | 'rollos' | 'metros'>(supply?.unit || 'unidades');
     const [minStock, setMinStock] = useState(supply?.minStock?.toString() || '');
@@ -64,7 +66,8 @@ const AddSupplyModal: React.FC<AddSupplyModalProps> = ({ supply, onSave, onClose
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const supplyData = { 
-            name, 
+            name: name.toUpperCase(), 
+            code: code.toUpperCase(),
             type, 
             unit, 
             minStock: minStock ? parseInt(minStock, 10) : undefined,
@@ -83,7 +86,8 @@ const AddSupplyModal: React.FC<AddSupplyModalProps> = ({ supply, onSave, onClose
     return (
         <Modal title={supply ? "Editar Consumible" : "Añadir Nuevo Consumible"} onClose={onClose}>
             <form onSubmit={handleSubmit} className="space-y-4">
-                <div><label className="block text-sm font-medium">Nombre</label><input type="text" value={name} onChange={e => setName(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                <div><label className="block text-sm font-medium">Nombre</label><input type="text" value={name} onChange={e => setName(e.target.value.toUpperCase())} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 uppercase" /></div>
+                <div><label className="block text-sm font-medium">Código</label><input type="text" value={code} onChange={e => setCode(e.target.value.toUpperCase())} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 uppercase font-mono" placeholder="Ej: EMB001" /></div>
                 <div><label className="block text-sm font-medium">Tipo</label><select value={type} onChange={e => setType(e.target.value as any)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"><option value="Contable">Contable</option><option value="No Contable">No Contable</option></select></div>
                 <div><label className="block text-sm font-medium">Unidad</label><select value={unit} onChange={e => setUnit(e.target.value as any)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"><option value="unidades">Unidades</option><option value="cajas">Cajas</option><option value="rollos">Rollos</option><option value="metros">Metros</option></select></div>
                 <div><label className="block text-sm font-medium">Stock Mínimo (Opcional)</label><input type="number" value={minStock} onChange={e => setMinStock(e.target.value)} min="0" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
@@ -257,6 +261,7 @@ const Inventory: React.FC = () => {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Artículo</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lote</th>
@@ -271,6 +276,7 @@ const Inventory: React.FC = () => {
                             {inventoryStock.length > 0 ? (
                                 inventoryStock.map((item, index) => (
                                     <tr key={`${item.name}-${item.lot}-${index}`}>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm font-mono text-gray-600 uppercase">{item.code || '-'}</td>
                                         <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
                                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{item.type}</td>
                                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">{item.lot || 'N/A'}</td>
@@ -285,7 +291,7 @@ const Inventory: React.FC = () => {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-12 text-center text-sm text-gray-500">
+                                    <td colSpan={9} className="px-6 py-12 text-center text-sm text-gray-500">
                                         No hay artículos en el inventario. Comienza registrando una nueva entrada.
                                     </td>
                                 </tr>
@@ -304,6 +310,7 @@ const Inventory: React.FC = () => {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Código</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
                                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
                                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Unidad</th>
@@ -320,6 +327,7 @@ const Inventory: React.FC = () => {
 
                                 return (
                                 <tr key={s.id}>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm font-mono text-gray-600 uppercase">{s.code || '-'}</td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{s.name}</td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{s.type}</td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-center">{s.unit}</td>
@@ -346,7 +354,7 @@ const Inventory: React.FC = () => {
                                 )
                             }) : (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">
+                                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-500">
                                         No hay consumibles definidos. Haz clic en "Añadir Nuevo Consumible" para empezar.
                                     </td>
                                 </tr>

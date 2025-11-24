@@ -15,7 +15,8 @@ export type Permission =
   | 'incidents:manage'
   | 'reports:view'
   | 'traceability:view'
-  | 'audit:view';
+  | 'audit:view'
+  | 'inventory:adjust'; // New permission
 
 
 export interface Role {
@@ -129,6 +130,7 @@ export interface Informacion {
 export interface Supply {
   id: string;
   name: string;
+  code?: string; // New field for Article Code
   type: 'Contable' | 'No Contable';
   unit: 'unidades' | 'cajas' | 'rollos' | 'metros';
   quantity: number;
@@ -202,6 +204,7 @@ export interface Merma {
 
 export interface InventoryStockItem {
   name: string;
+  code?: string; // Added code for display
   type: 'Producto' | 'Consumible';
   lot?: string;
   unit: string;

@@ -58,6 +58,8 @@ interface DataContextType {
     updateSupply: (supply: Supply) => Promise<void>;
     deleteSupply: (supplyId: string, supplyName: string) => Promise<void>;
     updateSupplyLot: (supplyName: string, originalLot: string, newLot: string) => Promise<void>;
+    updateSupplyDetails: (id: string, newName: string, newCode: string, oldName: string) => Promise<void>;
+    mergeSupplies: (masterId: string, sourceIds: string[]) => Promise<void>;
     
     addPackModel: (model: Omit<PackModel, 'id'|'created_at'>) => Promise<void>;
 
@@ -184,7 +186,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             if (albaranesResult.error) throw albaranesResult.error;
 
             const [suppliesResult, packModelsResult] = await Promise.all([
-                supabase!.from('supplies').select('id, name, type, unit, quantity, minStock:min_stock, created_at').order('name'),
+                // Added code field
+                supabase!.from('supplies').select('id, name, code, type, unit, quantity, minStock:min_stock, created_at').order('name'),
                 supabase!.from('pack_models').select('id, name, description, productRequirements:product_requirements, supplyRequirements:supply_requirements, created_at').order('name')
             ]);
             if (suppliesResult.error) throw suppliesResult.error;
@@ -313,7 +316,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                         const lot = pallet.supplyLot || 'SIN LOTE';
                         const key = `supply-${supplyInfo.name}-${lot}`;
                         if (!stockMap.has(key)) {
-                            stockMap.set(key, { name: supplyInfo.name, type: 'Consumible', lot: lot, unit: supplyInfo.unit, total: 0, inPacks: 0, inMerma: 0, available: 0, minStock: supplyInfo.minStock });
+                            // Added code to InventoryItem
+                            stockMap.set(key, { name: supplyInfo.name, code: supplyInfo.code, type: 'Consumible', lot: lot, unit: supplyInfo.unit, total: 0, inPacks: 0, inMerma: 0, available: 0, minStock: supplyInfo.minStock });
                         }
                         stockMap.get(key)!.total += pallet.supplyQuantity || 0;
                      }
@@ -325,7 +329,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             if (supply.quantity > 0) {
                  const key = `supply-${supply.name}-SIN LOTE`;
                  if (!stockMap.has(key)) {
-                    stockMap.set(key, { name: supply.name, type: 'Consumible', lot: 'SIN LOTE', unit: supply.unit, total: 0, inPacks: 0, inMerma: 0, available: 0, minStock: supply.minStock });
+                    stockMap.set(key, { name: supply.name, code: supply.code, type: 'Consumible', lot: 'SIN LOTE', unit: supply.unit, total: 0, inPacks: 0, inMerma: 0, available: 0, minStock: supply.minStock });
                 }
                 stockMap.get(key)!.total += supply.quantity || 0;
             }
@@ -422,7 +426,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     };
     
     const addNewSupply = async (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }): Promise<string> => {
-        const dbData = { name: supplyData.name, type: supplyData.type, unit: supplyData.unit, min_stock: supplyData.minStock, quantity: 0 };
+        const dbData = { name: supplyData.name.toUpperCase(), code: supplyData.code?.toUpperCase(), type: supplyData.type, unit: supplyData.unit, min_stock: supplyData.minStock, quantity: 0 };
         const { data, error } = await supabase!.from('supplies').insert(dbData).select().single();
         if (error) throw error;
         await addAuditLog(`Creó el consumible "${supplyData.name}"`);
@@ -446,11 +450,73 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await addAuditLog(`Añadió ${quantity} de stock al consumible "${supply.name}"`);
     };
     const updateSupply = async (supply: Supply) => {
-        const { id, name, type, unit, quantity, minStock } = supply;
-        const { error } = await supabase!.from('supplies').update({ name, type, unit, quantity, min_stock: minStock }).eq('id', id);
+        const { id, name, code, type, unit, quantity, minStock } = supply;
+        const { error } = await supabase!.from('supplies').update({ name: name.toUpperCase(), code: code?.toUpperCase(), type, unit, quantity, min_stock: minStock }).eq('id', id);
         if (error) throw error;
         await addAuditLog(`Actualizó el consumible "${supply.name}"`);
     };
+
+    // --- NEW FUNCTIONS FOR INVENTORY ADJUSTMENT ---
+    const updateSupplyDetails = async (id: string, newName: string, newCode: string, oldName: string) => {
+        const upperName = newName.toUpperCase();
+        const upperCode = newCode.toUpperCase();
+        
+        // 1. Update Supply
+        const { error: supplyError } = await supabase!.from('supplies')
+            .update({ name: upperName, code: upperCode })
+            .eq('id', id);
+        if (supplyError) throw supplyError;
+
+        // 2. Update References if name changed (to keep history consistent)
+        if (oldName !== upperName) {
+            // Update Pallets (product_name is used for supplies too)
+            await supabase!.from('pallets')
+                .update({ product_name: upperName })
+                .eq('product_name', oldName);
+                
+            // Update Mermas
+            await supabase!.from('mermas')
+                .update({ item_name: upperName })
+                .eq('item_name', oldName);
+        }
+        
+        await addAuditLog(`Actualizó detalles del consumible: ${oldName} -> ${upperName} (Code: ${upperCode})`);
+        await fetchData();
+    };
+
+    const mergeSupplies = async (masterId: string, sourceIds: string[]) => {
+        const masterSupply = supplies.find(s => s.id === masterId);
+        if (!masterSupply) throw new Error("Consumible maestro no encontrado");
+
+        for (const sourceId of sourceIds) {
+            const sourceSupply = supplies.find(s => s.id === sourceId);
+            if (!sourceSupply) continue;
+
+            // 1. Add Stock
+            const newQuantity = (masterSupply.quantity || 0) + (sourceSupply.quantity || 0);
+            
+            // Update Master
+            await supabase!.from('supplies').update({ quantity: newQuantity }).eq('id', masterId);
+            masterSupply.quantity = newQuantity; // Update local to keep accumulating
+
+            // 2. Update References
+            await supabase!.from('pallets')
+                .update({ product_name: masterSupply.name })
+                .eq('product_name', sourceSupply.name);
+
+            await supabase!.from('mermas')
+                .update({ item_name: masterSupply.name })
+                .eq('item_name', sourceSupply.name);
+
+            // 3. Delete Source
+            await supabase!.from('supplies').delete().eq('id', sourceId);
+        }
+        
+        await addAuditLog(`Fusionó consumibles en "${masterSupply.name}"`);
+        await fetchData();
+    };
+    // ---------------------------------------------
+
     const deleteSupply = async (supplyId: string, supplyName: string) => {
         const { error } = await supabase!.from('supplies').delete().eq('id', supplyId);
         if (error) throw error;
@@ -619,6 +685,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         currentUser, users, roles, albaranes, supplies, products, packModels, packs, salidas, incidents, mermas, productionReports, auditLogs, inventoryStock, loading, error,
         addAlbaran, updateAlbaran, deleteAlbaran,
         addNewSupply, addSupplyStock, updateSupply, deleteSupply, updateSupplyLot,
+        updateSupplyDetails, mergeSupplies, // Exposed new functions
         addPackModel,
         addPack, handleDispatch, addMerma, addProductionReport, updateProductionReport, deleteProductionReport,
         addIncident, resolveIncident,

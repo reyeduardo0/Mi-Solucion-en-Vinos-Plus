@@ -5,6 +5,15 @@ import Card from './ui/Card';
 
 const changelogData = [
     {
+        version: '1.5.0',
+        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'new', text: 'Nuevo Módulo de Ajustes de Inventario: Estandarización de nombres y códigos.' },
+            { type: 'new', text: 'Herramienta de Fusión de Duplicados para unificar stocks.' },
+            { type: 'improvement', text: 'Visualización de Códigos de Artículo en el Inventario.' },
+        ]
+    },
+    {
         version: '1.4.0',
         date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
         changes: [
