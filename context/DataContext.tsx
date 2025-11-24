@@ -458,11 +458,13 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const upperName = newName.toUpperCase();
         const upperCode = newCode.toUpperCase();
         
+        // 1. Update Supplies Table
         const { error: supplyError } = await supabase!.from('supplies')
             .update({ name: upperName, code: upperCode })
             .eq('id', id);
         if (supplyError) throw supplyError;
 
+        // 2. Update Pallets and Mermas (Direct column updates)
         if (oldName !== upperName) {
             await supabase!.from('pallets')
                 .update({ product_name: upperName })
@@ -472,8 +474,63 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 .update({ item_name: upperName })
                 .eq('item_name', oldName);
         }
+
+        // 3. Update Pack Models (JSONB)
+        const { data: models } = await supabase!.from('pack_models').select('*');
+        if (models) {
+            for (const model of models) {
+                let changed = false;
+                const newReqs = (model.supply_requirements || []).map((req: any) => {
+                    if (req.supplyId === id) {
+                        changed = true;
+                        return { ...req, name: upperName, code: upperCode };
+                    }
+                    return req;
+                });
+                if (changed) {
+                    await supabase!.from('pack_models').update({ supply_requirements: newReqs }).eq('id', model.id);
+                }
+            }
+        }
+
+        // 4. Update Wine Packs (JSONB)
+        const { data: packsData } = await supabase!.from('wine_packs').select('*');
+        if (packsData) {
+            for (const pack of packsData) {
+                let changed = false;
+                const newSuppliesUsed = (pack.supplies_used || []).map((s: any) => {
+                    if (s.supplyId === id) {
+                        changed = true;
+                        return { ...s, name: upperName }; // Packs don't strictly store code, but name is used
+                    }
+                    return s;
+                });
+                if (changed) {
+                    await supabase!.from('wine_packs').update({ supplies_used: newSuppliesUsed }).eq('id', pack.id);
+                }
+            }
+        }
+
+        // 5. Update Production Reports (JSONB)
+        const { data: reports } = await supabase!.from('production_reports').select('*');
+        if (reports) {
+            for (const report of reports) {
+                let changed = false;
+                const newConsumptions = (report.consumptions || []).map((c: any) => {
+                    // Match by itemId (which holds supplyId for supplies) OR by name if legacy
+                    if ((c.type === 'supply' && c.itemId === id) || (c.type === 'supply' && c.name === oldName)) {
+                        changed = true;
+                        return { ...c, name: upperName }; 
+                    }
+                    return c;
+                });
+                if (changed) {
+                    await supabase!.from('production_reports').update({ consumptions: newConsumptions }).eq('id', report.id);
+                }
+            }
+        }
         
-        await addAuditLog(`Actualizó detalles del consumible: ${oldName} -> ${upperName} (Code: ${upperCode})`);
+        await addAuditLog(`Actualizó detalles del consumible (Global): ${oldName} -> ${upperName} (Code: ${upperCode})`);
         await fetchData();
     };
 
@@ -485,11 +542,12 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             const sourceSupply = supplies.find(s => s.id === sourceId);
             if (!sourceSupply) continue;
 
+            // 1. Sum Quantity
             const newQuantity = (masterSupply.quantity || 0) + (sourceSupply.quantity || 0);
-            
             await supabase!.from('supplies').update({ quantity: newQuantity }).eq('id', masterId);
             masterSupply.quantity = newQuantity; 
 
+            // 2. Update Pallets/Mermas
             await supabase!.from('pallets')
                 .update({ product_name: masterSupply.name })
                 .eq('product_name', sourceSupply.name);
@@ -498,6 +556,62 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 .update({ item_name: masterSupply.name })
                 .eq('item_name', sourceSupply.name);
 
+            // 3. Update Pack Models (JSONB) - Replace SourceID with MasterID
+            const { data: models } = await supabase!.from('pack_models').select('*');
+            if (models) {
+                for (const model of models) {
+                    let changed = false;
+                    const newReqs = (model.supply_requirements || []).map((req: any) => {
+                        if (req.supplyId === sourceId) {
+                            changed = true;
+                            // Update to Master ID and Name
+                            return { ...req, supplyId: masterId, name: masterSupply.name, code: masterSupply.code };
+                        }
+                        return req;
+                    });
+                    if (changed) {
+                        await supabase!.from('pack_models').update({ supply_requirements: newReqs }).eq('id', model.id);
+                    }
+                }
+            }
+
+            // 4. Update Wine Packs (JSONB)
+            const { data: packsData } = await supabase!.from('wine_packs').select('*');
+            if (packsData) {
+                for (const pack of packsData) {
+                    let changed = false;
+                    const newSuppliesUsed = (pack.supplies_used || []).map((s: any) => {
+                        if (s.supplyId === sourceId) {
+                            changed = true;
+                            return { ...s, supplyId: masterId, name: masterSupply.name };
+                        }
+                        return s;
+                    });
+                    if (changed) {
+                        await supabase!.from('wine_packs').update({ supplies_used: newSuppliesUsed }).eq('id', pack.id);
+                    }
+                }
+            }
+
+            // 5. Update Production Reports
+            const { data: reports } = await supabase!.from('production_reports').select('*');
+            if (reports) {
+                for (const report of reports) {
+                    let changed = false;
+                    const newConsumptions = (report.consumptions || []).map((c: any) => {
+                         if ((c.type === 'supply' && c.itemId === sourceId) || (c.type === 'supply' && c.name === sourceSupply.name)) {
+                            changed = true;
+                            return { ...c, itemId: masterId, name: masterSupply.name }; 
+                        }
+                        return c;
+                    });
+                    if (changed) {
+                        await supabase!.from('production_reports').update({ consumptions: newConsumptions }).eq('id', report.id);
+                    }
+                }
+            }
+
+            // 6. Delete Source
             await supabase!.from('supplies').delete().eq('id', sourceId);
         }
         
@@ -610,7 +724,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         if (error) throw error;
         await addAuditLog(`Eliminó parte de montaje "${id}"`);
         await fetchData();
-    }
+    };
 
     const addIncident = async (incidentData: Omit<Incident, 'id'|'date'|'resolved'|'created_at'>) => {
         const { relatedId, ...rest } = incidentData;

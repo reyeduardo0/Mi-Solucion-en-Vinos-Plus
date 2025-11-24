@@ -10,11 +10,13 @@ interface ConfirmationModalProps {
   onCancel: () => void;
   confirmText?: string;
   cancelText?: string;
+  children?: React.ReactNode;
 }
 
-const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ title, message, onConfirm, onCancel, confirmText = 'Sí, eliminar', cancelText = 'Cancelar' }) => (
+const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ title, message, onConfirm, onCancel, confirmText = 'Sí, eliminar', cancelText = 'Cancelar', children }) => (
     <Modal title={title} onClose={onCancel} maxWidth="max-w-md">
-        <p className="text-gray-600">{message}</p>
+        <p className="text-gray-600 mb-4">{message}</p>
+        {children}
         <div className="flex justify-end space-x-3 mt-6">
             <Button variant="secondary" onClick={onCancel}>{cancelText}</Button>
             <Button variant="danger" onClick={onConfirm}>{confirmText}</Button>

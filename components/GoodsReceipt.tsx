@@ -22,6 +22,7 @@ interface PalletGroup {
     // Consumable fields
     supplyId: string;
     supplyName: string; // Added explicit field for free text
+    supplyCode?: string; // Added code for new supplies
     supplyLot: string;
     supplyQuantity: number; // Added field for inventory control
     supplyUnit?: 'unidades' | 'cajas' | 'rollos' | 'metros'; // For new items
@@ -99,6 +100,7 @@ const GoodsReceipt: React.FC = () => {
                 bottlesPerBox: 0,
                 supplyId: '',
                 supplyName: '',
+                supplyCode: '',
                 supplyLot: '',
                 supplyQuantity: 0,
                 ean: '',
@@ -148,6 +150,7 @@ const GoodsReceipt: React.FC = () => {
                             bottlesPerBox: p.type === 'product' ? (p.bottlesPerBox || 0) : 0,
                             supplyId: p.type === 'consumable' ? (supplyForGroup?.id || '') : '',
                             supplyName: p.type === 'consumable' ? supplyNameStr : '',
+                            supplyCode: '', // Existing items don't need code re-entry here
                             supplyLot: p.type === 'consumable' ? (p.supplyLot || '') : '',
                             supplyQuantity: p.type === 'consumable' ? (p.supplyQuantity || 0) : 0,
                             ean: p.eanBox || '', // Capture EAN from pallet
@@ -242,6 +245,7 @@ const GoodsReceipt: React.FC = () => {
             bottlesPerBox: 0,
             supplyId: '',
             supplyName: '',
+            supplyCode: '',
             supplyLot: '',
             supplyQuantity: 0,
             ean: '',
@@ -356,6 +360,7 @@ const GoodsReceipt: React.FC = () => {
                             // Consumable Fields
                             supplyId: '', // Will be matched by name or created as new
                             supplyName: !isProduct ? capitalizeWords(item.description) : '',
+                            supplyCode: '',
                             supplyLot: !isProduct ? String(item.lot || '').toUpperCase() : '',
                             supplyQuantity: !isProduct ? qty : 0,
                             supplyUnit: 'unidades',
@@ -416,6 +421,7 @@ const GoodsReceipt: React.FC = () => {
                             // It's a truly new supply, create it
                             newId = await addNewSupply({
                                 name: group.supplyName,
+                                code: group.supplyCode, // Added Code support for new supplies
                                 type: group.supplyType || 'Contable',
                                 unit: group.supplyUnit || 'unidades',
                             });
@@ -608,7 +614,7 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
             ...g,
             type: newType,
             productName: '', productLot: '', boxesPerPallet: 0, bottlesPerBox: 0,
-            supplyId: '', supplyName: '', supplyLot: '', supplyQuantity: 0, ean: ''
+            supplyId: '', supplyName: '', supplyCode: '', supplyLot: '', supplyQuantity: 0, ean: ''
         }));
     };
 
@@ -706,6 +712,10 @@ const PalletGroupDefinition: React.FC<PalletGroupDefinitionProps> = ({ group, on
                         </div>
                         {isNewSupply && (
                             <>
+                                <div className="sm:col-span-1">
+                                    <label className="text-xs font-medium text-gray-600">Código (Nuevo)</label>
+                                    <input type="text" value={group.supplyCode || ''} onChange={e => handleFieldChange('supplyCode', e.target.value.toUpperCase())} className="w-full p-2 border rounded-md text-sm bg-blue-50" placeholder="Opcional"/>
+                                </div>
                                 <div className="sm:col-span-1">
                                     <label className="text-xs font-medium text-gray-600">Unidad (Nuevo)</label>
                                     <select value={group.supplyUnit || 'unidades'} onChange={e => handleFieldChange('supplyUnit', e.target.value)} className="w-full p-2 border rounded-md text-sm bg-blue-50">

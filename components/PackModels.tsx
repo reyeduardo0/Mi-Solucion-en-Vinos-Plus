@@ -29,6 +29,21 @@ const AddPackModelModal: React.FC<AddPackModelModalProps> = ({ supplies, product
     const [productReqs, setProductReqs] = useState<{productName: string, quantity: number}[]>(initialModel?.productRequirements || []);
     const [supplyReqs, setSupplyReqs] = useState<{supplyId: string, name: string, quantity: number}[]>(initialModel?.supplyRequirements || []);
 
+    // Effect to sync state when initialModel changes (fixes Edit button not populating data correctly on subsequent clicks)
+    useEffect(() => {
+        if (initialModel) {
+            setName(initialModel.name);
+            setDescription(initialModel.description);
+            setProductReqs(initialModel.productRequirements || []);
+            setSupplyReqs(initialModel.supplyRequirements || []);
+        } else {
+             setName('');
+             setDescription('');
+             setProductReqs([]);
+             setSupplyReqs([]);
+        }
+    }, [initialModel]);
+
     const handleAddProductReq = () => setProductReqs([...productReqs, { productName: '', quantity: 1 }]);
     const handleUpdateProductReq = (index: number, field: 'productName' | 'quantity', value: string | number) => {
         const updated = [...productReqs];
