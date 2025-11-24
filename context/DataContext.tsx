@@ -1,5 +1,4 @@
 
-
 import React, {
   createContext,
   useContext,
@@ -62,6 +61,8 @@ interface DataContextType {
     mergeSupplies: (masterId: string, sourceIds: string[]) => Promise<void>;
     
     addPackModel: (model: Omit<PackModel, 'id'|'created_at'>) => Promise<void>;
+    updatePackModel: (model: PackModel) => Promise<void>;
+    deletePackModel: (id: string, name: string) => Promise<void>;
 
     addPack: (pack: WinePack) => Promise<void>;
     handleDispatch: (dispatchData: Omit<DispatchNote, 'id' | 'created_at' | 'status'>) => Promise<void>;
@@ -186,7 +187,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             if (albaranesResult.error) throw albaranesResult.error;
 
             const [suppliesResult, packModelsResult] = await Promise.all([
-                // Added code field
                 supabase!.from('supplies').select('id, name, code, type, unit, quantity, minStock:min_stock, created_at').order('name'),
                 supabase!.from('pack_models').select('id, name, description, productRequirements:product_requirements, supplyRequirements:supply_requirements, created_at').order('name')
             ]);
@@ -209,7 +209,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             if (mermasResult.error) throw mermasResult.error;
             if (auditLogsResult.error) throw auditLogsResult.error;
 
-            // --- TRY CATCH for Production Reports (Fail-safe) ---
             let fetchedProdReports: any[] = [];
             try {
                 const prodReportsResult = await supabase!.from('production_reports').select('id, packId:pack_id, reportDate:report_date, producedQuantity:produced_quantity, consumptions, notes, created_at').order('created_at', { ascending: false });
@@ -316,7 +315,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                         const lot = pallet.supplyLot || 'SIN LOTE';
                         const key = `supply-${supplyInfo.name}-${lot}`;
                         if (!stockMap.has(key)) {
-                            // Added code to InventoryItem
                             stockMap.set(key, { name: supplyInfo.name, code: supplyInfo.code, type: 'Consumible', lot: lot, unit: supplyInfo.unit, total: 0, inPacks: 0, inMerma: 0, available: 0, minStock: supplyInfo.minStock });
                         }
                         stockMap.get(key)!.total += pallet.supplyQuantity || 0;
@@ -456,25 +454,20 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await addAuditLog(`Actualizó el consumible "${supply.name}"`);
     };
 
-    // --- NEW FUNCTIONS FOR INVENTORY ADJUSTMENT ---
     const updateSupplyDetails = async (id: string, newName: string, newCode: string, oldName: string) => {
         const upperName = newName.toUpperCase();
         const upperCode = newCode.toUpperCase();
         
-        // 1. Update Supply
         const { error: supplyError } = await supabase!.from('supplies')
             .update({ name: upperName, code: upperCode })
             .eq('id', id);
         if (supplyError) throw supplyError;
 
-        // 2. Update References if name changed (to keep history consistent)
         if (oldName !== upperName) {
-            // Update Pallets (product_name is used for supplies too)
             await supabase!.from('pallets')
                 .update({ product_name: upperName })
                 .eq('product_name', oldName);
                 
-            // Update Mermas
             await supabase!.from('mermas')
                 .update({ item_name: upperName })
                 .eq('item_name', oldName);
@@ -492,14 +485,11 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             const sourceSupply = supplies.find(s => s.id === sourceId);
             if (!sourceSupply) continue;
 
-            // 1. Add Stock
             const newQuantity = (masterSupply.quantity || 0) + (sourceSupply.quantity || 0);
             
-            // Update Master
             await supabase!.from('supplies').update({ quantity: newQuantity }).eq('id', masterId);
-            masterSupply.quantity = newQuantity; // Update local to keep accumulating
+            masterSupply.quantity = newQuantity; 
 
-            // 2. Update References
             await supabase!.from('pallets')
                 .update({ product_name: masterSupply.name })
                 .eq('product_name', sourceSupply.name);
@@ -508,14 +498,12 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 .update({ item_name: masterSupply.name })
                 .eq('item_name', sourceSupply.name);
 
-            // 3. Delete Source
             await supabase!.from('supplies').delete().eq('id', sourceId);
         }
         
         await addAuditLog(`Fusionó consumibles en "${masterSupply.name}"`);
         await fetchData();
     };
-    // ---------------------------------------------
 
     const deleteSupply = async (supplyId: string, supplyName: string) => {
         const { error } = await supabase!.from('supplies').delete().eq('id', supplyId);
@@ -537,6 +525,23 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const { error } = await supabase!.from('pack_models').insert(dbModel);
         if (error) throw error;
         await addAuditLog(`Creó el modelo de pack "${model.name}"`);
+        await fetchData();
+    };
+
+    const updatePackModel = async (model: PackModel) => {
+        const { id, name, description, productRequirements, supplyRequirements } = model;
+        const dbModel = { name, description, product_requirements: productRequirements, supply_requirements: supplyRequirements };
+        const { error } = await supabase!.from('pack_models').update(dbModel).eq('id', id);
+        if (error) throw error;
+        await addAuditLog(`Actualizó el modelo de pack "${model.name}"`);
+        await fetchData();
+    };
+
+    const deletePackModel = async (id: string, name: string) => {
+        const { error } = await supabase!.from('pack_models').delete().eq('id', id);
+        if (error) throw error;
+        await addAuditLog(`Eliminó el modelo de pack "${name}"`);
+        await fetchData();
     };
 
     const addPack = async (pack: WinePack) => {
@@ -571,11 +576,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const { id, packId, reportDate, producedQuantity, consumptions, notes } = report;
         const dbReport = { id, pack_id: packId, report_date: reportDate, produced_quantity: producedQuantity, consumptions, notes };
         
-        // 1. Save Report
         const { error } = await supabase!.from('production_reports').insert(dbReport);
         if (error) throw error;
 
-        // 2. Process Mermas automatically
         for (const item of consumptions) {
             if (item.quantityWaste > 0) {
                 await addMerma({
@@ -685,8 +688,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         currentUser, users, roles, albaranes, supplies, products, packModels, packs, salidas, incidents, mermas, productionReports, auditLogs, inventoryStock, loading, error,
         addAlbaran, updateAlbaran, deleteAlbaran,
         addNewSupply, addSupplyStock, updateSupply, deleteSupply, updateSupplyLot,
-        updateSupplyDetails, mergeSupplies, // Exposed new functions
-        addPackModel,
+        updateSupplyDetails, mergeSupplies, 
+        addPackModel, updatePackModel, deletePackModel,
         addPack, handleDispatch, addMerma, addProductionReport, updateProductionReport, deleteProductionReport,
         addIncident, resolveIncident,
         addUser, updateUser, deleteUser, updateCurrentUserPassword, updateUserPasswordByAdmin,

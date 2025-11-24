@@ -149,6 +149,7 @@ export interface PackModel {
     supplyRequirements: {
         supplyId: string;
         name: string;
+        code?: string; // Optional code for display
         quantity: number;
     }[];
     created_at?: string;
