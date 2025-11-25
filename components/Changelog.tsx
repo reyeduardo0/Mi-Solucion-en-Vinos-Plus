@@ -4,8 +4,16 @@ import Card from './ui/Card';
 
 const changelogData = [
     {
-        version: '1.6.1',
+        version: '1.6.2',
         date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'fix', text: 'Sincronización total del sistema: Asegurando que Reportes, Dashboard y Lógica de Producción estén alineados en GitHub.' },
+            { type: 'improvement', text: 'Verificación de integridad de archivos para despliegue.' },
+        ]
+    },
+    {
+        version: '1.6.1',
+        date: '25 de noviembre de 2025',
         changes: [
             { type: 'fix', text: 'Sincronización forzada de todos los módulos con GitHub.' },
             { type: 'fix', text: 'Asegurada la visualización de nombres actualizados en Partes de Montaje.' },

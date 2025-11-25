@@ -1,4 +1,5 @@
 
+/* Force Git Sync: v1.6.2 - Ensure updated display logic for pack models is deployed */
 import React, { useState, useEffect } from 'react';
 import { PackModel, Supply } from '../types';
 import Card from './ui/Card';

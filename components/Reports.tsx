@@ -1,4 +1,5 @@
 
+/* Force Git Sync: v1.6.2 - Ensure Stock Detailed and Aggregated reports are deployed */
 import React, { useState } from 'react';
 import { Albaran, Incident, WinePack, DispatchNote, Supply } from '../types';
 import Card from './ui/Card';

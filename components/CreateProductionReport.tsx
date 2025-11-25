@@ -1,4 +1,5 @@
 
+/* Force Git Sync: v1.6.2 - Ensure supply name update logic is deployed */
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
