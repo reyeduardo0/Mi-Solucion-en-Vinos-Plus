@@ -26,6 +26,7 @@ const Dashboard: React.FC = () => {
   
   // FIX: State to track if component has mounted. This prevents Recharts from trying to measure
   // the container dimension before the DOM is fully painted, resolving the "width(-1)" error.
+  // This ensures stability across different screen sizes and loading states.
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {

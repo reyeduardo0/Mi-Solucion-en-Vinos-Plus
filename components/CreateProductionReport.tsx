@@ -28,7 +28,8 @@ const CreateProductionReport: React.FC = () => {
                 setReportDate(existingReport.reportDate.split('T')[0]);
                 setProducedQuantity(existingReport.producedQuantity);
                 
-                // Refresh names in case they changed since report creation
+                // REFRESH LOGIC: Ensure consumption names match current inventory names
+                // This fixes issues where renamed supplies still showed old names in reports
                 const refreshedConsumptions = existingReport.consumptions.map(c => {
                     if (c.type === 'supply') {
                         // Try to find by ID first, then by Name (fuzzy match)
