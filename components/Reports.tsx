@@ -1,5 +1,4 @@
 
-
 import React, { useState } from 'react';
 import { Albaran, Incident, WinePack, DispatchNote, Supply } from '../types';
 import Card from './ui/Card';
@@ -14,7 +13,7 @@ const CsvIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5
 const PdfIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
 
 const Reports: React.FC = () => {
-    const { albaranes, incidents, salidas, supplies, inventoryStock, productionReports, packs } = useData();
+    const { albaranes, incidents, salidas, supplies, inventoryStock, productionReports, packs, mermas } = useData();
     const [reportFilters, setReportFilters] = useState({ type: 'entries', startDate: '', endDate: '', carrier: '', customer: '', status: 'all' });
     const [generatedReport, setGeneratedReport] = useState<{ headers: string[], data: (string|number)[][] } | null>(null);
 
@@ -44,18 +43,10 @@ const Reports: React.FC = () => {
             case 'supplies':
                 headers = ['Nombre', 'Tipo', 'Stock Actual', 'Unidad', 'Stock Mínimo'];
                 data = supplies.map(s => {
-                    // Calculate real available stock from inventoryStock context
                     const calculatedStock = inventoryStock
                         .filter(item => item.type === 'Consumible' && item.name === s.name)
                         .reduce((acc, item) => acc + item.available, 0);
-                    
-                    return [
-                        s.name, 
-                        s.type, 
-                        calculatedStock, 
-                        s.unit, 
-                        s.minStock ?? 'N/A'
-                    ];
+                    return [s.name, s.type, calculatedStock, s.unit, s.minStock ?? 'N/A'];
                 });
                 break;
             case 'production':
@@ -72,6 +63,31 @@ const Reports: React.FC = () => {
                     ];
                 });
                 break;
+            case 'mermas_total':
+                headers = ['Artículo', 'Tipo', 'Total Merma', 'Veces Reportado'];
+                // Agrupar mermas por nombre
+                const groupedMermas = mermas.filter(m => dateFilter(m.created_at)).reduce((acc, curr) => {
+                    const key = curr.itemName;
+                    if (!acc[key]) acc[key] = { name: curr.itemName, type: curr.itemType, total: 0, count: 0 };
+                    acc[key].total += curr.quantity;
+                    acc[key].count += 1;
+                    return acc;
+                }, {} as Record<string, any>);
+                data = Object.values(groupedMermas).map(m => [m.name, m.type, m.total, m.count]);
+                break;
+            case 'production_by_model':
+                headers = ['Modelo de Pack', 'Unidades Producidas', 'Nº de Partes (Lotes)'];
+                // Agrupar producción por nombre del modelo del pack
+                const groupedProd = productionReports.filter(r => dateFilter(r.reportDate)).reduce((acc, curr) => {
+                    const pack = packs.find(p => p.id === curr.packId);
+                    const name = pack ? pack.modelName : 'Modelo Desconocido';
+                    if (!acc[name]) acc[name] = { name, totalQty: 0, batches: 0 };
+                    acc[name].totalQty += curr.producedQuantity;
+                    acc[name].batches += 1;
+                    return acc;
+                }, {} as Record<string, any>);
+                data = Object.values(groupedProd).map(p => [p.name, p.totalQty, p.batches]);
+                break;
         }
         setGeneratedReport({ headers, data });
     };
@@ -81,17 +97,17 @@ const Reports: React.FC = () => {
 
         const doc = new jsPDF();
         
-        // Título del reporte
         let title = "Reporte";
         switch (reportFilters.type) {
             case 'entries': title = "Reporte de Entradas"; break;
             case 'dispatches': title = "Reporte de Salidas"; break;
             case 'incidents': title = "Reporte de Incidencias"; break;
             case 'supplies': title = "Reporte de Inventario de Consumibles"; break;
-            case 'production': title = "Reporte de Rendimiento de Producción"; break;
+            case 'production': title = "Reporte de Partes de Montaje"; break;
+            case 'mermas_total': title = "Resumen Total de Mermas"; break;
+            case 'production_by_model': title = "Resumen de Producción por Modelo"; break;
         }
 
-        // Añadir fecha de generación
         const dateStr = new Date().toLocaleDateString('es-ES');
         
         doc.setFontSize(18);
@@ -103,16 +119,14 @@ const Reports: React.FC = () => {
             doc.text(`Filtro de fecha: ${reportFilters.startDate || 'Inicio'} - ${reportFilters.endDate || 'Fin'}`, 14, 34);
         }
 
-        // Generar tabla
         autoTable(doc, {
             startY: 40,
             head: [generatedReport.headers],
             body: generatedReport.data,
-            headStyles: { fillColor: [251, 191, 36], textColor: [17, 24, 39] }, // Brand yellow and dark
+            headStyles: { fillColor: [251, 191, 36], textColor: [17, 24, 39] },
             styles: { fontSize: 8 },
         });
 
-        // Guardar archivo
         const fileName = `reporte_${reportFilters.type}_${new Date().toISOString().slice(0, 10)}.pdf`;
         doc.save(fileName);
     };
@@ -143,7 +157,18 @@ const Reports: React.FC = () => {
             <div className="space-y-6">
                 <Card title="Configurar Reporte">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                        <div><label className="block text-sm font-medium mb-1">Tipo de Reporte</label><select name="type" value={reportFilters.type} onChange={handleFilterChange} className="w-full p-2 border rounded-md"><option value="entries">Historial de Entradas</option><option value="dispatches">Detalle de Salidas</option><option value="incidents">Resumen de Incidencias</option><option value="supplies">Inventario de Consumibles</option><option value="production">Rendimiento de Producción</option></select></div>
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Tipo de Reporte</label>
+                            <select name="type" value={reportFilters.type} onChange={handleFilterChange} className="w-full p-2 border rounded-md">
+                                <option value="entries">Historial de Entradas</option>
+                                <option value="dispatches">Detalle de Salidas</option>
+                                <option value="incidents">Resumen de Incidencias</option>
+                                <option value="supplies">Inventario de Consumibles</option>
+                                <option value="production">Listado Partes de Montaje</option>
+                                <option value="mermas_total">Total Mermas (Agrupado)</option>
+                                <option value="production_by_model">Producción por Modelo (Agrupado)</option>
+                            </select>
+                        </div>
                         <div><label className="block text-sm font-medium mb-1">Fecha Desde</label><input type="date" name="startDate" value={reportFilters.startDate} onChange={handleFilterChange} className="w-full p-2 border rounded-md"/></div>
                         <div><label className="block text-sm font-medium mb-1">Fecha Hasta</label><input type="date" name="endDate" value={reportFilters.endDate} onChange={handleFilterChange} className="w-full p-2 border rounded-md"/></div>
                         {(reportFilters.type === 'entries' || reportFilters.type === 'dispatches') && <div><label className="block text-sm font-medium mb-1">Transportista</label><select name="carrier" value={reportFilters.carrier} onChange={handleFilterChange} className="w-full p-2 border rounded-md"><option value="">Todos</option>{uniqueCarriers.map(c => <option key={c} value={c}>{c}</option>)}</select></div>}
