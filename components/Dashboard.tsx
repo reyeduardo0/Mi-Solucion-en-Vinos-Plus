@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from './ui/Card';
 import { NewEntryIcon, NewPackIcon, NewExitIcon } from '../constants';
@@ -23,6 +23,14 @@ const StatCard: React.FC<{ title: string; value: string | number; colorClass: st
 const Dashboard: React.FC = () => {
   const navigateTo = useNavigate();
   const { albaranes, incidents, packs, salidas, inventoryStock } = useData();
+  
+  // FIX: State to track if component has mounted. This prevents Recharts from trying to measure
+  // the container dimension before the DOM is fully painted, resolving the "width(-1)" error.
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const totalPalletsReceived = albaranes.reduce((sum, a) => sum + (a.pallets?.length || 0), 0);
   
@@ -77,27 +85,25 @@ const Dashboard: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card title="Resumen de Movimientos" className="lg:col-span-2">
-          {/* 
-              Recharts Fix: 
-              Using inline styles ensures explicit dimensions for the ResponsiveContainer,
-              preventing the width(-1) error common in Grid layouts.
-          */}
-          <div style={{ width: '100%', height: 300, minWidth: 0 }}>
-            <ResponsiveContainer width="99%" height="100%">
-              <BarChart data={movementData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="Total" fill="#8884d8">
-                    {movementData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={movementColors[index % movementColors.length]} />
-                    ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+        {/* Added min-w-0 to prevent grid blowout causing chart sizing issues */}
+        <Card title="Resumen de Movimientos" className="lg:col-span-2 min-w-0">
+          <div style={{ width: '100%', height: 300 }}>
+            {isMounted && (
+                <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={movementData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="Total" fill="#8884d8">
+                        {movementData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={movementColors[index % movementColors.length]} />
+                        ))}
+                    </Bar>
+                </BarChart>
+                </ResponsiveContainer>
+            )}
           </div>
         </Card>
         

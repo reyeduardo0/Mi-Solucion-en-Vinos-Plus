@@ -1,19 +1,21 @@
 
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { WinePack, PackModel, Merma, Supply, InventoryStockItem } from '../types';
 import Card from './ui/Card';
 import Button from './ui/Button';
 import { useData } from '../context/DataContext';
-import { fileToBase64, getErrorMessage } from '../utils/helpers';
+import { fileToBase64, getErrorMessage, formatDateTimeSafe } from '../utils/helpers';
 import Modal from './ui/Modal';
+import ConfirmationModal from './ui/ConfirmationModal';
+import StatusBadge from './ui/StatusBadge';
 
 const OrderIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>;
 const PackModelIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>;
-// FIX: Update AssignLotIcon to accept SVG props to allow passing className.
 const AssignLotIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M17 14v6m-3-3h6M6 10h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2zm10 0h2a2 2 0 002-2V6a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2zM6 20h2a2 2 0 002-2v-2a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2z" /></svg>;
 const CheckCircleIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>;
+const TrashIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>;
+const PencilIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" /></svg>;
 
 // --- MODALS ---
 
@@ -28,11 +30,9 @@ interface AssignLotsModalProps {
 const AssignLotsModal: React.FC<AssignLotsModalProps> = ({ productName, requiredQty, availableLots, onSave, onClose }) => {
     const [assignments, setAssignments] = useState<{ lot: string; qty: string }[]>([{ lot: '', qty: '' }]);
     
-    // Robust calculation handling strings/numbers
     const totalAssigned = assignments.reduce((sum, a) => sum + (Number(a.qty) || 0), 0);
     const remaining = requiredQty - totalAssigned;
     
-    // Validation logic: Total must match exactly AND all rows must have lot and qty > 0
     const canSave = totalAssigned === requiredQty && assignments.every(a => a.lot && (Number(a.qty) > 0));
 
     const updateAssignment = (index: number, field: 'lot' | 'qty', value: string) => {
@@ -44,7 +44,6 @@ const AssignLotsModal: React.FC<AssignLotsModalProps> = ({ productName, required
     const addAssignment = () => setAssignments([...assignments, { lot: '', qty: '' }]);
     const removeAssignment = (index: number) => setAssignments(assignments.filter((_, i) => i !== index));
 
-    // Función inteligente para rellenar cantidad automáticamente
     const handleAutoFill = (index: number) => {
         const currentLotName = assignments[index].lot;
         if (!currentLotName) return;
@@ -52,13 +51,8 @@ const AssignLotsModal: React.FC<AssignLotsModalProps> = ({ productName, required
         const lotData = availableLots.find(l => l.lot === currentLotName);
         if (!lotData) return;
 
-        // Cuánto ya se ha asignado en OTRAS filas
         const assignedElsewhere = assignments.reduce((sum, a, i) => i === index ? sum : sum + (Number(a.qty) || 0), 0);
-        
-        // Cuánto falta para llegar al objetivo
         const remainingNeed = requiredQty - assignedElsewhere;
-        
-        // La cantidad a poner es el mínimo entre lo que falta y lo que tiene el lote
         const quantityToSet = Math.max(0, Math.min(remainingNeed, lotData.available));
         
         if (quantityToSet > 0) {
@@ -153,18 +147,55 @@ const AssignLotsModal: React.FC<AssignLotsModalProps> = ({ productName, required
     );
 };
 
+const EditPackModal: React.FC<{ pack: WinePack; onSave: (pack: WinePack) => void; onClose: () => void; }> = ({ pack, onSave, onClose }) => {
+    const [orderId, setOrderId] = useState(pack.orderId);
+    const [status, setStatus] = useState(pack.status);
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSave({ ...pack, orderId, status });
+        onClose();
+    };
+
+    return (
+        <Modal title="Editar Pack" onClose={onClose}>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium">Nº Pedido Cliente</label>
+                    <input type="text" value={orderId} onChange={e => setOrderId(e.target.value)} className="mt-1 block w-full p-2 border rounded-md" />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium">Estado</label>
+                    <select value={status} onChange={e => setStatus(e.target.value as any)} className="mt-1 block w-full p-2 border rounded-md">
+                        <option value="Ensamblado">Ensamblado</option>
+                        <option value="Despachado">Despachado</option>
+                    </select>
+                </div>
+                <div className="flex justify-end space-x-2 pt-4">
+                    <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+                    <Button type="submit">Guardar Cambios</Button>
+                </div>
+            </form>
+        </Modal>
+    );
+};
+
 const CreatePack: React.FC = () => {
     const navigate = useNavigate();
-    const { packModels, inventoryStock, addPack, supplies, addMerma } = useData();
+    const { packModels, inventoryStock, addPack, updatePack, deletePack, supplies, packs } = useData();
 
-    const [orderId, setOrderId] = useState('');
-    const [packCount, setPackCount] = useState<number>(1); // Default to 1 pack
-    const [selectedModelId, setSelectedModelId] = useState<string>('');
-    // State to hold { productName: string, lot: string, quantity: number }[]
-    const [assignedContents, setAssignedContents] = useState<WinePack['contents']>([]);
+    const [activeTab, setActiveTab] = useState<'create' | 'list'>('create');
     
-    // State for modal
+    // Create State
+    const [orderId, setOrderId] = useState('');
+    const [packCount, setPackCount] = useState<number>(1);
+    const [selectedModelId, setSelectedModelId] = useState<string>('');
+    const [assignedContents, setAssignedContents] = useState<WinePack['contents']>([]);
     const [modalProduct, setModalProduct] = useState<{ name: string; requiredQty: number; } | null>(null);
+
+    // Manage State
+    const [packToEdit, setPackToEdit] = useState<WinePack | null>(null);
+    const [packToDelete, setPackToDelete] = useState<WinePack | null>(null);
 
     const selectedModel = useMemo(() => packModels.find(m => m.id === selectedModelId), [selectedModelId, packModels]);
 
@@ -177,17 +208,15 @@ const CreatePack: React.FC = () => {
 
     const handleModelChange = (modelId: string) => {
         setSelectedModelId(modelId);
-        setAssignedContents([]); // Reset assignments when model changes
+        setAssignedContents([]);
     };
 
     const handleSaveLots = (productName: string, assignments: { lot: string; qty: number }[]) => {
-        // Remove old assignments for this product
         const otherAssignments = assignedContents.filter(c => c.productName !== productName);
         const newAssignments = assignments.map(a => ({ productName, lot: a.lot, quantity: a.qty }));
         setAssignedContents([...otherAssignments, ...newAssignments]);
     };
 
-    // Check if the total assigned quantity for a product meets the requirement * packCount
     const isProductFullyAssigned = (productName: string, requiredPerPack: number) => {
         const totalRequired = requiredPerPack * packCount;
         const assignedTotal = assignedContents
@@ -198,7 +227,6 @@ const CreatePack: React.FC = () => {
 
     const canCreatePack = useMemo(() => {
         if (!orderId.trim() || !selectedModel || packCount <= 0) return false;
-        // Check if all required products have been fully assigned
         return selectedModel.productRequirements.every(req => isProductFullyAssigned(req.productName, req.quantity));
     }, [orderId, selectedModel, assignedContents, packCount]);
 
@@ -211,25 +239,47 @@ const CreatePack: React.FC = () => {
             modelId: selectedModel.id,
             modelName: selectedModel.name,
             orderId: orderId.trim(),
-            quantity: packCount, // Store planned quantity
+            quantity: packCount,
             creationDate: new Date().toISOString(),
             contents: assignedContents,
             suppliesUsed: selectedModel.supplyRequirements.map(s => ({
                 supplyId: s.supplyId,
                 name: s.name,
-                quantity: s.quantity * packCount, // Scale supplies too
+                quantity: s.quantity * packCount,
             })),
             status: 'Ensamblado',
         };
 
         try {
             await addPack(newPack);
-            navigate('/inventario');
+            // Reset form and go to list
+            setOrderId('');
+            setPackCount(1);
+            setAssignedContents([]);
+            setActiveTab('list');
         } catch (error) {
             alert(getErrorMessage(error));
         }
     };
 
+    const handleUpdatePack = async (updatedPack: WinePack) => {
+        try {
+            await updatePack(updatedPack);
+            setPackToEdit(null);
+        } catch (error) {
+            alert(getErrorMessage(error));
+        }
+    };
+
+    const handleDeletePack = async () => {
+        if (!packToDelete) return;
+        try {
+            await deletePack(packToDelete.id);
+            setPackToDelete(null);
+        } catch (error) {
+            alert(getErrorMessage(error));
+        }
+    };
 
     return (
         <div className="p-4 sm:p-6 lg:p-8">
@@ -242,139 +292,202 @@ const CreatePack: React.FC = () => {
                     onClose={() => setModalProduct(null)}
                 />
             )}
-            <h1 className="text-3xl font-bold text-gray-800 mb-6">Crear Nuevo Pack de Vino</h1>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-6">
-                    <Card title="Paso 1: Información General">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Nº Pedido Cliente</label>
-                                <input type="text" value={orderId} onChange={e => setOrderId(e.target.value)} placeholder="Ej: PO-12345" className="mt-1 block w-full p-2 border-gray-300 rounded-md shadow-sm" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Modelo de Pack</label>
-                                <select value={selectedModelId} onChange={e => handleModelChange(e.target.value)} className="mt-1 block w-full p-2 border-gray-300 rounded-md shadow-sm">
-                                    <option value="">Seleccionar un modelo...</option>
-                                    {packModels.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Cantidad de Packs a crear</label>
-                                <input 
-                                    type="number" 
-                                    value={packCount} 
-                                    onChange={e => {
-                                        const val = Number(e.target.value);
-                                        setPackCount(val > 0 ? val : 0); // Prevent negative
-                                        // Reset assignments if quantity changes to force re-validation to avoid stale "complete" states
-                                        setAssignedContents([]);
-                                    }} 
-                                    min="1" 
-                                    className="mt-1 block w-full p-2 border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500 font-bold text-lg" 
-                                />
-                                <p className="text-xs text-gray-500 mt-1">Define cuántas unidades de este modelo vas a producir en este lote.</p>
-                            </div>
-                        </div>
-                    </Card>
+            
+            {packToEdit && <EditPackModal pack={packToEdit} onSave={handleUpdatePack} onClose={() => setPackToEdit(null)} />}
+            
+            {packToDelete && (
+                <ConfirmationModal 
+                    title="Eliminar Pack" 
+                    message="¿Estás seguro de que quieres eliminar este pack? Esta acción no se puede deshacer y afectará al historial." 
+                    onConfirm={handleDeletePack} 
+                    onCancel={() => setPackToDelete(null)} 
+                />
+            )}
 
-                    {selectedModel && (
-                        <Card title="Paso 2: Asignar Lotes de Producto">
-                            <p className="text-sm text-gray-600 mb-4">Asigna los lotes específicos de producto que se usarán. Se calculan las botellas totales necesarias según la cantidad de packs.</p>
-                            <div className="space-y-3">
-                                {selectedModel.productRequirements.map(req => {
-                                    const totalRequired = req.quantity * packCount;
-                                    const isAssigned = isProductFullyAssigned(req.productName, req.quantity);
-                                    
-                                    return (
-                                        <div key={req.productName} className={`flex justify-between items-center p-4 rounded-md border ${isAssigned ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'}`}>
-                                            <div>
-                                                <p className="font-semibold text-gray-800">{req.productName}</p>
-                                                <p className="text-sm text-gray-500">
-                                                    Requerido: <strong>{totalRequired}</strong> botellas 
-                                                    <span className="text-xs ml-1">({req.quantity} x {packCount} packs)</span>
-                                                </p>
-                                            </div>
-                                            <Button 
-                                                variant={isAssigned ? "secondary" : "primary"}
-                                                onClick={() => setModalProduct({ name: req.productName, requiredQty: totalRequired })}
-                                                className={isAssigned ? "text-green-700 bg-green-100 border-green-300 hover:bg-green-200" : ""}
-                                            >
-                                                {isAssigned ? <CheckCircleIcon className="h-5 w-5 mr-2" /> : <AssignLotIcon className="h-5 w-5 mr-2" />}
-                                                {isAssigned ? 'Listo (Editar)' : 'Asignar Lotes'}
-                                            </Button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </Card>
-                    )}
-                </div>
-                <div className="lg:col-span-1">
-                    {selectedModel && (
-                        <Card title="Resumen de Producción">
-                           <div className="space-y-4">
-                               <div>
-                                   <h4 className="font-semibold text-gray-800">Modelo</h4>
-                                   <p className="text-gray-600">{selectedModel.name}</p>
-                               </div>
-                               <div className="grid grid-cols-2 gap-2">
-                                   <div>
-                                       <h4 className="font-semibold text-gray-800">Pedido</h4>
-                                       <p className="text-gray-600">{orderId || '---'}</p>
-                                   </div>
-                                   <div>
-                                       <h4 className="font-semibold text-gray-800">Cantidad</h4>
-                                       <p className="text-blue-600 font-bold text-lg">{packCount}</p>
-                                   </div>
-                               </div>
-                               
-                               <div className="pt-3 border-t">
-                                   <h4 className="font-semibold text-gray-800 mb-2">Productos Asignados (Botellas)</h4>
-                                   {assignedContents.length > 0 ? (
-                                       <ul className="list-disc list-inside text-sm space-y-1 text-gray-600">
-                                           {assignedContents.map((c, i) => (
-                                               <li key={i}>
-                                                   {c.productName} <br/> 
-                                                   <span className="ml-4 text-xs bg-gray-100 px-1 rounded">Lote: {c.lot}</span> 
-                                                   <span className="font-semibold ml-1">x{c.quantity}</span>
-                                               </li>
-                                           ))}
-                                       </ul>
-                                   ) : <p className="text-sm text-gray-500 italic">Pendiente de asignación...</p>}
-                               </div>
-                               
-                               <div className="pt-3 border-t">
-                                   <h4 className="font-semibold text-gray-800 mb-2">Consumibles Totales</h4>
-                                   <ul className="list-disc list-inside text-sm space-y-1 text-gray-600">
-                                       {selectedModel.supplyRequirements.map(s => (
-                                           <li key={s.supplyId}>
-                                               {s.name} 
-                                               <span className="font-semibold ml-1">x{s.quantity * packCount}</span>
-                                           </li>
-                                       ))}
-                                   </ul>
-                               </div>
-
-                               <div className="pt-4">
-                                   <Button 
-                                        className="w-full" 
-                                        onClick={handleCreatePack} 
-                                        disabled={!canCreatePack}
-                                        title={!canCreatePack ? "Complete todos los campos requeridos y asigne lotes para habilitar." : "Crear producción"}
-                                   >
-                                       Confirmar y Crear Producción
-                                   </Button>
-                                   {!canCreatePack && (
-                                       <p className="text-xs text-center text-red-500 mt-2">
-                                           Complete el Nº de Pedido y asigne todos los lotes correctamente.
-                                       </p>
-                                   )}
-                               </div>
-                           </div>
-                        </Card>
-                    )}
-                </div>
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">Gestión de Packs de Vino</h1>
+            
+            <div className="mb-6 border-b border-gray-200">
+                <nav className="-mb-px flex space-x-8">
+                    <button onClick={() => setActiveTab('create')} className={`${activeTab === 'create' ? 'border-yellow-500 text-yellow-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
+                        Crear Nuevo Pack
+                    </button>
+                    <button onClick={() => setActiveTab('list')} className={`${activeTab === 'list' ? 'border-yellow-500 text-yellow-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
+                        Historial y Gestión
+                    </button>
+                </nav>
             </div>
+
+            {activeTab === 'create' ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-2 space-y-6">
+                        <Card title="Paso 1: Información General">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Nº Pedido Cliente</label>
+                                    <input type="text" value={orderId} onChange={e => setOrderId(e.target.value)} placeholder="Ej: PO-12345" className="mt-1 block w-full p-2 border-gray-300 rounded-md shadow-sm" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Modelo de Pack</label>
+                                    <select value={selectedModelId} onChange={e => handleModelChange(e.target.value)} className="mt-1 block w-full p-2 border-gray-300 rounded-md shadow-sm">
+                                        <option value="">Seleccionar un modelo...</option>
+                                        {packModels.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700">Cantidad de Packs a crear</label>
+                                    <input 
+                                        type="number" 
+                                        value={packCount} 
+                                        onChange={e => {
+                                            const val = Number(e.target.value);
+                                            setPackCount(val > 0 ? val : 0);
+                                            setAssignedContents([]);
+                                        }} 
+                                        min="1" 
+                                        className="mt-1 block w-full p-2 border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500 font-bold text-lg" 
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Define cuántas unidades de este modelo vas a producir en este lote.</p>
+                                </div>
+                            </div>
+                        </Card>
+
+                        {selectedModel && (
+                            <Card title="Paso 2: Asignar Lotes de Producto">
+                                <p className="text-sm text-gray-600 mb-4">Asigna los lotes específicos de producto que se usarán. Se calculan las botellas totales necesarias según la cantidad de packs.</p>
+                                <div className="space-y-3">
+                                    {selectedModel.productRequirements.map(req => {
+                                        const totalRequired = req.quantity * packCount;
+                                        const isAssigned = isProductFullyAssigned(req.productName, req.quantity);
+                                        
+                                        return (
+                                            <div key={req.productName} className={`flex justify-between items-center p-4 rounded-md border ${isAssigned ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'}`}>
+                                                <div>
+                                                    <p className="font-semibold text-gray-800">{req.productName}</p>
+                                                    <p className="text-sm text-gray-500">
+                                                        Requerido: <strong>{totalRequired}</strong> botellas 
+                                                        <span className="text-xs ml-1">({req.quantity} x {packCount} packs)</span>
+                                                    </p>
+                                                </div>
+                                                <Button 
+                                                    variant={isAssigned ? "secondary" : "primary"}
+                                                    onClick={() => setModalProduct({ name: req.productName, requiredQty: totalRequired })}
+                                                    className={isAssigned ? "text-green-700 bg-green-100 border-green-300 hover:bg-green-200" : ""}
+                                                >
+                                                    {isAssigned ? <CheckCircleIcon className="h-5 w-5 mr-2" /> : <AssignLotIcon className="h-5 w-5 mr-2" />}
+                                                    {isAssigned ? 'Listo (Editar)' : 'Asignar Lotes'}
+                                                </Button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </Card>
+                        )}
+                    </div>
+                    <div className="lg:col-span-1">
+                        {selectedModel && (
+                            <Card title="Resumen de Producción">
+                            <div className="space-y-4">
+                                <div>
+                                    <h4 className="font-semibold text-gray-800">Modelo</h4>
+                                    <p className="text-gray-600">{selectedModel.name}</p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <h4 className="font-semibold text-gray-800">Pedido</h4>
+                                        <p className="text-gray-600">{orderId || '---'}</p>
+                                    </div>
+                                    <div>
+                                        <h4 className="font-semibold text-gray-800">Cantidad</h4>
+                                        <p className="text-blue-600 font-bold text-lg">{packCount}</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="pt-3 border-t">
+                                    <h4 className="font-semibold text-gray-800 mb-2">Productos Asignados (Botellas)</h4>
+                                    {assignedContents.length > 0 ? (
+                                        <ul className="list-disc list-inside text-sm space-y-1 text-gray-600">
+                                            {assignedContents.map((c, i) => (
+                                                <li key={i}>
+                                                    {c.productName} <br/> 
+                                                    <span className="ml-4 text-xs bg-gray-100 px-1 rounded">Lote: {c.lot}</span> 
+                                                    <span className="font-semibold ml-1">x{c.quantity}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : <p className="text-sm text-gray-500 italic">Pendiente de asignación...</p>}
+                                </div>
+                                
+                                <div className="pt-3 border-t">
+                                    <h4 className="font-semibold text-gray-800 mb-2">Consumibles Totales</h4>
+                                    <ul className="list-disc list-inside text-sm space-y-1 text-gray-600">
+                                        {selectedModel.supplyRequirements.map(s => (
+                                            <li key={s.supplyId}>
+                                                {s.name} 
+                                                <span className="font-semibold ml-1">x{s.quantity * packCount}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+
+                                <div className="pt-4">
+                                    <Button 
+                                            className="w-full" 
+                                            onClick={handleCreatePack} 
+                                            disabled={!canCreatePack}
+                                            title={!canCreatePack ? "Complete todos los campos requeridos y asigne lotes para habilitar." : "Crear producción"}
+                                    >
+                                        Confirmar y Crear Producción
+                                    </Button>
+                                    {!canCreatePack && (
+                                        <p className="text-xs text-center text-red-500 mt-2">
+                                            Complete el Nº de Pedido y asigne todos los lotes correctamente.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                            </Card>
+                        )}
+                    </div>
+                </div>
+            ) : (
+                <Card>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Pack</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modelo</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pedido</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
+                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {packs.length > 0 ? packs.map(pack => (
+                                    <tr key={pack.id} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{pack.id}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDateTimeSafe(pack.creationDate)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pack.modelName}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pack.orderId}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right font-semibold">{pack.quantity}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center"><StatusBadge status={pack.status} /></td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                            <Button variant="secondary" className="p-1.5" onClick={() => setPackToEdit(pack)} title="Editar"><PencilIcon /></Button>
+                                            <Button variant="danger" className="p-1.5" onClick={() => setPackToDelete(pack)} title="Eliminar"><TrashIcon /></Button>
+                                        </td>
+                                    </tr>
+                                )) : (
+                                    <tr>
+                                        <td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-500">No hay packs creados aún.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
         </div>
     );
 };

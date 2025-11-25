@@ -4,8 +4,32 @@ import Card from './ui/Card';
 
 const changelogData = [
     {
-        version: '1.5.10',
+        version: '1.5.13',
         date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'fix', text: 'Corrección definitiva de renderizado de gráficos (isMounted check).' },
+            { type: 'improvement', text: 'Optimización de estabilidad en la carga del Dashboard.' },
+        ]
+    },
+    {
+        version: '1.5.12',
+        date: '24 de Agosto, 2024',
+        changes: [
+            { type: 'fix', text: 'Solución definitiva para error de ancho negativo en gráficos (Recharts 99% width).' },
+            { type: 'improvement', text: 'Validación de despliegue de código en producción.' },
+        ]
+    },
+    {
+        version: '1.5.11',
+        date: '24 de Agosto, 2024',
+        changes: [
+            { type: 'fix', text: 'Estabilización final del Dashboard: solución de ancho en gráficos (position: relative).' },
+            { type: 'fix', text: 'Sincronización de lógica de nombres de consumibles actualizada.' },
+        ]
+    },
+    {
+        version: '1.5.10',
+        date: '24 de Agosto, 2024',
         changes: [
             { type: 'fix', text: 'Solución definitiva error width(-1) en gráficos usando estilos en línea.' },
             { type: 'improvement', text: 'Estabilización del Dashboard para evitar errores de renderizado.' },

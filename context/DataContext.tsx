@@ -66,6 +66,9 @@ interface DataContextType {
     deletePackModel: (id: string, name: string) => Promise<void>;
 
     addPack: (pack: WinePack) => Promise<void>;
+    updatePack: (pack: WinePack) => Promise<void>;
+    deletePack: (id: string) => Promise<void>;
+
     handleDispatch: (dispatchData: Omit<DispatchNote, 'id' | 'created_at' | 'status'>) => Promise<void>;
     addMerma: (merma: Omit<Merma, 'id' | 'created_at'>) => Promise<void>;
     
@@ -287,6 +290,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         };
     }, [session.user, fetchData]);
 
+    // ... products and inventoryStock memos remain the same ...
     const products = useMemo(() => {
         const productSet = new Set<string>();
         albaranes.forEach(albaran => {
@@ -299,7 +303,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         return Array.from(productSet).map(name => ({ id: name, name, type: 'wine' as const, sku: '' }));
     }, [albaranes]);
     
-    // ... inventoryStock calculation remains same ...
     const inventoryStock = useMemo((): InventoryStockItem[] => {
         const stockMap = new Map<string, InventoryStockItem>();
 
@@ -391,6 +394,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         return result.sort((a, b) => a.name.localeCompare(b.name) || (a.lot || '').localeCompare(b.lot || ''));
     }, [albaranes, supplies, packs, mermas]);
 
+    // ... addAlbaran, updateAlbaran, deleteAlbaran, addNewSupply, addSupplyStock, updateSupply, deleteSupply, updateSupplyLot, updateSupplyDetails, mergeSupplies, addPackModel, updatePackModel, deletePackModel remain same ...
     const addAlbaran = async (albaran: Albaran) => {
         const { pallets, ...albaranData } = albaran;
         const dbAlbaran = { id: albaranData.id, entry_date: albaranData.entryDate, truck_plate: albaranData.truckPlate, origin: albaranData.origin, carrier: albaranData.carrier, driver: albaranData.driver, status: albaranData.status, incident_details: albaranData.incidentDetails, incident_images: albaranData.incidentImages };
@@ -461,13 +465,11 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const upperCode = newCode ? newCode.toUpperCase() : '';
         const lowerOldName = oldName.trim().toLowerCase();
         
-        // 1. Update Supplies Table
         const { error: supplyError } = await supabase!.from('supplies')
             .update({ name: upperName, code: upperCode })
             .eq('id', id);
         if (supplyError) throw supplyError;
 
-        // 2. Update Pallets and Mermas (Direct column updates)
         if (oldName !== upperName) {
             await supabase!.from('pallets')
                 .update({ product_name: upperName })
@@ -478,7 +480,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 .eq('item_name', oldName);
         }
 
-        // Helper to update JSONB arrays
         const updateJsonbField = async (table: string, column: string, selectQuery: string = '*') => {
              const { data: rows } = await supabase!.from(table).select(selectQuery);
              if (!rows) return;
@@ -487,7 +488,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 let changed = false;
                 const list = row[column] || [];
                 const newList = list.map((item: any) => {
-                    // Match by ID or Case-insensitive Name
                     const itemId = item.supplyId || item.itemId; 
                     const itemName = item.name;
                     
@@ -498,7 +498,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                             ...(item.supplyId !== undefined ? { supplyId: id } : {}),
                             ...(item.itemId !== undefined ? { itemId: id } : {}),
                             name: upperName,
-                            // Add/Update code if it exists or if we want to ensure it is there
                             ...(item.code !== undefined || table === 'pack_models' ? { code: upperCode } : {}) 
                         };
                     }
@@ -511,13 +510,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
              }
         };
 
-        // 3. Update Pack Models (JSONB)
         await updateJsonbField('pack_models', 'supply_requirements');
-
-        // 4. Update Wine Packs (JSONB)
         await updateJsonbField('wine_packs', 'supplies_used');
-
-        // 5. Update Production Reports (JSONB)
         await updateJsonbField('production_reports', 'consumptions');
         
         await addAuditLog(`Actualizó detalles del consumible (Global): ${oldName} -> ${upperName}`);
@@ -532,12 +526,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             const sourceSupply = supplies.find(s => s.id === sourceId);
             if (!sourceSupply) continue;
 
-            // 1. Sum Quantity
             const newQuantity = (masterSupply.quantity || 0) + (sourceSupply.quantity || 0);
             await supabase!.from('supplies').update({ quantity: newQuantity }).eq('id', masterId);
             masterSupply.quantity = newQuantity; 
 
-            // 2. Update Pallets/Mermas
             await supabase!.from('pallets')
                 .update({ product_name: masterSupply.name })
                 .eq('product_name', sourceSupply.name);
@@ -546,7 +538,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 .update({ item_name: masterSupply.name })
                 .eq('item_name', sourceSupply.name);
 
-            // 3. Update Pack Models (JSONB) - Replace SourceID with MasterID
             const { data: models } = await supabase!.from('pack_models').select('*');
             if (models) {
                 for (const model of models) {
@@ -554,7 +545,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                     const newReqs = (model.supply_requirements || []).map((req: any) => {
                         if (req.supplyId === sourceId || req.name === sourceSupply.name) {
                             changed = true;
-                            // Update to Master ID and Name
                             return { ...req, supplyId: masterId, name: masterSupply.name, code: masterSupply.code };
                         }
                         return req;
@@ -565,7 +555,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 }
             }
 
-            // 4. Update Wine Packs (JSONB)
             const { data: packsData } = await supabase!.from('wine_packs').select('*');
             if (packsData) {
                 for (const pack of packsData) {
@@ -583,7 +572,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 }
             }
 
-            // 5. Update Production Reports
             const { data: reports } = await supabase!.from('production_reports').select('*');
             if (reports) {
                 for (const report of reports) {
@@ -601,7 +589,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 }
             }
 
-            // 6. Delete Source
             await supabase!.from('supplies').delete().eq('id', sourceId);
         }
         
@@ -609,7 +596,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await fetchData();
     };
 
-    // ... rest of the functions (deleteSupply, updateSupplyLot, addPackModel, etc.) remain same ...
     const deleteSupply = async (supplyId: string, supplyName: string) => {
         const { error } = await supabase!.from('supplies').delete().eq('id', supplyId);
         if (error) throw error;
@@ -655,7 +641,25 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const { error } = await supabase!.from('wine_packs').insert(dbPack);
         if (error) throw error;
         await addAuditLog(`Ensambló el pack "${pack.id}" para la orden "${pack.orderId}"`);
+        await fetchData();
     };
+
+    const updatePack = async (pack: WinePack) => {
+        const { id, modelId, modelName, orderId, quantity, creationDate, contents, suppliesUsed, additionalComponents, packImage, status } = pack;
+        const dbPack = { model_id: modelId, model_name: modelName, order_id: orderId, quantity, creation_date: creationDate, contents, supplies_used: suppliesUsed, additional_components: additionalComponents, pack_image: packImage, status };
+        const { error } = await supabase!.from('wine_packs').update(dbPack).eq('id', id);
+        if (error) throw error;
+        await addAuditLog(`Actualizó el pack "${pack.id}"`);
+        await fetchData();
+    };
+
+    const deletePack = async (id: string) => {
+        const { error } = await supabase!.from('wine_packs').delete().eq('id', id);
+        if (error) throw error;
+        await addAuditLog(`Eliminó el pack "${id}"`);
+        await fetchData();
+    };
+
     const handleDispatch = async (dispatchData: Omit<DispatchNote, 'id' | 'created_at' | 'status'>) => {
         const id = `SAL-${Date.now()}`;
         const note: DispatchNote = { ...dispatchData, id, status: 'Despachado' };
@@ -795,7 +799,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         addNewSupply, addSupplyStock, updateSupply, deleteSupply, updateSupplyLot,
         updateSupplyDetails, mergeSupplies, 
         addPackModel, updatePackModel, deletePackModel,
-        addPack, handleDispatch, addMerma, addProductionReport, updateProductionReport, deleteProductionReport,
+        addPack, updatePack, deletePack, handleDispatch, addMerma, addProductionReport, updateProductionReport, deleteProductionReport,
         addIncident, resolveIncident,
         addUser, updateUser, deleteUser, updateCurrentUserPassword, updateUserPasswordByAdmin,
         addRole, updateRole, deleteRole
