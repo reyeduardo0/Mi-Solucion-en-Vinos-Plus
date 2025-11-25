@@ -78,8 +78,8 @@ const Dashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card title="Resumen de Movimientos" className="lg:col-span-2">
-          {/* Recharts container fix: Use explicit relative positioning and width to avoid negative calculation errors */}
-          <div style={{ position: 'relative', width: '100%', height: '320px' }}>
+          {/* Recharts container fix: Use explicit relative positioning and min-width to avoid negative calculation errors */}
+          <div className="min-w-0" style={{ position: 'relative', width: '99%', height: '320px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={movementData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />

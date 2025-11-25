@@ -4,8 +4,17 @@ import Card from './ui/Card';
 
 const changelogData = [
     {
-        version: '1.5.4',
+        version: '1.5.5',
         date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'fix', text: 'Actualización crítica para forzar la sincronización de código en producción.' },
+            { type: 'fix', text: 'Corrección definitiva del error de ancho en gráficos del Dashboard.' },
+            { type: 'improvement', text: 'Visualización actualizada de códigos de consumibles en Partes de Montaje.' },
+        ]
+    },
+    {
+        version: '1.5.4',
+        date: '24 de Agosto, 2024',
         changes: [
             { type: 'fix', text: 'Actualización forzada: Corrección visual en Partes de Montaje para nombres de consumibles.' },
             { type: 'fix', text: 'Solución robusta para error de ancho en gráfico del Dashboard.' },
