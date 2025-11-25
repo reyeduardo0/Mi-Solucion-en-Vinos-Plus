@@ -1,4 +1,5 @@
 
+// ... imports remain the same ...
 import React, {
   createContext,
   useContext,
@@ -52,7 +53,6 @@ interface DataContextType {
     updateAlbaran: (albaran: Albaran) => Promise<void>;
     deleteAlbaran: (albaran: Albaran) => Promise<void>;
 
-    // FIX: Changed return type to Promise<string> to allow returning the new ID
     addNewSupply: (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }) => Promise<string>;
     addSupplyStock: (supplyId: string, quantity: number, lot: string) => Promise<void>;
     updateSupply: (supply: Supply) => Promise<void>;
@@ -299,6 +299,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         return Array.from(productSet).map(name => ({ id: name, name, type: 'wine' as const, sku: '' }));
     }, [albaranes]);
     
+    // ... inventoryStock calculation remains same ...
     const inventoryStock = useMemo((): InventoryStockItem[] => {
         const stockMap = new Map<string, InventoryStockItem>();
 
@@ -433,7 +434,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             await addSupplyStock(data.id, initialData.quantity, initialData.lot);
         }
         await fetchData();
-        // FIX: Return the new supply ID
         return data.id;
     };
 
@@ -609,6 +609,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await fetchData();
     };
 
+    // ... rest of the functions (deleteSupply, updateSupplyLot, addPackModel, etc.) remain same ...
     const deleteSupply = async (supplyId: string, supplyName: string) => {
         const { error } = await supabase!.from('supplies').delete().eq('id', supplyId);
         if (error) throw error;

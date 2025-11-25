@@ -88,6 +88,7 @@ const CreateProductionReport: React.FC = () => {
 
             if (relatedModel && relatedModel.supplyRequirements) {
                  relatedModel.supplyRequirements.forEach(req => {
+                    // BUSQUEDA INTELIGENTE: Buscar datos actuales en el inventario
                     const freshSupply = supplies.find(s => s.id === req.supplyId) || 
                                       supplies.find(s => s.name.trim().toLowerCase() === req.name.trim().toLowerCase());
                     
@@ -101,6 +102,7 @@ const CreateProductionReport: React.FC = () => {
                             displayName = `[${freshSupply.code}] ${freshSupply.name}`;
                         }
                     } else if (req.code) {
+                         // Fallback si tiene codigo guardado en el modelo pero no encontramos supply actual
                          displayName = `[${req.code}] ${displayName}`;
                     }
 

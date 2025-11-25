@@ -1,12 +1,20 @@
 
-
 import React from 'react';
 import Card from './ui/Card';
 
 const changelogData = [
     {
-        version: '1.5.0',
+        version: '1.5.1',
         date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'fix', text: 'Corrección en nombres de consumibles desactualizados en Partes de Montaje y Modelos.' },
+            { type: 'fix', text: 'Solución a error de renderizado en gráfico de Dashboard.' },
+            { type: 'improvement', text: 'Sincronización robusta de nombres al editar inventario.' },
+        ]
+    },
+    {
+        version: '1.5.0',
+        date: '22 de Agosto, 2024',
         changes: [
             { type: 'new', text: 'Nuevo Módulo de Ajustes de Inventario: Estandarización de nombres y códigos.' },
             { type: 'new', text: 'Herramienta de Fusión de Duplicados para unificar stocks.' },
@@ -15,7 +23,7 @@ const changelogData = [
     },
     {
         version: '1.4.0',
-        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        date: '15 de Agosto, 2024',
         changes: [
             { type: 'new', text: 'Reportes de Rendimiento de Producción añadidos.' },
             { type: 'new', text: 'Funcionalidad para imprimir "Parte de Montaje" en PDF (diseño Excel).' },
