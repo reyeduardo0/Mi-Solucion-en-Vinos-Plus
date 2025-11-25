@@ -4,8 +4,16 @@ import Card from './ui/Card';
 
 const changelogData = [
     {
-        version: '1.5.9',
+        version: '1.5.10',
         date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'fix', text: 'Solución definitiva error width(-1) en gráficos usando estilos en línea.' },
+            { type: 'improvement', text: 'Estabilización del Dashboard para evitar errores de renderizado.' },
+        ]
+    },
+    {
+        version: '1.5.9',
+        date: '24 de Agosto, 2024',
         changes: [
             { type: 'fix', text: 'Corrección de estabilidad en gráficos del Dashboard (99% width).' },
             { type: 'improvement', text: 'Sincronización general de componentes para despliegue.' },

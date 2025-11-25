@@ -80,10 +80,10 @@ const Dashboard: React.FC = () => {
         <Card title="Resumen de Movimientos" className="lg:col-span-2">
           {/* 
               Recharts Fix: 
-              Using a fixed width of 99% on ResponsiveContainer is a known workaround for the 
-              "width(-1)" error caused by ResizeObserver loops in grid layouts.
+              Using inline styles ensures explicit dimensions for the ResponsiveContainer,
+              preventing the width(-1) error common in Grid layouts.
           */}
-          <div className="w-full h-[300px]">
+          <div style={{ width: '100%', height: 300, minWidth: 0 }}>
             <ResponsiveContainer width="99%" height="100%">
               <BarChart data={movementData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
