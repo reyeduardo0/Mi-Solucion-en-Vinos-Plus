@@ -49,6 +49,53 @@ const Reports: React.FC = () => {
                     return [s.name, s.type, calculatedStock, s.unit, s.minStock ?? 'N/A'];
                 });
                 break;
+            case 'stock_detailed':
+                // Inventario Actual Detallado por Lote
+                headers = ['Código', 'Artículo', 'Tipo', 'Lote', 'Stock Total', 'Disponible', 'En Packs', 'En Merma'];
+                data = inventoryStock.map(i => [
+                    i.code || '-',
+                    i.name,
+                    i.type,
+                    i.lot || 'SIN LOTE',
+                    i.total,
+                    i.available,
+                    i.inPacks,
+                    i.inMerma
+                ]);
+                break;
+            case 'stock_aggregated':
+                // Inventario Actual Agrupado por Producto
+                headers = ['Código', 'Artículo', 'Tipo', 'Stock Total', 'Disponible', 'En Packs', 'En Merma'];
+                const aggregatedStock = inventoryStock.reduce((acc, curr) => {
+                    const key = curr.name;
+                    if (!acc[key]) {
+                        acc[key] = { 
+                            name: curr.name, 
+                            code: curr.code || '-', 
+                            type: curr.type, 
+                            total: 0, 
+                            available: 0, 
+                            inPacks: 0, 
+                            inMerma: 0 
+                        };
+                    }
+                    acc[key].total += curr.total;
+                    acc[key].available += curr.available;
+                    acc[key].inPacks += curr.inPacks;
+                    acc[key].inMerma += curr.inMerma;
+                    return acc;
+                }, {} as Record<string, any>);
+                
+                data = Object.values(aggregatedStock).sort((a: any, b: any) => a.name.localeCompare(b.name)).map((i: any) => [
+                    i.code,
+                    i.name,
+                    i.type,
+                    i.total,
+                    i.available,
+                    i.inPacks,
+                    i.inMerma
+                ]);
+                break;
             case 'production':
                 headers = ['Fecha', 'Nº Lanzamiento', 'Modelo', 'Cant. Producida', 'Total Mermas (Items)'];
                 data = productionReports.filter(r => dateFilter(r.reportDate)).map(r => {
@@ -102,7 +149,9 @@ const Reports: React.FC = () => {
             case 'entries': title = "Reporte de Entradas"; break;
             case 'dispatches': title = "Reporte de Salidas"; break;
             case 'incidents': title = "Reporte de Incidencias"; break;
-            case 'supplies': title = "Reporte de Inventario de Consumibles"; break;
+            case 'supplies': title = "Reporte de Inventario de Consumibles (General)"; break;
+            case 'stock_detailed': title = "Reporte de Stock Detallado (Por Lotes)"; break;
+            case 'stock_aggregated': title = "Reporte de Stock Agrupado (Por Producto)"; break;
             case 'production': title = "Reporte de Partes de Montaje"; break;
             case 'mermas_total': title = "Resumen Total de Mermas"; break;
             case 'production_by_model': title = "Resumen de Producción por Modelo"; break;
@@ -163,7 +212,9 @@ const Reports: React.FC = () => {
                                 <option value="entries">Historial de Entradas</option>
                                 <option value="dispatches">Detalle de Salidas</option>
                                 <option value="incidents">Resumen de Incidencias</option>
-                                <option value="supplies">Inventario de Consumibles</option>
+                                <option value="stock_detailed">Inventario Detallado (Lotes)</option>
+                                <option value="stock_aggregated">Inventario Agrupado (Producto)</option>
+                                <option value="supplies">Maestro de Consumibles</option>
                                 <option value="production">Listado Partes de Montaje</option>
                                 <option value="mermas_total">Total Mermas (Agrupado)</option>
                                 <option value="production_by_model">Producción por Modelo (Agrupado)</option>

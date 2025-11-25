@@ -4,8 +4,17 @@ import Card from './ui/Card';
 
 const changelogData = [
     {
-        version: '1.5.13',
+        version: '1.6.0',
         date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'new', text: 'Reporte de Inventario Detallado (con Lotes y Mermas).' },
+            { type: 'new', text: 'Reporte de Inventario Agrupado por Producto (Stock Total).' },
+            { type: 'improvement', text: 'Mejoras en la generación de PDF para nuevos reportes.' },
+        ]
+    },
+    {
+        version: '1.5.13',
+        date: '24 de Agosto, 2024',
         changes: [
             { type: 'fix', text: 'Corrección definitiva de renderizado de gráficos (isMounted check).' },
             { type: 'improvement', text: 'Optimización de estabilidad en la carga del Dashboard.' },
