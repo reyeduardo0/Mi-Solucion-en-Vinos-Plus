@@ -4,11 +4,44 @@ import Card from './ui/Card';
 
 const changelogData = [
     {
-        version: '1.5.5',
+        version: '1.5.9',
         date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
         changes: [
+            { type: 'fix', text: 'Corrección de estabilidad en gráficos del Dashboard (99% width).' },
+            { type: 'improvement', text: 'Sincronización general de componentes para despliegue.' },
+        ]
+    },
+    {
+        version: '1.5.8',
+        date: '24 de Agosto, 2024',
+        changes: [
+            { type: 'fix', text: 'Corrección definitiva del contenedor de gráficos del Dashboard.' },
+            { type: 'fix', text: 'Sincronización de código de producción para corrección de nombres.' },
+        ]
+    },
+    {
+        version: '1.5.7',
+        date: '24 de Agosto, 2024',
+        changes: [
+            { type: 'fix', text: 'Solución definitiva a error de ancho en gráfico del Dashboard.' },
+            { type: 'fix', text: 'Actualización forzada para corregir nombres en Partes de Montaje.' },
+        ]
+    },
+    {
+        version: '1.5.6',
+        date: '24 de Agosto, 2024',
+        changes: [
+            { type: 'fix', text: 'Resolución definitiva del error visual en gráficos del Dashboard.' },
+            { type: 'fix', text: 'Forzado de actualización en GitHub para reflejar cambios en nombres de consumibles.' },
+            { type: 'improvement', text: 'Estabilidad mejorada en la carga de reportes de producción.' },
+        ]
+    },
+    {
+        version: '1.5.5',
+        date: '24 de Agosto, 2024',
+        changes: [
             { type: 'fix', text: 'Actualización crítica para forzar la sincronización de código en producción.' },
-            { type: 'fix', text: 'Corrección definitiva del error de ancho en gráficos del Dashboard.' },
+            { type: 'fix', text: 'Corrección del error de ancho en gráficos del Dashboard.' },
             { type: 'improvement', text: 'Visualización actualizada de códigos de consumibles en Partes de Montaje.' },
         ]
     },
