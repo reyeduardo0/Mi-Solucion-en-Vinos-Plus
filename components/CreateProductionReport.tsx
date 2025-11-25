@@ -89,6 +89,7 @@ const CreateProductionReport: React.FC = () => {
             if (relatedModel && relatedModel.supplyRequirements) {
                  relatedModel.supplyRequirements.forEach(req => {
                     // BUSQUEDA INTELIGENTE: Buscar datos actuales en el inventario
+                    // Esto resuelve el problema de ver nombres antiguos en nuevos reportes
                     const freshSupply = supplies.find(s => s.id === req.supplyId) || 
                                       supplies.find(s => s.name.trim().toLowerCase() === req.name.trim().toLowerCase());
                     
@@ -118,6 +119,7 @@ const CreateProductionReport: React.FC = () => {
             } else if (selectedPack.suppliesUsed) {
                 // FALLBACK: Usar datos guardados en el pack si no se encuentra modelo
                 selectedPack.suppliesUsed.forEach(s => {
+                    // Intentar refrescar nombre también aquí
                     const freshSupply = supplies.find(sup => sup.id === s.supplyId) || 
                                       supplies.find(sup => sup.name.trim().toLowerCase() === s.name.trim().toLowerCase());
                     

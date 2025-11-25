@@ -78,8 +78,8 @@ const Dashboard: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card title="Resumen de Movimientos" className="lg:col-span-2">
-          {/* Added min-w-0 to prevent flexbox overflow issue with Recharts */}
-          <div className="h-80 w-full min-w-0 overflow-hidden" style={{ minHeight: '320px' }}>
+          {/* Recharts container fix: Use explicit relative positioning and width to avoid negative calculation errors */}
+          <div style={{ position: 'relative', width: '100%', height: '320px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={movementData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
