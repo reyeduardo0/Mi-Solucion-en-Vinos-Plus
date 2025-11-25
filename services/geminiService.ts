@@ -13,9 +13,13 @@ const fileToGenerativePart = async (file: File) => {
 };
 
 export const extractDataFromImage = async (imageFile: File, prompt: string): Promise<any> => {
-  const apiKey = (window as any).process?.env?.API_KEY;
+  // SECURITY UPDATE: Prefer VITE_API_KEY injected by Netlify/Vite build process.
+  // Fallback to legacy window.process for local dev if needed.
+  // FIX: Cast import.meta to any to avoid TS error 'Property env does not exist on type ImportMeta'
+  const apiKey = (import.meta as any).env?.VITE_API_KEY || (window as any).process?.env?.API_KEY;
+  
   if (!apiKey) {
-    throw new Error("La variable de entorno API_KEY no está configurada. Las funciones de IA están desactivadas.");
+    throw new Error("La variable de entorno VITE_API_KEY no está configurada en Netlify. Las funciones de IA están desactivadas por seguridad.");
   }
   try {
     const ai = new GoogleGenAI({ apiKey });
@@ -35,17 +39,15 @@ export const extractDataFromImage = async (imageFile: File, prompt: string): Pro
       }
     });
 
-    const text = response.text.trim();
+    const text = response.text ? response.text.trim() : "";
     // Clean potential markdown code block fences
-    // FIX: Replaced original regex to avoid a browser-specific parsing error.
     const cleanedText = text.replace(/^```json\s*|```\s*$/g, '');
     return JSON.parse(cleanedText);
 
   } catch (error: any) {
-    // FIX: Added opening brace for the catch block to fix syntax error.
     console.error("Error calling Gemini API:", error);
     if (error instanceof Error && error.message.includes("API key not valid")) {
-        throw new Error("La clave API proporcionada no es válida. Por favor, verifique su configuración.");
+        throw new Error("La clave API proporcionada no es válida. Por favor, verifique su configuración en Netlify.");
     }
     const errorMessage = getErrorMessage(error);
     throw new Error(`${errorMessage} Por favor, revise la consola para más detalles.`);
