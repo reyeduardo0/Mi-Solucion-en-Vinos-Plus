@@ -170,10 +170,13 @@ const PackModels: React.FC = () => {
                                 <h4 className="flex items-center text-sm font-semibold text-gray-700 mb-1"><SupplyIcon/> Consumibles Requeridos</h4>
                                 <ul className="list-disc list-inside pl-4 text-gray-600">
                                     {model.supplyRequirements?.map((s, i) => {
-                                        // Lookup to show current Code if available
-                                        const sup = supplies.find(x => x.id === s.supplyId);
+                                        // Lookup to show current Code/Name if available alive, fallback to stored values
+                                        // Busca por ID o por Nombre (insensible a mayúsculas) para mostrar datos actuales
+                                        const sup = supplies.find(x => x.id === s.supplyId) || 
+                                                    supplies.find(x => x.name.trim().toLowerCase() === s.name.trim().toLowerCase());
+                                        const displayName = sup ? sup.name : s.name;
                                         const displayCode = sup?.code ? `[${sup.code}] ` : '';
-                                        return <li key={i}>{displayCode}{s.name} (x{s.quantity})</li>
+                                        return <li key={i}>{displayCode}{displayName} (x{s.quantity})</li>
                                     })}
                                 </ul>
                             </div>

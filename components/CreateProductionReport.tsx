@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
@@ -11,7 +10,7 @@ import { generateUUID, formatDateSafe } from '../utils/helpers';
 const CreateProductionReport: React.FC = () => {
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>(); // Get ID if in edit mode
-    const { packs, supplies, addProductionReport, updateProductionReport, productionReports, products } = useData();
+    const { packs, supplies, addProductionReport, updateProductionReport, productionReports, products, packModels } = useData();
     
     const isEditing = !!id;
 
@@ -28,10 +27,26 @@ const CreateProductionReport: React.FC = () => {
                 setSelectedPackId(existingReport.packId);
                 setReportDate(existingReport.reportDate.split('T')[0]);
                 setProducedQuantity(existingReport.producedQuantity);
-                setConsumptions(existingReport.consumptions);
+                
+                // Refresh names in case they changed since report creation
+                const refreshedConsumptions = existingReport.consumptions.map(c => {
+                    if (c.type === 'supply') {
+                        // Try to find by ID first, then by Name (fuzzy match)
+                        const freshSupply = supplies.find(s => s.id === c.itemId) || 
+                                          supplies.find(s => s.name.trim().toLowerCase() === c.name.trim().toLowerCase());
+                        
+                        if (freshSupply) {
+                            let displayName = freshSupply.name;
+                            if (freshSupply.code) displayName = `[${freshSupply.code}] ${displayName}`;
+                            return { ...c, name: displayName, itemId: freshSupply.id };
+                        }
+                    }
+                    return c;
+                });
+                setConsumptions(refreshedConsumptions);
             }
         }
-    }, [isEditing, id, productionReports]);
+    }, [isEditing, id, productionReports, supplies]);
 
     // Filtrar packs disponibles. Si editamos, DEBEMOS incluir el pack actual aunque tenga reporte.
     const availablePacks = useMemo(() => {
@@ -45,16 +60,15 @@ const CreateProductionReport: React.FC = () => {
     const selectedPack = useMemo(() => packs.find(p => p.id === selectedPackId), [selectedPackId, packs]);
 
     // Auto-rellenar datos al seleccionar pack (SOLO si NO estamos editando o si cambiamos de pack manualmente)
-    // Importante: Si estamos editando, el useEffect inicial ya cargó los datos, no queremos sobreescribirlos
-    // a menos que el usuario cambie el pack en el dropdown explícitamente.
     useEffect(() => {
         if (!isEditing && selectedPack) {
             // Si el pack tiene cantidad guardada, usarla. Si no, 1.
-            setProducedQuantity(selectedPack.quantity || 1); 
+            const initialQty = selectedPack.quantity || 1;
+            setProducedQuantity(initialQty); 
 
             const newConsumptions: ProductionConsumption[] = [];
 
-            // 1. Vinos (Products)
+            // 1. Vinos (Products) from Pack Content (Specific Lots)
             if (selectedPack.contents) {
                 selectedPack.contents.forEach(c => {
                     newConsumptions.push({
@@ -69,13 +83,58 @@ const CreateProductionReport: React.FC = () => {
             }
 
             // 2. Consumibles (Supplies)
-            if (selectedPack.suppliesUsed) {
-                selectedPack.suppliesUsed.forEach(s => {
+            // PREFERENCIA: Usar la definición del MODELO actual si existe, para asegurar nombres/códigos actualizados
+            const relatedModel = packModels.find(m => m.id === selectedPack.modelId);
+
+            if (relatedModel && relatedModel.supplyRequirements) {
+                 relatedModel.supplyRequirements.forEach(req => {
+                    const freshSupply = supplies.find(s => s.id === req.supplyId) || 
+                                      supplies.find(s => s.name.trim().toLowerCase() === req.name.trim().toLowerCase());
+                    
+                    let displayName = req.name;
+                    let displayId = req.supplyId;
+
+                    if (freshSupply) {
+                        displayId = freshSupply.id;
+                        displayName = freshSupply.name;
+                        if (freshSupply.code) {
+                            displayName = `[${freshSupply.code}] ${freshSupply.name}`;
+                        }
+                    } else if (req.code) {
+                         displayName = `[${req.code}] ${displayName}`;
+                    }
+
                     newConsumptions.push({
-                        itemId: s.supplyId,
-                        name: s.name,
+                        itemId: displayId,
+                        name: displayName,
                         type: 'supply',
-                        lot: 'SIN LOTE', // Default
+                        lot: 'SIN LOTE',
+                        quantityConsumed: req.quantity * initialQty,
+                        quantityWaste: 0
+                    });
+                 });
+            } else if (selectedPack.suppliesUsed) {
+                // FALLBACK: Usar datos guardados en el pack si no se encuentra modelo
+                selectedPack.suppliesUsed.forEach(s => {
+                    const freshSupply = supplies.find(sup => sup.id === s.supplyId) || 
+                                      supplies.find(sup => sup.name.trim().toLowerCase() === s.name.trim().toLowerCase());
+                    
+                    let displayName = s.name;
+                    let displayId = s.supplyId || '';
+
+                    if (freshSupply) {
+                        displayId = freshSupply.id;
+                        displayName = freshSupply.name;
+                        if (freshSupply.code) {
+                            displayName = `[${freshSupply.code}] ${freshSupply.name}`;
+                        }
+                    }
+
+                    newConsumptions.push({
+                        itemId: displayId,
+                        name: displayName,
+                        type: 'supply',
+                        lot: 'SIN LOTE',
                         quantityConsumed: s.quantity,
                         quantityWaste: 0
                     });
@@ -84,9 +143,7 @@ const CreateProductionReport: React.FC = () => {
 
             setConsumptions(newConsumptions);
         } 
-        // En modo edición, NO reseteamos consumos automáticamente al cargar la página, 
-        // solo si el usuario CAMBIA el pack en el dropdown (lo cual es raro pero posible).
-    }, [selectedPack, isEditing]);
+    }, [selectedPack, isEditing, supplies, packModels]); 
 
     const handleConsumptionChange = (index: number, field: keyof ProductionConsumption, value: any) => {
         const updated = [...consumptions];

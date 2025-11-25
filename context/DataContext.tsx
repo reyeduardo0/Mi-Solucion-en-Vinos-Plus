@@ -52,6 +52,7 @@ interface DataContextType {
     updateAlbaran: (albaran: Albaran) => Promise<void>;
     deleteAlbaran: (albaran: Albaran) => Promise<void>;
 
+    // FIX: Changed return type to Promise<string> to allow returning the new ID
     addNewSupply: (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }) => Promise<string>;
     addSupplyStock: (supplyId: string, quantity: number, lot: string) => Promise<void>;
     updateSupply: (supply: Supply) => Promise<void>;
@@ -423,7 +424,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await addAuditLog(`Eliminó la entrada "${albaran.id}"`);
     };
     
-    const addNewSupply = async (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }): Promise<string> => {
+    const addNewSupply = async (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }) => {
         const dbData = { name: supplyData.name.toUpperCase(), code: supplyData.code?.toUpperCase(), type: supplyData.type, unit: supplyData.unit, min_stock: supplyData.minStock, quantity: 0 };
         const { data, error } = await supabase!.from('supplies').insert(dbData).select().single();
         if (error) throw error;
@@ -432,6 +433,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             await addSupplyStock(data.id, initialData.quantity, initialData.lot);
         }
         await fetchData();
+        // FIX: Return the new supply ID
         return data.id;
     };
 
@@ -456,7 +458,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
     const updateSupplyDetails = async (id: string, newName: string, newCode: string, oldName: string) => {
         const upperName = newName.toUpperCase();
-        const upperCode = newCode.toUpperCase();
+        const upperCode = newCode ? newCode.toUpperCase() : '';
+        const lowerOldName = oldName.trim().toLowerCase();
         
         // 1. Update Supplies Table
         const { error: supplyError } = await supabase!.from('supplies')
@@ -475,62 +478,49 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 .eq('item_name', oldName);
         }
 
-        // 3. Update Pack Models (JSONB)
-        const { data: models } = await supabase!.from('pack_models').select('*');
-        if (models) {
-            for (const model of models) {
+        // Helper to update JSONB arrays
+        const updateJsonbField = async (table: string, column: string, selectQuery: string = '*') => {
+             const { data: rows } = await supabase!.from(table).select(selectQuery);
+             if (!rows) return;
+             
+             for (const row of rows) {
                 let changed = false;
-                const newReqs = (model.supply_requirements || []).map((req: any) => {
-                    if (req.supplyId === id) {
+                const list = row[column] || [];
+                const newList = list.map((item: any) => {
+                    // Match by ID or Case-insensitive Name
+                    const itemId = item.supplyId || item.itemId; 
+                    const itemName = item.name;
+                    
+                    if (itemId === id || (itemName && itemName.trim().toLowerCase() === lowerOldName)) {
                         changed = true;
-                        return { ...req, name: upperName, code: upperCode };
+                        return { 
+                            ...item, 
+                            ...(item.supplyId !== undefined ? { supplyId: id } : {}),
+                            ...(item.itemId !== undefined ? { itemId: id } : {}),
+                            name: upperName,
+                            // Add/Update code if it exists or if we want to ensure it is there
+                            ...(item.code !== undefined || table === 'pack_models' ? { code: upperCode } : {}) 
+                        };
                     }
-                    return req;
+                    return item;
                 });
+
                 if (changed) {
-                    await supabase!.from('pack_models').update({ supply_requirements: newReqs }).eq('id', model.id);
+                    await supabase!.from(table).update({ [column]: newList }).eq('id', row.id);
                 }
-            }
-        }
+             }
+        };
+
+        // 3. Update Pack Models (JSONB)
+        await updateJsonbField('pack_models', 'supply_requirements');
 
         // 4. Update Wine Packs (JSONB)
-        const { data: packsData } = await supabase!.from('wine_packs').select('*');
-        if (packsData) {
-            for (const pack of packsData) {
-                let changed = false;
-                const newSuppliesUsed = (pack.supplies_used || []).map((s: any) => {
-                    if (s.supplyId === id) {
-                        changed = true;
-                        return { ...s, name: upperName }; // Packs don't strictly store code, but name is used
-                    }
-                    return s;
-                });
-                if (changed) {
-                    await supabase!.from('wine_packs').update({ supplies_used: newSuppliesUsed }).eq('id', pack.id);
-                }
-            }
-        }
+        await updateJsonbField('wine_packs', 'supplies_used');
 
         // 5. Update Production Reports (JSONB)
-        const { data: reports } = await supabase!.from('production_reports').select('*');
-        if (reports) {
-            for (const report of reports) {
-                let changed = false;
-                const newConsumptions = (report.consumptions || []).map((c: any) => {
-                    // Match by itemId (which holds supplyId for supplies) OR by name if legacy
-                    if ((c.type === 'supply' && c.itemId === id) || (c.type === 'supply' && c.name === oldName)) {
-                        changed = true;
-                        return { ...c, name: upperName }; 
-                    }
-                    return c;
-                });
-                if (changed) {
-                    await supabase!.from('production_reports').update({ consumptions: newConsumptions }).eq('id', report.id);
-                }
-            }
-        }
+        await updateJsonbField('production_reports', 'consumptions');
         
-        await addAuditLog(`Actualizó detalles del consumible (Global): ${oldName} -> ${upperName} (Code: ${upperCode})`);
+        await addAuditLog(`Actualizó detalles del consumible (Global): ${oldName} -> ${upperName}`);
         await fetchData();
     };
 
@@ -562,7 +552,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 for (const model of models) {
                     let changed = false;
                     const newReqs = (model.supply_requirements || []).map((req: any) => {
-                        if (req.supplyId === sourceId) {
+                        if (req.supplyId === sourceId || req.name === sourceSupply.name) {
                             changed = true;
                             // Update to Master ID and Name
                             return { ...req, supplyId: masterId, name: masterSupply.name, code: masterSupply.code };
@@ -581,7 +571,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 for (const pack of packsData) {
                     let changed = false;
                     const newSuppliesUsed = (pack.supplies_used || []).map((s: any) => {
-                        if (s.supplyId === sourceId) {
+                        if (s.supplyId === sourceId || s.name === sourceSupply.name) {
                             changed = true;
                             return { ...s, supplyId: masterId, name: masterSupply.name };
                         }
