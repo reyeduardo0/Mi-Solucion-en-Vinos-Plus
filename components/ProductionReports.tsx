@@ -1,6 +1,5 @@
 
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import Card from './ui/Card';
@@ -15,11 +14,13 @@ const PlusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-
 const TrashIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>;
 const PrinterIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm7-8V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>;
 const EditIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" /></svg>;
+const SearchIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>;
 
 const ProductionReports: React.FC = () => {
     const navigate = useNavigate();
     const { productionReports, packs, deleteProductionReport } = useData();
     const [reportToDelete, setReportToDelete] = useState<string | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const handleDelete = async () => {
         if(reportToDelete) {
@@ -33,6 +34,19 @@ const ProductionReports: React.FC = () => {
             }
         }
     };
+
+    const filteredReports = useMemo(() => {
+        return productionReports.filter(report => {
+            const pack = packs.find(p => p.id === report.packId);
+            const term = searchTerm.toLowerCase();
+            
+            const reportIdMatch = report.id.toLowerCase().includes(term);
+            const packOrderMatch = pack?.orderId.toLowerCase().includes(term);
+            const packModelMatch = pack?.modelName.toLowerCase().includes(term);
+            
+            return reportIdMatch || packOrderMatch || packModelMatch;
+        });
+    }, [productionReports, packs, searchTerm]);
 
     const handlePrintPDF = (report: any, pack: any) => {
         const doc = new jsPDF();
@@ -130,9 +144,24 @@ const ProductionReports: React.FC = () => {
                 </Button>
             </div>
 
+            <Card className="mb-6">
+                <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <SearchIcon />
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Buscar por ID de Parte, Nº Pedido o Modelo..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500"
+                    />
+                </div>
+            </Card>
+
             <div className="grid grid-cols-1 gap-6">
-                {productionReports.length > 0 ? (
-                    productionReports.map(report => {
+                {filteredReports.length > 0 ? (
+                    filteredReports.map(report => {
                         const pack = packs.find(p => p.id === report.packId);
                         return (
                             <Card key={report.id} className="hover:shadow-md transition-shadow border border-gray-200">
@@ -179,8 +208,8 @@ const ProductionReports: React.FC = () => {
                 ) : (
                     <div className="text-center py-12 bg-white rounded-lg shadow border border-gray-200">
                         <ProductionIcon />
-                        <h3 className="text-xl font-semibold text-gray-700 mt-4">No hay partes de montaje</h3>
-                        <p className="text-gray-500 mt-2">Crea un nuevo parte para finalizar la producción de un pack y registrar mermas.</p>
+                        <h3 className="text-xl font-semibold text-gray-700 mt-4">No se encontraron partes de montaje</h3>
+                        <p className="text-gray-500 mt-2">Intenta ajustar el criterio de búsqueda o crea un nuevo parte.</p>
                     </div>
                 )}
             </div>
