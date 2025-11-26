@@ -1,10 +1,19 @@
+
 import React from 'react';
 import Card from './ui/Card';
 
 const changelogData = [
     {
-        version: '1.6.6',
+        version: '1.7.0',
         date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'fix', text: 'Actualización mayor del sistema para sincronización de despliegue.' },
+            { type: 'improvement', text: 'Optimización de carga y seguridad en variables de entorno.' },
+        ]
+    },
+    {
+        version: '1.6.6',
+        date: '25 de noviembre de 2025',
         changes: [
             { type: 'fix', text: 'Eliminación total de referencias a claves API en index.html para despliegue seguro.' },
             { type: 'improvement', text: 'Configuración estricta de variables de entorno para servicios de IA.' },

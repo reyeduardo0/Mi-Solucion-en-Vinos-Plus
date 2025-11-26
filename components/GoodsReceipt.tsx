@@ -5,11 +5,11 @@ import { Albaran, Pallet, Supply } from '../types';
 import Card from './ui/Card';
 import Button from './ui/Button';
 import Spinner from './ui/Spinner';
+import ConfirmationModal from './ui/ConfirmationModal';
+import PalletInput from './goods-receipt/PalletInput';
 import { useData } from '../context/DataContext';
 import { toDateTimeLocalInput, fileToBase64, capitalizeWords, getErrorMessage, generateUUID } from '../utils/helpers';
-import ConfirmationModal from './ui/ConfirmationModal';
 import { extractDataFromImage } from '../services/geminiService';
-import PalletInput from './goods-receipt/PalletInput';
 
 interface PalletGroup {
     id: string; // for react key
@@ -85,7 +85,7 @@ const GoodsReceipt: React.FC = () => {
     const initialType = searchParams.get('type') === 'consumable' ? 'consumable' : 'product';
     const isAIAvailable = useMemo(() => !!(window as any).process?.env?.API_KEY, []);
 
-    const assignedPalletsCount = useMemo(() => palletGroups.reduce((acc, group) => acc + (group.palletCount || 0), 0), [palletGroups]);
+    const assignedPalletsCount = useMemo(() => palletGroups.reduce((acc, group) => acc + (group.palletCount || 0), [palletGroups]));
     const isPalletCountMismatch = totalPallets > 0 && totalPallets !== assignedPalletsCount;
 
     // Initialize with a group if new entry

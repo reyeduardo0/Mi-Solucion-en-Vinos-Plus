@@ -1,5 +1,5 @@
 
-/* Force Git Sync: v1.6.2 - Ensure Dashboard stability fix is deployed */
+/* Force Git Sync: v1.7.0 */
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from './ui/Card';
@@ -25,8 +25,6 @@ const Dashboard: React.FC = () => {
   const navigateTo = useNavigate();
   const { albaranes, incidents, packs, salidas, inventoryStock } = useData();
   
-  // FIX: State to track if component has mounted. This prevents Recharts from trying to measure
-  // the container dimension before the DOM is fully painted, resolving the "width(-1)" error.
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
@@ -86,7 +84,6 @@ const Dashboard: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Added min-w-0 to prevent grid blowout causing chart sizing issues */}
         <Card title="Resumen de Movimientos" className="lg:col-span-2 min-w-0">
           <div style={{ width: '100%', height: 300 }}>
             {isMounted && (
@@ -123,6 +120,9 @@ const Dashboard: React.FC = () => {
             </div>
         </Card>
       </div>
+      <footer className="mt-8 text-center text-xs text-gray-400">
+        v1.7.0 © 2025 Mi Solución en Vinos
+      </footer>
     </div>
   );
 };
