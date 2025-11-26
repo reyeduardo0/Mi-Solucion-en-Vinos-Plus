@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 // FIX: Changed to a type-only import for Session.
@@ -53,22 +52,44 @@ const AppRoutes: React.FC = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const fetchSession = async () => {
-            // More robust session fetching with error handling.
-            const { data, error } = await supabase!.auth.getSession();
-            if (error) {
-                console.error("Error fetching session on initial load:", error.message);
-                setSession(null); // Ensure session is cleared on error
-            } else {
+        const initializeAuth = async () => {
+            try {
+                // More robust session fetching with error handling.
+                const { data, error } = await supabase!.auth.getSession();
+                
+                if (error) {
+                    throw error;
+                }
+                
                 setSession(data.session);
+            } catch (error: any) {
+                console.error("Auth initialization error:", error.message);
+                
+                // FIX: If the refresh token is invalid or not found (stale local storage),
+                // force a sign out to clear the browser's storage and allow a fresh login.
+                if (error.message && (error.message.includes("Refresh Token") || error.message.includes("Invalid"))) {
+                    console.warn("Clearing invalid session data...");
+                    await supabase!.auth.signOut();
+                }
+                
+                setSession(null);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
         
-        fetchSession();
+        initializeAuth();
 
-        const { data: { subscription } } = supabase!.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
+        const { data: { subscription } } = supabase!.auth.onAuthStateChange((event, session) => {
+            if (event === 'TOKEN_REFRESH_PREVIOUSLY_FAILED') {
+                // Handle specific refresh failure event
+                console.warn("Token refresh failed, clearing session.");
+                setSession(null);
+            } else if (event === 'SIGNED_OUT') {
+                setSession(null);
+            } else {
+                setSession(session);
+            }
         });
 
         return () => subscription.unsubscribe();
