@@ -4,40 +4,8 @@ import Card from './ui/Card';
 
 const changelogData = [
     {
-        version: '1.7.4',
-        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
-        changes: [
-            { type: 'fix', text: 'Limpieza profunda de código para cumplimiento de seguridad en despliegue.' },
-            { type: 'improvement', text: 'Actualización de lógica de API para uso estricto de variables de entorno.' },
-        ]
-    },
-    {
-        version: '1.7.3',
-        date: '25 de noviembre de 2025',
-        changes: [
-            { type: 'fix', text: 'Reconfiguración de Vite para asegurar limpieza de caché en construcción.' },
-            { type: 'fix', text: 'Eliminación de rastros de API Key en historial de archivos.' },
-        ]
-    },
-    {
-        version: '1.7.2',
-        date: '25 de noviembre de 2025',
-        changes: [
-            { type: 'fix', text: 'Eliminación de referencias a API Key en index.html.' },
-            { type: 'improvement', text: 'Uso exclusivo de VITE_API_KEY.' },
-        ]
-    },
-    {
-        version: '1.7.1',
-        date: '25 de noviembre de 2025',
-        changes: [
-            { type: 'fix', text: 'Configuración de limpieza de salida en Vite (emptyOutDir).' },
-            { type: 'fix', text: 'Regeneración de hash de archivos JS para evitar caché contaminado.' },
-        ]
-    },
-    {
         version: '1.7.0',
-        date: '25 de noviembre de 2025',
+        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
         changes: [
             { type: 'fix', text: 'Actualización mayor del sistema para sincronización de despliegue.' },
             { type: 'improvement', text: 'Optimización de carga y seguridad en variables de entorno.' },
