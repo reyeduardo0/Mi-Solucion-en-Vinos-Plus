@@ -1,10 +1,19 @@
+
 import React from 'react';
 import Card from './ui/Card';
 
 const changelogData = [
     {
-        version: '1.6.4',
+        version: '1.6.5',
         date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'fix', text: 'Limpieza profunda de credenciales en código fuente para pasar auditoría de seguridad de Netlify.' },
+            { type: 'improvement', text: 'Validación de entorno de despliegue.' },
+        ]
+    },
+    {
+        version: '1.6.4',
+        date: '25 de noviembre de 2025',
         changes: [
             { type: 'fix', text: 'Resolución de error de seguridad en despliegue: Clave API movida a variables de entorno.' },
             { type: 'fix', text: 'Sincronización forzada de versión para producción.' },
