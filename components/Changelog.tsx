@@ -1,11 +1,18 @@
-
 import React from 'react';
 import Card from './ui/Card';
 
 const changelogData = [
     {
-        version: '1.6.3',
+        version: '1.6.4',
         date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'fix', text: 'Resolución de error de seguridad en despliegue: Clave API movida a variables de entorno.' },
+            { type: 'fix', text: 'Sincronización forzada de versión para producción.' },
+        ]
+    },
+    {
+        version: '1.6.3',
+        date: '25 de noviembre de 2025',
         changes: [
             { type: 'fix', text: 'Corrección de seguridad crítica: Eliminada clave API expuesta para permitir despliegue en Netlify.' },
             { type: 'improvement', text: 'Configuración actualizada para usar Variables de Entorno (VITE_API_KEY).' },

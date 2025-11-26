@@ -26,8 +26,8 @@
     <!-- PEGA AQUÍ TUS CLAVES DE SUPABASE -->
     <script>
       window.SUPABASE_CONFIG = {
-        URL: 'https://hfjlmzkcsyegwchdmwhd.supabase.co', // <-- Pega tu URL aquí
-        ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhmamxtemtjc3llZ3djaGRtd2hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4NzMyOTAsImV4cCI6MjA3NjQ0OTI5MH0.n8gKG9S65rWrYT2JkYUOADSeOob9njE2jgV6Qq3pANQ' // <-- Pega tu Clave Anónima aquí
+        URL: 'https://hfjlmzkcsyegwchdmwhd.supabase.co', 
+        ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhmamxtemtjc3llZ3djaGRtd2hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4NzMyOTAsImV4cCI6MjA3NjQ0OTI5MH0.n8gKG9S65rWrYT2JkYUOADSeOob9njE2jgV6Qq3pANQ' 
       };
     </script>
 
@@ -50,8 +50,9 @@
       // Define the environment variable for the application at runtime
       window.process = window.process || {};
       window.process.env = window.process.env || {};
-      // SECURITY FIX: API Key removed from source to pass Netlify Secret Scanning.
-      // Please configure VITE_API_KEY in Netlify Environment Variables.
+      
+      // SECURITY FIX: Removed hardcoded API Key.
+      // The app will now use VITE_API_KEY from Netlify Environment Variables.
       window.process.env.API_KEY = '';
     </script>
 </head>
