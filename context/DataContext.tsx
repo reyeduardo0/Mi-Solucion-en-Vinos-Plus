@@ -61,6 +61,9 @@ interface DataContextType {
     updateSupplyDetails: (id: string, newName: string, newCode: string, oldName: string) => Promise<void>;
     mergeSupplies: (masterId: string, sourceIds: string[]) => Promise<void>;
     
+    updateProductDetails: (oldName: string, newName: string) => Promise<void>;
+    mergeProducts: (masterName: string, sourceNames: string[]) => Promise<void>;
+
     addPackModel: (model: Omit<PackModel, 'id'|'created_at'>) => Promise<void>;
     updatePackModel: (model: PackModel) => Promise<void>;
     deletePackModel: (id: string, name: string) => Promise<void>;
@@ -290,7 +293,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         };
     }, [session.user, fetchData]);
 
-    // ... products and inventoryStock memos remain the same ...
     const products = useMemo(() => {
         const productSet = new Set<string>();
         albaranes.forEach(albaran => {
@@ -596,6 +598,62 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await fetchData();
     };
 
+    const updateProductDetails = async (oldName: string, newName: string) => {
+        const upperNewName = newName.toUpperCase();
+        
+        // 1. Update Pallets
+        const { error: palletError } = await supabase!.from('pallets')
+            .update({ product_name: upperNewName })
+            .eq('product_name', oldName);
+        if (palletError) throw palletError;
+
+        // 2. Update Mermas
+        const { error: mermaError } = await supabase!.from('mermas')
+            .update({ item_name: upperNewName })
+            .eq('item_name', oldName)
+            .eq('item_type', 'product');
+        if (mermaError) throw mermaError;
+
+        // 3. Update JSONB fields (Pack Models, Packs, Reports)
+        const updateJsonbField = async (table: string, column: string, selectQuery: string = '*') => {
+             const { data: rows } = await supabase!.from(table).select(selectQuery);
+             if (!rows) return;
+             
+             for (const row of rows) {
+                let changed = false;
+                const list = row[column] || [];
+                const newList = list.map((item: any) => {
+                    // For products, we usually match by name since there is no centralized ID table
+                    const itemName = item.productName || item.name;
+                    if (itemName && itemName === oldName) {
+                        changed = true;
+                        return { ...item, ...(item.productName ? { productName: upperNewName } : { name: upperNewName }) };
+                    }
+                    return item;
+                });
+
+                if (changed) {
+                    await supabase!.from(table).update({ [column]: newList }).eq('id', row.id);
+                }
+             }
+        };
+
+        await updateJsonbField('pack_models', 'product_requirements');
+        await updateJsonbField('wine_packs', 'contents');
+        await updateJsonbField('production_reports', 'consumptions');
+
+        await addAuditLog(`Actualizó nombre del producto (Global): ${oldName} -> ${upperNewName}`);
+        await fetchData();
+    };
+
+    const mergeProducts = async (masterName: string, sourceNames: string[]) => {
+        for (const sourceName of sourceNames) {
+            await updateProductDetails(sourceName, masterName);
+        }
+        await addAuditLog(`Fusionó productos en "${masterName}"`);
+        await fetchData();
+    };
+
     const deleteSupply = async (supplyId: string, supplyName: string) => {
         const { error } = await supabase!.from('supplies').delete().eq('id', supplyId);
         if (error) throw error;
@@ -736,7 +794,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     
     const addUser = async (userData: Omit<User, 'id'> & { password?: string }) => {
         if (!userData.password) throw new Error("La contraseña es obligatoria para nuevos usuarios.");
-        const tempSupabase = createClient(window.SUPABASE_CONFIG!.URL, window.SUPABASE_CONFIG!.ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+        const tempSupabase = createClient((import.meta as any).env.VITE_SUPABASE_URL, (import.meta as any).env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
         const { data: authData, error: authError } = await tempSupabase.auth.signUp({ email: userData.email, password: userData.password, options: { data: { full_name: userData.name, role_id: userData.roleId } } });
         if (authError) throw authError;
         if (!authData.user) throw new Error("No se pudo crear el usuario en Supabase Auth.");
@@ -798,6 +856,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         addAlbaran, updateAlbaran, deleteAlbaran,
         addNewSupply, addSupplyStock, updateSupply, deleteSupply, updateSupplyLot,
         updateSupplyDetails, mergeSupplies, 
+        updateProductDetails, mergeProducts, // New product adjustment functions
         addPackModel, updatePackModel, deletePackModel,
         addPack, updatePack, deletePack, handleDispatch, addMerma, addProductionReport, updateProductionReport, deleteProductionReport,
         addIncident, resolveIncident,
