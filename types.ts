@@ -1,5 +1,4 @@
 
-
 export type Permission = 
   | 'users:manage'
   | 'entries:create'
@@ -54,6 +53,7 @@ export interface Incident {
 export interface Product {
   id: string;
   name: string;
+  code?: string; // NEW: Added code field
   type: 'wine' | 'packaging';
   sku: string;
 }
@@ -78,6 +78,7 @@ export interface Pallet {
     name: string;
     lot: string;
   };
+  productCode?: string; // NEW: Added to store product code from DB
   boxesPerPallet?: number;
   bottlesPerBox?: number;
   totalBottles?: number;
@@ -188,7 +189,12 @@ export interface DispatchNote {
     carrier: string;
     truckPlate?: string;
     driver?: string;
-    packIds: string[]; // Array of IDs of the WinePacks included
+    packIds: string[]; // Array of IDs of the WinePacks included (kept for reference)
+    dispatchDetails?: { // NEW: Detailed breakdown for partial dispatch
+        packId: string;
+        expeditionLot: string;
+        quantity: number;
+    }[];
     status: 'Pendiente' | 'Despachado';
     created_at?: string;
 }
@@ -231,6 +237,7 @@ export interface ProductionReport {
     id: string;
     packId: string; // Link to WinePack
     reportDate: string;
+    expeditionLot?: string; // Nuevo: Lote de Expedición
     producedQuantity: number; // Actual good packs produced
     consumptions: ProductionConsumption[];
     notes?: string;

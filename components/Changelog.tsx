@@ -4,6 +4,22 @@ import Card from './ui/Card';
 
 const changelogData = [
     {
+        version: '1.8.1',
+        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'new', text: 'Implementación de Despacho Parcial por Lote de Expedición.' },
+            { type: 'improvement', text: 'Cálculo de inventario disponible en tiempo real basado en producción y salidas previas.' },
+        ]
+    },
+    {
+        version: '1.8.0',
+        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
+        changes: [
+            { type: 'new', text: 'Implementación completa de Códigos de Producto en Ajustes de Inventario.' },
+            { type: 'fix', text: 'Actualización forzada de estructura de datos para soportar nuevos campos.' },
+        ]
+    },
+    {
         version: '1.7.9',
         date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
         changes: [

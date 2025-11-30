@@ -43,8 +43,10 @@ const ProductionReports: React.FC = () => {
             const reportIdMatch = report.id.toLowerCase().includes(term);
             const packOrderMatch = pack?.orderId.toLowerCase().includes(term);
             const packModelMatch = pack?.modelName.toLowerCase().includes(term);
+            // Search by Expedition Lot
+            const expeditionLotMatch = report.expeditionLot?.toLowerCase().includes(term);
             
-            return reportIdMatch || packOrderMatch || packModelMatch;
+            return reportIdMatch || packOrderMatch || packModelMatch || expeditionLotMatch;
         });
     }, [productionReports, packs, searchTerm]);
 
@@ -99,8 +101,15 @@ const ProductionReports: React.FC = () => {
         doc.rect(175, finalY + 1, 20, 8, 'F'); // Input area highlight
         doc.text(formatDateSafe(report.reportDate), 176, finalY + 6);
 
+        // Lote Expedición line (if exists)
+        if (report.expeditionLot) {
+            finalY += 12;
+            doc.setFontSize(9);
+            doc.text(`LOTE EXPEDICIÓN: ${report.expeditionLot}`, 16, finalY);
+        }
+
         // TABLA DE CONSUMOS
-        finalY += 15;
+        finalY += report.expeditionLot ? 8 : 15;
         doc.setFontSize(10);
         doc.setFont("helvetica", "bolditalic");
         doc.text("CONSUMOS REALIZADOS:", 14, finalY - 2);
@@ -151,7 +160,7 @@ const ProductionReports: React.FC = () => {
                     </div>
                     <input
                         type="text"
-                        placeholder="Buscar por ID de Parte, Nº Pedido o Modelo..."
+                        placeholder="Buscar por ID, Pedido, Modelo o Lote de Expedición..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="pl-10 w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500"
@@ -174,9 +183,16 @@ const ProductionReports: React.FC = () => {
                                         <p className="text-sm text-gray-500">
                                             Fecha: {formatDateSafe(report.reportDate)} | Pack: {pack ? `${pack.orderId} (${pack.modelName})` : report.packId}
                                         </p>
-                                        <p className="text-sm text-gray-600 mt-1">
-                                            Producido: <strong>{report.producedQuantity}</strong> unidades
-                                        </p>
+                                        <div className="flex space-x-4 mt-2">
+                                            <p className="text-sm text-gray-600">
+                                                Producido: <strong>{report.producedQuantity}</strong> unidades
+                                            </p>
+                                            {report.expeditionLot && (
+                                                <p className="text-sm text-blue-600">
+                                                    Lote Exp: <span className="font-mono font-bold">{report.expeditionLot}</span>
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="mt-4 md:mt-0 flex space-x-2">
                                         <Button onClick={() => navigate(`/partes-montaje/editar/${report.id}`)} variant="secondary" className="p-2" title="Editar">

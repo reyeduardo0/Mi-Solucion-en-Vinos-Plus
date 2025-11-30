@@ -26,8 +26,10 @@ const InventoryAdjustments: React.FC = () => {
             ).sort((a, b) => a.name.localeCompare(b.name));
         } else {
             // For products, 'id' is same as 'name' in our current context structure
+            // Now filtering by code too
             return products.filter(p => 
-                p.name.toLowerCase().includes(searchTerm.toLowerCase())
+                p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                (p.code && p.code.toLowerCase().includes(searchTerm.toLowerCase()))
             ).sort((a, b) => a.name.localeCompare(b.name));
         }
     }, [supplies, products, searchTerm, activeTab]);
@@ -52,7 +54,7 @@ const InventoryAdjustments: React.FC = () => {
             } else {
                 const p = products.find(x => x.id === id); // id is name for products
                 baseName = p?.name || '';
-                baseCode = ''; // Products don't have code in this context
+                baseCode = p?.code || ''; 
             }
 
             return {
@@ -79,7 +81,8 @@ const InventoryAdjustments: React.FC = () => {
                 }
             } else {
                 // For products, ID is the original name
-                await updateProductDetails(id, edit.name);
+                // Now passing code to updateProductDetails
+                await updateProductDetails(id, edit.name, edit.code);
             }
             
             setEdits(prev => {
@@ -97,7 +100,7 @@ const InventoryAdjustments: React.FC = () => {
 
     const handleMergeClick = () => {
         if (selectedIds.size < 2) return;
-        setMasterId(Array.from(selectedIds)[0]); 
+        setMasterId((Array.from(selectedIds) as string[])[0]); 
         setShowMergeModal(true);
     };
 
@@ -138,7 +141,7 @@ const InventoryAdjustments: React.FC = () => {
                             onChange={e => setMasterId(e.target.value)}
                             className="mt-1 block w-full p-2 border border-gray-300 rounded-md"
                         >
-                            {Array.from(selectedIds).map((id: string) => {
+                            {(Array.from(selectedIds) as string[]).map(id => {
                                 let name = '';
                                 if (activeTab === 'supplies') {
                                     const s = supplies.find(x => x.id === id);
@@ -198,7 +201,7 @@ const InventoryAdjustments: React.FC = () => {
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="px-4 py-3 w-10"><input type="checkbox" disabled /></th>
-                                {activeTab === 'supplies' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Código</th>}
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Código</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre / Descripción</th>
                                 <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Acción</th>
                             </tr>
@@ -226,17 +229,15 @@ const InventoryAdjustments: React.FC = () => {
                                                 className="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
                                             />
                                         </td>
-                                        {activeTab === 'supplies' && (
-                                            <td className="px-4 py-4">
-                                                <input 
-                                                    type="text" 
-                                                    value={currentCode}
-                                                    onChange={e => handleEditChange(id, 'code', e.target.value.toUpperCase())}
-                                                    placeholder="Ej: EMB001"
-                                                    className="w-full p-1 border border-gray-300 rounded text-sm uppercase font-mono"
-                                                />
-                                            </td>
-                                        )}
+                                        <td className="px-4 py-4">
+                                            <input 
+                                                type="text" 
+                                                value={currentCode}
+                                                onChange={e => handleEditChange(id, 'code', e.target.value.toUpperCase())}
+                                                placeholder="Ej: PTA..."
+                                                className="w-full p-1 border border-gray-300 rounded text-sm uppercase font-mono"
+                                            />
+                                        </td>
                                         <td className="px-4 py-4">
                                             <input 
                                                 type="text" 

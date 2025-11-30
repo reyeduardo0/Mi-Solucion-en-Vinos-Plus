@@ -61,7 +61,7 @@ interface DataContextType {
     updateSupplyDetails: (id: string, newName: string, newCode: string, oldName: string) => Promise<void>;
     mergeSupplies: (masterId: string, sourceIds: string[]) => Promise<void>;
     
-    updateProductDetails: (oldName: string, newName: string) => Promise<void>;
+    updateProductDetails: (oldName: string, newName: string, newCode?: string) => Promise<void>;
     mergeProducts: (masterName: string, sourceNames: string[]) => Promise<void>;
 
     addPackModel: (model: Omit<PackModel, 'id'|'created_at'>) => Promise<void>;
@@ -189,7 +189,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             
             const albaranesResult = await supabase!.from('albaranes').select(`
                     id, entryDate:entry_date, truckPlate:truck_plate, origin, carrier, driver, status, incidentDetails:incident_details, incidentImages:incident_images, created_at,
-                    pallets (id, palletNumber:palletnumber, productName:product_name, productLot:product_lot, boxesPerPallet:boxesperpallet, bottlesPerBox:bottlesperbox, totalBottles:totalbottles, eanBottle:eanbottle, eanBox:eanbox, sscc, labelImage:labelimage, incidentDescription:incident_description, incidentImages:incident_images, created_at)
+                    pallets (id, palletNumber:palletnumber, productName:product_name, productLot:product_lot, productCode:product_code, boxesPerPallet:boxesperpallet, bottlesPerBox:bottlesperbox, totalBottles:totalbottles, eanBottle:eanbottle, eanBox:eanbox, sscc, labelImage:labelimage, incidentDescription:incident_description, incidentImages:incident_images, created_at)
                 `).order('created_at', { ascending: false });
             if (albaranesResult.error) throw albaranesResult.error;
 
@@ -202,7 +202,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
             const [packsResult, salidasResult] = await Promise.all([
                 supabase!.from('wine_packs').select('id, modelId:model_id, modelName:model_name, orderId:order_id, quantity, creationDate:creation_date, contents, suppliesUsed:supplies_used, additionalComponents:additional_components, packImage:pack_image, status, created_at').order('created_at', { ascending: false }),
-                supabase!.from('dispatch_notes').select('id, dispatchDate:dispatch_date, customer, destination, carrier, truckPlate:truck_plate, driver, packIds:pack_ids, status, created_at').order('created_at', { ascending: false })
+                // UPDATE: Added dispatchDetails to select query
+                supabase!.from('dispatch_notes').select('id, dispatchDate:dispatch_date, customer, destination, carrier, truckPlate:truck_plate, driver, packIds:pack_ids, dispatchDetails:dispatch_details, status, created_at').order('created_at', { ascending: false })
             ]);
             if (packsResult.error) throw packsResult.error;
             if (salidasResult.error) throw salidasResult.error;
@@ -218,7 +219,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
             let fetchedProdReports: any[] = [];
             try {
-                const prodReportsResult = await supabase!.from('production_reports').select('id, packId:pack_id, reportDate:report_date, producedQuantity:produced_quantity, consumptions, notes, created_at').order('created_at', { ascending: false });
+                const prodReportsResult = await supabase!.from('production_reports').select('id, packId:pack_id, reportDate:report_date, producedQuantity:produced_quantity, expeditionLot:expedition_lot, consumptions, notes, created_at').order('created_at', { ascending: false });
                 if (!prodReportsResult.error) {
                     fetchedProdReports = prodReportsResult.data || [];
                 }
@@ -245,12 +246,12 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                     const hasProductQuantities = (p.boxesPerPallet != null && p.boxesPerPallet > 0) || (p.bottlesPerBox != null && p.bottlesPerBox > 0);
                     const matchesSupplyName = p.productName && supplyNames.has(p.productName);
                     if (hasProductQuantities) {
-                        return { ...basePallet, type: 'product', product: { name: p.productName || '', lot: p.productLot || '' }, boxesPerPallet: p.boxesPerPallet, bottlesPerBox: p.bottlesPerBox, totalBottles: p.totalBottles, eanBottle: p.eanBottle, eanBox: p.eanBox };
+                        return { ...basePallet, type: 'product', product: { name: p.productName || '', lot: p.productLot || '' }, productCode: p.productCode, boxesPerPallet: p.boxesPerPallet, bottlesPerBox: p.bottlesPerBox, totalBottles: p.totalBottles, eanBottle: p.eanBottle, eanBox: p.eanBox };
                     }
                     if (matchesSupplyName) {
                         return { ...basePallet, type: 'consumable', supplyName: p.productName, supplyQuantity: p.totalBottles, supplyLot: p.productLot, eanBox: p.eanBox };
                     }
-                    return { ...basePallet, type: 'product', product: { name: p.productName || '', lot: p.productLot || '' }, boxesPerPallet: p.boxesPerPallet, bottlesPerBox: p.bottlesPerBox, totalBottles: p.totalBottles, eanBottle: p.eanBottle, eanBox: p.eanBox };
+                    return { ...basePallet, type: 'product', product: { name: p.productName || '', lot: p.productLot || '' }, productCode: p.productCode, boxesPerPallet: p.boxesPerPallet, bottlesPerBox: p.bottlesPerBox, totalBottles: p.totalBottles, eanBottle: p.eanBottle, eanBox: p.eanBox };
                 });
                 return { ...albaran, pallets: processedPallets };
             });
@@ -274,6 +275,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         }
     }, [session.user]);
     
+    // ... useEffect, products, inventoryStock remain same ...
     useEffect(() => {
         if (session.user) {
             fetchData();
@@ -294,15 +296,20 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     }, [session.user, fetchData]);
 
     const products = useMemo(() => {
-        const productSet = new Set<string>();
+        const productMap = new Map<string, { code: string }>();
         albaranes.forEach(albaran => {
             albaran.pallets?.forEach(pallet => {
                 if (pallet.type === 'product' && pallet.product?.name) {
-                    productSet.add(pallet.product.name);
+                    const existing = productMap.get(pallet.product.name);
+                    if (pallet.productCode) {
+                        productMap.set(pallet.product.name, { code: pallet.productCode });
+                    } else if (!existing) {
+                        productMap.set(pallet.product.name, { code: '' });
+                    }
                 }
             });
         });
-        return Array.from(productSet).map(name => ({ id: name, name, type: 'wine' as const, sku: '' }));
+        return Array.from(productMap.entries()).map(([name, details]) => ({ id: name, name, code: details.code, type: 'wine' as const, sku: '' }));
     }, [albaranes]);
     
     const inventoryStock = useMemo((): InventoryStockItem[] => {
@@ -313,7 +320,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 if (pallet.type === 'product' && pallet.product?.name && pallet.product?.lot) {
                     const key = `product-${pallet.product.name}-${pallet.product.lot}`;
                     if (!stockMap.has(key)) {
-                        stockMap.set(key, { name: pallet.product.name, type: 'Producto', lot: pallet.product.lot, unit: 'botellas', total: 0, inPacks: 0, inMerma: 0, available: 0 });
+                        stockMap.set(key, { name: pallet.product.name, code: pallet.productCode, type: 'Producto', lot: pallet.product.lot, unit: 'botellas', total: 0, inPacks: 0, inMerma: 0, available: 0 });
                     }
                     stockMap.get(key)!.total += pallet.totalBottles || 0;
                 } else if (pallet.type === 'consumable' && pallet.supplyName) {
@@ -396,14 +403,30 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         return result.sort((a, b) => a.name.localeCompare(b.name) || (a.lot || '').localeCompare(b.lot || ''));
     }, [albaranes, supplies, packs, mermas]);
 
-    // ... addAlbaran, updateAlbaran, deleteAlbaran, addNewSupply, addSupplyStock, updateSupply, deleteSupply, updateSupplyLot, updateSupplyDetails, mergeSupplies, addPackModel, updatePackModel, deletePackModel remain same ...
+    // ... helper functions ...
     const addAlbaran = async (albaran: Albaran) => {
         const { pallets, ...albaranData } = albaran;
         const dbAlbaran = { id: albaranData.id, entry_date: albaranData.entryDate, truck_plate: albaranData.truckPlate, origin: albaranData.origin, carrier: albaranData.carrier, driver: albaranData.driver, status: albaranData.status, incident_details: albaranData.incidentDetails, incident_images: albaranData.incidentImages };
         const { error: albaranError } = await supabase!.from('albaranes').insert(dbAlbaran);
         if (albaranError) throw albaranError;
         if (pallets && pallets.length > 0) {
-            const dbPallets = pallets.map(p => ({ id: p.id, albaran_id: albaranData.id, palletnumber: p.palletNumber, product_name: p.type === 'product' ? p.product?.name : p.supplyName, product_lot: p.type === 'product' ? p.product?.lot : p.supplyLot, boxesperpallet: p.boxesPerPallet, bottlesperbox: p.bottlesPerBox, totalbottles: p.type === 'consumable' ? p.supplyQuantity : p.totalBottles, eanbottle: p.eanBottle, eanbox: p.eanBox, sscc: p.sscc, labelimage: p.labelImage, incident_description: p.incident?.description, incident_images: p.incident?.images }));
+            const dbPallets = pallets.map(p => ({ 
+                id: p.id, 
+                albaran_id: albaranData.id, 
+                palletnumber: p.palletNumber, 
+                product_name: p.type === 'product' ? p.product?.name : p.supplyName, 
+                product_lot: p.type === 'product' ? p.product?.lot : p.supplyLot, 
+                product_code: p.type === 'product' ? p.productCode : null, 
+                boxesperpallet: p.boxesPerPallet, 
+                bottlesperbox: p.bottlesPerBox, 
+                totalbottles: p.type === 'consumable' ? p.supplyQuantity : p.totalBottles, 
+                eanbottle: p.eanBottle, 
+                eanbox: p.eanBox, 
+                sscc: p.sscc, 
+                labelimage: p.labelImage, 
+                incident_description: p.incident?.description, 
+                incident_images: p.incident?.images 
+            }));
             const { error: palletsError } = await supabase!.from('pallets').insert(dbPallets);
             if (palletsError) throw palletsError;
         }
@@ -418,7 +441,23 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const { error: deleteError } = await supabase!.from('pallets').delete().eq('albaran_id', albaranData.id);
         if (deleteError) throw deleteError;
         if (pallets && pallets.length > 0) {
-            const dbPallets = pallets.map(p => ({ id: p.id, albaran_id: albaranData.id, palletnumber: p.palletNumber, product_name: p.type === 'product' ? p.product?.name : p.supplyName, product_lot: p.type === 'product' ? p.product?.lot : p.supplyLot, boxesperpallet: p.boxesPerPallet, bottlesperbox: p.bottlesPerBox, totalbottles: p.type === 'consumable' ? p.supplyQuantity : p.totalBottles, eanbottle: p.eanBottle, eanbox: p.eanBox, sscc: p.sscc, labelimage: p.labelImage, incident_description: p.incident?.description, incident_images: p.incident?.images }));
+            const dbPallets = pallets.map(p => ({ 
+                id: p.id, 
+                albaran_id: albaranData.id, 
+                palletnumber: p.palletNumber, 
+                product_name: p.type === 'product' ? p.product?.name : p.supplyName, 
+                product_lot: p.type === 'product' ? p.product?.lot : p.supplyLot, 
+                product_code: p.type === 'product' ? p.productCode : null, 
+                boxesperpallet: p.boxesPerPallet, 
+                bottlesperbox: p.bottlesPerBox, 
+                totalbottles: p.type === 'consumable' ? p.supplyQuantity : p.totalBottles, 
+                eanbottle: p.eanBottle, 
+                eanbox: p.eanBox, 
+                sscc: p.sscc, 
+                labelimage: p.labelImage, 
+                incident_description: p.incident?.description, 
+                incident_images: p.incident?.images 
+            }));
             const { error: insertError } = await supabase!.from('pallets').insert(dbPallets);
             if (insertError) throw insertError;
         }
@@ -598,12 +637,13 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await fetchData();
     };
 
-    const updateProductDetails = async (oldName: string, newName: string) => {
+    const updateProductDetails = async (oldName: string, newName: string, newCode?: string) => {
         const upperNewName = newName.toUpperCase();
+        const upperCode = newCode ? newCode.toUpperCase() : null;
         
-        // 1. Update Pallets
+        // 1. Update Pallets (Name AND Code)
         const { error: palletError } = await supabase!.from('pallets')
-            .update({ product_name: upperNewName })
+            .update({ product_name: upperNewName, product_code: upperCode })
             .eq('product_name', oldName);
         if (palletError) throw palletError;
 
@@ -623,10 +663,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 let changed = false;
                 const list = row[column] || [];
                 const newList = list.map((item: any) => {
-                    // For products, we usually match by name since there is no centralized ID table
                     const itemName = item.productName || item.name;
                     if (itemName && itemName === oldName) {
                         changed = true;
+                        // Keep code if it's there or if we are not managing it strictly in JSON
                         return { ...item, ...(item.productName ? { productName: upperNewName } : { name: upperNewName }) };
                     }
                     return item;
@@ -642,13 +682,13 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await updateJsonbField('wine_packs', 'contents');
         await updateJsonbField('production_reports', 'consumptions');
 
-        await addAuditLog(`Actualizó nombre del producto (Global): ${oldName} -> ${upperNewName}`);
+        await addAuditLog(`Actualizó producto (Global): ${oldName} -> ${upperNewName} [Code: ${upperCode || '-'}]`);
         await fetchData();
     };
 
     const mergeProducts = async (masterName: string, sourceNames: string[]) => {
         for (const sourceName of sourceNames) {
-            await updateProductDetails(sourceName, masterName);
+            await updateProductDetails(sourceName, masterName); 
         }
         await addAuditLog(`Fusionó productos en "${masterName}"`);
         await fetchData();
@@ -721,13 +761,26 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     const handleDispatch = async (dispatchData: Omit<DispatchNote, 'id' | 'created_at' | 'status'>) => {
         const id = `SAL-${Date.now()}`;
         const note: DispatchNote = { ...dispatchData, id, status: 'Despachado' };
-        const { dispatchDate, customer, destination, carrier, truckPlate, driver, packIds, status } = note;
-        const dbNote = { id, dispatch_date: dispatchDate, customer, destination, carrier, truck_plate: truckPlate, driver, pack_ids: packIds, status };
+        // UPDATE: Destructure dispatchDetails and save to DB
+        const { dispatchDate, customer, destination, carrier, truckPlate, driver, packIds, status, dispatchDetails } = note;
+        const dbNote = { 
+            id, 
+            dispatch_date: dispatchDate, 
+            customer, 
+            destination, 
+            carrier, 
+            truck_plate: truckPlate, 
+            driver, 
+            pack_ids: packIds, 
+            dispatch_details: dispatchDetails,
+            status 
+        };
         const { error } = await supabase!.from('dispatch_notes').insert(dbNote);
         if (error) throw error;
-        for (const packId of dispatchData.packIds) {
-            await supabase!.from('wine_packs').update({ status: 'Despachado' }).eq('id', packId);
-        }
+        
+        // Removed automatic update of wine_packs status to 'Despachado' to allow partial dispatching.
+        // Status updates should be logic-based or manual if needed.
+        
         await addAuditLog(`Creó la salida "${id}" para el cliente "${dispatchData.customer}"`);
     };
 
@@ -740,8 +793,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     };
 
     const addProductionReport = async (report: Omit<ProductionReport, 'created_at'>) => {
-        const { id, packId, reportDate, producedQuantity, consumptions, notes } = report;
-        const dbReport = { id, pack_id: packId, report_date: reportDate, produced_quantity: producedQuantity, consumptions, notes };
+        const { id, packId, reportDate, producedQuantity, consumptions, notes, expeditionLot } = report;
+        const dbReport = { id, pack_id: packId, report_date: reportDate, expedition_lot: expeditionLot, produced_quantity: producedQuantity, consumptions, notes };
         
         const { error } = await supabase!.from('production_reports').insert(dbReport);
         if (error) throw error;
@@ -763,8 +816,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     };
     
     const updateProductionReport = async (report: ProductionReport) => {
-        const { id, producedQuantity, consumptions, reportDate, notes } = report;
-        const dbReport = { produced_quantity: producedQuantity, consumptions, report_date: reportDate, notes };
+        const { id, producedQuantity, consumptions, reportDate, notes, expeditionLot } = report;
+        const dbReport = { produced_quantity: producedQuantity, consumptions, report_date: reportDate, notes, expedition_lot: expeditionLot };
         const { error } = await supabase!.from('production_reports').update(dbReport).eq('id', id);
         if (error) throw error;
         
@@ -856,7 +909,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         addAlbaran, updateAlbaran, deleteAlbaran,
         addNewSupply, addSupplyStock, updateSupply, deleteSupply, updateSupplyLot,
         updateSupplyDetails, mergeSupplies, 
-        updateProductDetails, mergeProducts, // New product adjustment functions
+        updateProductDetails, mergeProducts, 
         addPackModel, updatePackModel, deletePackModel,
         addPack, updatePack, deletePack, handleDispatch, addMerma, addProductionReport, updateProductionReport, deleteProductionReport,
         addIncident, resolveIncident,

@@ -18,6 +18,7 @@ const CreateProductionReport: React.FC = () => {
     const [selectedPackId, setSelectedPackId] = useState('');
     const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
     const [producedQuantity, setProducedQuantity] = useState<number>(0);
+    const [expeditionLot, setExpeditionLot] = useState('');
     const [consumptions, setConsumptions] = useState<ProductionConsumption[]>([]);
     
     // If editing, we load the existing report data
@@ -28,12 +29,11 @@ const CreateProductionReport: React.FC = () => {
                 setSelectedPackId(existingReport.packId);
                 setReportDate(existingReport.reportDate.split('T')[0]);
                 setProducedQuantity(existingReport.producedQuantity);
+                setExpeditionLot(existingReport.expeditionLot || '');
                 
                 // REFRESH LOGIC: Ensure consumption names match current inventory names
-                // This fixes issues where renamed supplies still showed old names in reports
                 const refreshedConsumptions = existingReport.consumptions.map(c => {
                     if (c.type === 'supply') {
-                        // Try to find by ID first, then by Name (fuzzy match)
                         const freshSupply = supplies.find(s => s.id === c.itemId) || 
                                           supplies.find(s => s.name.trim().toLowerCase() === c.name.trim().toLowerCase());
                         
@@ -50,48 +50,59 @@ const CreateProductionReport: React.FC = () => {
         }
     }, [isEditing, id, productionReports, supplies]);
 
-    // Filtrar packs disponibles. Si editamos, DEBEMOS incluir el pack actual aunque tenga reporte.
+    // Filtrar packs disponibles
     const availablePacks = useMemo(() => {
-        const reportedPackIds = new Set(productionReports.map(r => r.packId));
-        return packs.filter(p => {
-            // Mostrar si el pack está ensamblado Y (no tiene reporte O es el pack que estamos editando)
-            return p.status === 'Ensamblado' && (!reportedPackIds.has(p.id) || (isEditing && p.id === selectedPackId));
-        });
-    }, [packs, productionReports, isEditing, selectedPackId]);
+        // Allow selection if editing or if it's a new report (partial production allows multiple reports per pack)
+        // Ideally we filter completed packs, but "completed" is subjective if partials are allowed.
+        // For now, list all 'Ensamblado' packs.
+        return packs.filter(p => p.status === 'Ensamblado');
+    }, [packs]);
 
     const selectedPack = useMemo(() => packs.find(p => p.id === selectedPackId), [selectedPackId, packs]);
 
-    // Auto-rellenar datos al seleccionar pack (SOLO si NO estamos editando o si cambiamos de pack manualmente)
+    // Calculate previous production for partial tracking
+    const productionStats = useMemo(() => {
+        if (!selectedPack) return { totalPlanned: 0, producedBefore: 0, remaining: 0 };
+        
+        const previousReports = productionReports.filter(r => r.packId === selectedPack.id && r.id !== id);
+        const producedBefore = previousReports.reduce((sum, r) => sum + r.producedQuantity, 0);
+        const totalPlanned = selectedPack.quantity || 0;
+        
+        return {
+            totalPlanned,
+            producedBefore,
+            remaining: Math.max(0, totalPlanned - producedBefore)
+        };
+    }, [selectedPack, productionReports, id]);
+
+    // Auto-rellenar datos al seleccionar pack
     useEffect(() => {
         if (!isEditing && selectedPack) {
-            // Si el pack tiene cantidad guardada, usarla. Si no, 1.
-            const initialQty = selectedPack.quantity || 1;
+            // Default to remaining quantity
+            const initialQty = productionStats.remaining > 0 ? productionStats.remaining : 1;
             setProducedQuantity(initialQty); 
 
             const newConsumptions: ProductionConsumption[] = [];
 
-            // 1. Vinos (Products) from Pack Content (Specific Lots)
+            // 1. Vinos
             if (selectedPack.contents) {
                 selectedPack.contents.forEach(c => {
                     newConsumptions.push({
-                        itemId: c.productName, // Usamos nombre como ID para productos vinos
+                        itemId: c.productName,
                         name: c.productName,
                         type: 'product',
                         lot: c.lot,
-                        quantityConsumed: c.quantity,
+                        quantityConsumed: c.quantity, // This logic might need adjustment for partials: total_needed / total_packs * current_packs
                         quantityWaste: 0
                     });
                 });
             }
 
-            // 2. Consumibles (Supplies)
-            // PREFERENCIA: Usar la definición del MODELO actual si existe, para asegurar nombres/códigos actualizados
+            // 2. Consumibles
             const relatedModel = packModels.find(m => m.id === selectedPack.modelId);
 
             if (relatedModel && relatedModel.supplyRequirements) {
                  relatedModel.supplyRequirements.forEach(req => {
-                    // BUSQUEDA INTELIGENTE: Buscar datos actuales en el inventario
-                    // Esto resuelve el problema de ver nombres antiguos en nuevos reportes
                     const freshSupply = supplies.find(s => s.id === req.supplyId) || 
                                       supplies.find(s => s.name.trim().toLowerCase() === req.name.trim().toLowerCase());
                     
@@ -101,12 +112,7 @@ const CreateProductionReport: React.FC = () => {
                     if (freshSupply) {
                         displayId = freshSupply.id;
                         displayName = freshSupply.name;
-                        if (freshSupply.code) {
-                            displayName = `[${freshSupply.code}] ${freshSupply.name}`;
-                        }
-                    } else if (req.code) {
-                         // Fallback si tiene codigo guardado en el modelo pero no encontramos supply actual
-                         displayName = `[${req.code}] ${displayName}`;
+                        if (freshSupply.code) displayName = `[${freshSupply.code}] ${freshSupply.name}`;
                     }
 
                     newConsumptions.push({
@@ -118,38 +124,40 @@ const CreateProductionReport: React.FC = () => {
                         quantityWaste: 0
                     });
                  });
-            } else if (selectedPack.suppliesUsed) {
-                // FALLBACK: Usar datos guardados en el pack si no se encuentra modelo
-                selectedPack.suppliesUsed.forEach(s => {
-                    // Intentar refrescar nombre también aquí
-                    const freshSupply = supplies.find(sup => sup.id === s.supplyId) || 
-                                      supplies.find(sup => sup.name.trim().toLowerCase() === s.name.trim().toLowerCase());
-                    
-                    let displayName = s.name;
-                    let displayId = s.supplyId || '';
-
-                    if (freshSupply) {
-                        displayId = freshSupply.id;
-                        displayName = freshSupply.name;
-                        if (freshSupply.code) {
-                            displayName = `[${freshSupply.code}] ${freshSupply.name}`;
-                        }
-                    }
-
-                    newConsumptions.push({
-                        itemId: displayId,
-                        name: displayName,
-                        type: 'supply',
-                        lot: 'SIN LOTE',
-                        quantityConsumed: s.quantity,
-                        quantityWaste: 0
-                    });
-                });
             }
-
             setConsumptions(newConsumptions);
         } 
-    }, [selectedPack, isEditing, supplies, packModels]); 
+    }, [selectedPack, isEditing, supplies, packModels, productionStats.remaining]); 
+
+    // Recalculate theoretical consumption when produced quantity changes
+    useEffect(() => {
+        if (selectedPack && producedQuantity > 0) {
+             const relatedModel = packModels.find(m => m.id === selectedPack.modelId);
+             
+             setConsumptions(prev => prev.map(c => {
+                 // For supplies, recalculate based on model requirement
+                 if (c.type === 'supply' && relatedModel) {
+                     const req = relatedModel.supplyRequirements.find(r => r.supplyId === c.itemId || r.name === c.name);
+                     if (req) {
+                         return { ...c, quantityConsumed: req.quantity * producedQuantity };
+                     }
+                 }
+                 // For products (wines), recalculate based on pack definition (assumes uniform distribution)
+                 if (c.type === 'product' && selectedPack.contents) {
+                     // Find original requirement per pack. 
+                     // Pack contents stores TOTAL for the ORDER. We need per-pack unit.
+                     // Unit per pack = content.quantity / pack.quantity
+                     const content = selectedPack.contents.find(k => k.productName === c.name && k.lot === c.lot);
+                     if (content && selectedPack.quantity) {
+                         const unitPerPack = content.quantity / selectedPack.quantity;
+                         return { ...c, quantityConsumed: Math.ceil(unitPerPack * producedQuantity) };
+                     }
+                 }
+                 return c;
+             }));
+        }
+    }, [producedQuantity, selectedPack, packModels]);
+
 
     const handleConsumptionChange = (index: number, field: keyof ProductionConsumption, value: any) => {
         const updated = [...consumptions];
@@ -158,14 +166,7 @@ const CreateProductionReport: React.FC = () => {
     };
 
     const handleAddRow = () => {
-        setConsumptions([...consumptions, {
-            itemId: '',
-            name: '',
-            type: 'supply',
-            lot: '',
-            quantityConsumed: 0,
-            quantityWaste: 0
-        }]);
+        setConsumptions([...consumptions, { itemId: '', name: '', type: 'supply', lot: '', quantityConsumed: 0, quantityWaste: 0 }]);
     };
 
     const handleRemoveRow = (index: number) => {
@@ -178,42 +179,24 @@ const CreateProductionReport: React.FC = () => {
             return;
         }
 
-        if (isEditing && id) {
-            // UPDATE MODE
-            const updatedReport: ProductionReport = {
-                id, // Keep existing ID
-                packId: selectedPackId,
-                reportDate,
-                producedQuantity,
-                consumptions
-            };
+        const reportData = {
+            packId: selectedPackId,
+            reportDate,
+            expeditionLot, // New Field
+            producedQuantity,
+            consumptions
+        };
 
-            try {
-                await updateProductionReport(updatedReport);
-                navigate('/partes-montaje');
-            } catch(error) {
-                console.error(error);
-                alert("Error al actualizar el parte.");
+        try {
+            if (isEditing && id) {
+                await updateProductionReport({ id, ...reportData });
+            } else {
+                await addProductionReport({ id: `REP-${Date.now()}`, ...reportData });
             }
-
-        } else {
-            // CREATE MODE
-            const reportId = `REP-${Date.now()}`;
-            const report: Omit<ProductionReport, 'created_at'> = {
-                id: reportId,
-                packId: selectedPackId,
-                reportDate,
-                producedQuantity,
-                consumptions
-            };
-
-            try {
-                await addProductionReport(report);
-                navigate('/partes-montaje');
-            } catch (error) {
-                console.error(error);
-                alert("Error al guardar el parte.");
-            }
+            navigate('/partes-montaje');
+        } catch (error) {
+            console.error(error);
+            alert("Error al guardar el parte.");
         }
     };
 
@@ -236,14 +219,13 @@ const CreateProductionReport: React.FC = () => {
                                 value={selectedPackId} 
                                 onChange={e => setSelectedPackId(e.target.value)} 
                                 className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500"
-                                disabled={isEditing} // Lock pack selection on edit to avoid confusion
+                                disabled={isEditing}
                             >
                                 <option value="">-- Seleccionar Pack --</option>
                                 {availablePacks.map(p => (
                                     <option key={p.id} value={p.id}>{p.orderId} - {p.modelName} ({formatDateSafe(p.creationDate)})</option>
                                 ))}
                             </select>
-                             {isEditing && <p className="text-xs text-gray-500 mt-1">* El pack no se puede cambiar en modo edición.</p>}
                         </div>
                         {selectedPack && (
                             <>
@@ -253,21 +235,45 @@ const CreateProductionReport: React.FC = () => {
                             </>
                         )}
                     </div>
+                    {/* Visual Progress Bar for Partial Production */}
+                    {selectedPack && (
+                        <div className="mt-4 p-3 bg-blue-50 rounded border border-blue-100">
+                            <div className="flex justify-between text-sm mb-1">
+                                <span className="font-semibold text-blue-800">Progreso de Producción</span>
+                                <span className="text-blue-600">{productionStats.producedBefore} fabricados de {productionStats.totalPlanned} planificados</span>
+                            </div>
+                            <div className="w-full bg-blue-200 rounded-full h-2.5">
+                                <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${Math.min(100, (productionStats.producedBefore / productionStats.totalPlanned) * 100)}%` }}></div>
+                            </div>
+                            <p className="text-xs text-blue-500 mt-1">Este parte añadirá <strong>{producedQuantity}</strong> unidades más.</p>
+                        </div>
+                    )}
                 </Card>
 
                 {/* CUERPO ESTILO EXCEL */}
                 {selectedPack && (
                     <>
                         <div className="bg-white shadow rounded-lg overflow-hidden border border-gray-300">
-                            <div className="grid grid-cols-2 border-b border-gray-300">
+                            <div className="grid grid-cols-1 md:grid-cols-3 border-b border-gray-300">
                                 <div className="p-4 border-r border-gray-300">
-                                    <label className="block text-sm font-bold text-gray-700 uppercase">Cantidad Producida:</label>
+                                    <label className="block text-sm font-bold text-gray-700 uppercase">Cantidad Producida (Este Parte):</label>
                                     <input 
                                         type="number" 
                                         value={producedQuantity} 
                                         onChange={e => setProducedQuantity(Number(e.target.value))} 
                                         className="mt-1 block w-full p-2 border border-gray-300 rounded bg-yellow-50 font-bold text-lg text-center"
                                     />
+                                </div>
+                                <div className="p-4 border-r border-gray-300">
+                                    <label className="block text-sm font-bold text-gray-700 uppercase">Lote de Expedición:</label>
+                                    <input 
+                                        type="text" 
+                                        value={expeditionLot} 
+                                        onChange={e => setExpeditionLot(e.target.value.toUpperCase())} 
+                                        placeholder="Ej: PTAM9125..."
+                                        className="mt-1 block w-full p-2 border border-gray-300 rounded bg-white text-center font-mono"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1 text-center">Referencia para salida</p>
                                 </div>
                                 <div className="p-4">
                                     <label className="block text-sm font-bold text-gray-700 uppercase">Fecha Realización:</label>

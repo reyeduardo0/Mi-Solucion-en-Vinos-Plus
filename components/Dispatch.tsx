@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DispatchNote } from '../types';
@@ -7,30 +8,100 @@ import { useData } from '../context/DataContext';
 
 const Dispatch: React.FC = () => {
     const navigate = useNavigate();
-    const { packs, handleDispatch } = useData();
+    const { packs, handleDispatch, productionReports, salidas } = useData();
 
     const [customer, setCustomer] = useState('');
     const [destination, setDestination] = useState('');
     const [carrier, setCarrier] = useState('');
     const [truckPlate, setTruckPlate] = useState('');
     const [driver, setDriver] = useState('');
-    const [selectedPackIds, setSelectedPackIds] = useState<string[]>([]);
     
-    const availablePacks = useMemo(() => packs.filter(p => p.status === 'Ensamblado'), [packs]);
+    // Detailed selection state: { [packId_expeditionLot]: quantity }
+    const [selectedQuantities, setSelectedQuantities] = useState<Record<string, number>>({});
     
-    const handleTogglePackSelection = (packId: string) => {
-        setSelectedPackIds(prev =>
-            prev.includes(packId)
-                ? prev.filter(id => id !== packId)
-                : [...prev, packId]
-        );
+    // 1. Calculate Real-Time Inventory based on Production - Previous Dispatches
+    const inventory = useMemo(() => {
+        const inv: Record<string, { packId: string, modelName: string, orderId: string, lots: Record<string, { produced: number, dispatched: number }> }> = {};
+
+        // Sum Production
+        productionReports.forEach(r => {
+            const pack = packs.find(p => p.id === r.packId);
+            if (!pack) return;
+            
+            if (!inv[r.packId]) {
+                inv[r.packId] = { packId: r.packId, modelName: pack.modelName, orderId: pack.orderId, lots: {} };
+            }
+            
+            const lot = r.expeditionLot || 'SIN LOTE';
+            if (!inv[r.packId].lots[lot]) inv[r.packId].lots[lot] = { produced: 0, dispatched: 0 };
+            inv[r.packId].lots[lot].produced += r.producedQuantity;
+        });
+
+        // Subtract Dispatches
+        salidas.forEach(s => {
+            if (s.dispatchDetails) {
+                s.dispatchDetails.forEach(d => {
+                    if (inv[d.packId] && inv[d.packId].lots[d.expeditionLot]) {
+                        inv[d.packId].lots[d.expeditionLot].dispatched += d.quantity;
+                    }
+                });
+            } else if (s.packIds) {
+                // Handle legacy dispatches (assume full pack dispatched if no details)
+                // This is an approximation since we don't know which lot was sent in legacy mode.
+                // For safety, we won't deduct from specific lots, but users should migrate to new system.
+            }
+        });
+
+        // Flatten for display
+        return Object.values(inv).map(item => {
+            const availableLots = Object.entries(item.lots).map(([lotName, data]) => ({
+                lotName,
+                available: data.produced - data.dispatched,
+                produced: data.produced
+            })).filter(l => l.available > 0);
+            
+            return { 
+                ...item, 
+                availableLots, 
+                totalAvailable: availableLots.reduce((sum, l) => sum + l.available, 0) 
+            };
+        }).filter(i => i.totalAvailable > 0);
+
+    }, [packs, productionReports, salidas]);
+
+    const handleQuantityChange = (packId: string, lot: string, qty: number, max: number) => {
+        const key = `${packId}::${lot}`;
+        if (qty < 0) qty = 0;
+        if (qty > max) qty = max;
+        
+        setSelectedQuantities(prev => {
+            const next = { ...prev };
+            if (qty === 0) delete next[key];
+            else next[key] = qty;
+            return next;
+        });
     };
 
     const handleConfirmDispatch = async () => {
-        if (!customer || !destination || !carrier || selectedPackIds.length === 0) {
-            alert("Por favor, complete los datos del cliente, destino, transportista y seleccione al menos un pack.");
+        const selectionKeys = Object.keys(selectedQuantities);
+        if (!customer || !destination || !carrier || selectionKeys.length === 0) {
+            alert("Por favor, complete los datos del cliente, destino, transportista y seleccione al menos una cantidad a despachar.");
             return;
         }
+
+        // Construct dispatch details
+        const dispatchDetails = selectionKeys.map(key => {
+            const [packId, expeditionLot] = key.split('::');
+            return {
+                packId,
+                expeditionLot,
+                quantity: selectedQuantities[key]
+            };
+        });
+
+        // Unique pack IDs for legacy support/search
+        const uniquePackIds = Array.from(new Set(dispatchDetails.map(d => d.packId)));
+
         await handleDispatch({
             dispatchDate: new Date().toISOString(),
             customer,
@@ -38,9 +109,11 @@ const Dispatch: React.FC = () => {
             carrier,
             truckPlate: truckPlate || undefined,
             driver: driver || undefined,
-            packIds: selectedPackIds
+            packIds: uniquePackIds,
+            dispatchDetails // New detailed structure
         });
-        navigate('/stock');
+        
+        navigate('/salidas'); // Redirect to list (or dashboard)
     };
 
     return (
@@ -48,25 +121,62 @@ const Dispatch: React.FC = () => {
             <h1 className="text-3xl font-bold text-gray-800 mb-6">Nueva Nota de Salida</h1>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2">
-                    <Card title="Packs Disponibles para Despacho">
-                        {availablePacks.length > 0 ? (
-                            <div className="max-h-[60vh] overflow-y-auto pr-2">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gray-50 sticky top-0"><tr><th className="w-12"></th><th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Pack</th><th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Modelo</th><th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Orden Pedido</th></tr></thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {availablePacks.map(pack => (
-                                            <tr key={pack.id} className={`${selectedPackIds.includes(pack.id) ? 'bg-yellow-50' : ''}`}>
-                                                <td className="px-4 py-4"><input type="checkbox" checked={selectedPackIds.includes(pack.id)} onChange={() => handleTogglePackSelection(pack.id)} className="h-4 w-4 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500"/></td>
-                                                <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{pack.id}</td>
-                                                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{pack.modelName}</td>
-                                                <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">{pack.orderId}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                    <Card title="Inventario Disponible para Despacho">
+                        {inventory.length > 0 ? (
+                            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                                {inventory.map(item => (
+                                    <div key={item.packId} className="border rounded-md p-4 bg-white shadow-sm">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <h3 className="font-bold text-gray-800">{item.modelName}</h3>
+                                                <p className="text-sm text-gray-500">Orden: {item.orderId}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5 rounded">
+                                                    Total Disp: {item.totalAvailable}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="mt-3 bg-gray-50 p-3 rounded-md">
+                                            <table className="w-full text-sm">
+                                                <thead>
+                                                    <tr className="text-left text-gray-500 border-b">
+                                                        <th className="pb-2">Lote Expedición</th>
+                                                        <th className="pb-2 text-right">Disponible</th>
+                                                        <th className="pb-2 text-right w-32">A Despachar</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {item.availableLots.map(lot => {
+                                                        const key = `${item.packId}::${lot.lotName}`;
+                                                        const currentQty = selectedQuantities[key] || '';
+                                                        return (
+                                                            <tr key={lot.lotName} className="border-b last:border-0">
+                                                                <td className="py-2 font-mono">{lot.lotName}</td>
+                                                                <td className="py-2 text-right font-medium">{lot.available}</td>
+                                                                <td className="py-2 text-right">
+                                                                    <input 
+                                                                        type="number" 
+                                                                        min="0"
+                                                                        max={lot.available}
+                                                                        placeholder="0"
+                                                                        value={currentQty}
+                                                                        onChange={e => handleQuantityChange(item.packId, lot.lotName, parseInt(e.target.value) || 0, lot.available)}
+                                                                        className={`w-24 p-1 text-right border rounded focus:ring-blue-500 focus:border-blue-500 ${currentQty ? 'bg-yellow-50 border-yellow-300 font-bold' : 'border-gray-300'}`}
+                                                                    />
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         ) : (
-                            <p className="text-center text-gray-500 py-8">No hay packs ensamblados listos para despachar.</p>
+                            <p className="text-center text-gray-500 py-8">No hay inventario disponible (producido y no despachado).</p>
                         )}
                     </Card>
                 </div>
@@ -80,8 +190,16 @@ const Dispatch: React.FC = () => {
                                 <div><label className="block text-sm font-medium mt-2">Matrícula Camión (Opcional)</label><input type="text" value={truckPlate} onChange={e => setTruckPlate(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
                                 <div><label className="block text-sm font-medium mt-2">Conductor (Opcional)</label><input type="text" value={driver} onChange={e => setDriver(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
                             </div>
-                            <div className="pt-4 border-t"><h4 className="font-semibold text-gray-800">Resumen</h4><p className="text-sm text-gray-600">Packs seleccionados: <span className="font-bold text-lg">{selectedPackIds.length}</span></p></div>
-                             <div className="pt-4"><Button onClick={handleConfirmDispatch} className="w-full" disabled={selectedPackIds.length === 0}>Confirmar y Despachar Salida</Button></div>
+                            
+                            <div className="pt-4 border-t">
+                                <h4 className="font-semibold text-gray-800">Resumen</h4>
+                                <div className="flex justify-between items-center mt-2">
+                                    <span className="text-sm text-gray-600">Total Unidades:</span>
+                                    <span className="font-bold text-xl text-blue-600">{Object.values(selectedQuantities).reduce((a: number, b: number) => a + b, 0)}</span>
+                                </div>
+                            </div>
+                            
+                             <div className="pt-4"><Button onClick={handleConfirmDispatch} className="w-full" disabled={Object.keys(selectedQuantities).length === 0}>Confirmar y Despachar Salida</Button></div>
                         </div>
                     </Card>
                 </div>
