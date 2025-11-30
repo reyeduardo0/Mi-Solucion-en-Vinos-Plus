@@ -83,9 +83,10 @@ const GoodsReceipt: React.FC = () => {
     
     const isEditing = !!albaranIdFromParams;
     const initialType = searchParams.get('type') === 'consumable' ? 'consumable' : 'product';
-    const isAIAvailable = useMemo(() => !!(window as any).process?.env?.API_KEY, []);
+    // SECURITY UPDATE: Use process.env.API_KEY
+    const isAIAvailable = useMemo(() => !!process.env.API_KEY, []);
 
-    const assignedPalletsCount = useMemo(() => palletGroups.reduce((acc, group) => acc + (group.palletCount || 0), [palletGroups]));
+    const assignedPalletsCount = useMemo(() => palletGroups.reduce((acc, group) => acc + (group.palletCount || 0), 0), [palletGroups]);
     const isPalletCountMismatch = totalPallets > 0 && totalPallets !== assignedPalletsCount;
 
     // Initialize with a group if new entry

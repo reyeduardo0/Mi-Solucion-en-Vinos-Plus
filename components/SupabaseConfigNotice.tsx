@@ -20,26 +20,22 @@ const SupabaseConfigNotice: React.FC = () => {
                 <h1 className="text-3xl font-bold text-center text-white mb-2">Configuración Requerida</h1>
                  <p className="text-center text-brand-text mb-8">La aplicación necesita conectarse a tu base de datos Supabase.</p>
                 <Card className="bg-gray-800 border border-yellow-500">
-                    <h2 className="text-xl font-semibold text-white mb-4">Acción Necesaria:</h2>
+                    <h2 className="text-xl font-semibold text-white mb-4">Acción Necesaria (Variables de Entorno):</h2>
                     <p className="text-brand-text mb-4">
-                        Para continuar, por favor abre el archivo <code className="bg-gray-900 text-yellow-300 px-2 py-1 rounded-md text-sm">index.html</code> en el editor de código.
+                        Esta aplicación utiliza variables de entorno para la configuración de seguridad.
                     </p>
                     <p className="text-brand-text mb-4">
-                        Busca la sección de configuración de Supabase y reemplaza los valores de marcador de posición con tu propia URL y Clave Anónima (anon key) de tu proyecto de Supabase.
+                        Si estás en desarrollo local, crea un archivo <code className="bg-gray-900 text-yellow-300 px-2 py-1 rounded-md text-sm">.env</code> en la raíz del proyecto.
+                        Si estás en Netlify, ve a <strong>Site configuration > Environment variables</strong>.
                     </p>
                     <pre className="bg-gray-900 text-white p-4 rounded-md overflow-x-auto text-sm">
                         <code>
-{`<!-- PEGA AQUÍ TUS CLAVES DE SUPABASE -->
-<script>
-  window.SUPABASE_CONFIG = {
-    URL: 'TU_SUPABASE_URL', // <-- Reemplaza esto
-    ANON_KEY: 'TU_SUPABASE_ANON_KEY' // <-- Reemplaza esto
-  };
-</script>`}
+{`VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
+VITE_SUPABASE_ANON_KEY=tu-clave-anonima-larga`}
                         </code>
                     </pre>
                      <p className="text-brand-text mt-4 text-sm">
-                        Una vez que guardes los cambios en <code className="bg-gray-900 text-yellow-300 px-2 py-1 rounded-md text-sm">index.html</code>, la aplicación se recargará automáticamente.
+                        Una vez configuradas las variables, reinicia el servidor de desarrollo o redespliega la aplicación.
                     </p>
                 </Card>
             </div>

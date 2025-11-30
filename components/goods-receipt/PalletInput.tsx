@@ -39,7 +39,8 @@ const PalletInput: React.FC<PalletInputProps> = ({ pallet, index, totalPallets, 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
-    const isAIAvailable = useMemo(() => !!(window as any).process?.env?.API_KEY, []);
+    // SECURITY UPDATE: Use process.env.API_KEY
+    const isAIAvailable = useMemo(() => !!process.env.API_KEY, []);
 
     const isIncident = pallet.incident !== undefined;
     const incidentDescription = pallet.incident?.description || '';

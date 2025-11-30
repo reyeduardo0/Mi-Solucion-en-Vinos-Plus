@@ -4,40 +4,8 @@ import Card from './ui/Card';
 
 const changelogData = [
     {
-        version: '1.8.1',
-        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
-        changes: [
-            { type: 'new', text: 'Implementación de Despacho Parcial por Lote de Expedición.' },
-            { type: 'improvement', text: 'Cálculo de inventario disponible en tiempo real basado en producción y salidas previas.' },
-        ]
-    },
-    {
-        version: '1.8.0',
-        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
-        changes: [
-            { type: 'new', text: 'Implementación completa de Códigos de Producto en Ajustes de Inventario.' },
-            { type: 'fix', text: 'Actualización forzada de estructura de datos para soportar nuevos campos.' },
-        ]
-    },
-    {
-        version: '1.7.9',
-        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
-        changes: [
-            { type: 'new', text: 'Funcionalidad de Ajuste de Inventario extendida a Productos (Vinos).' },
-            { type: 'improvement', text: 'Mejora en la interfaz de fusión y renombrado masivo.' },
-        ]
-    },
-    {
-        version: '1.7.7',
-        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
-        changes: [
-            { type: 'fix', text: 'Resincronización completa de código con repositorio remoto.' },
-            { type: 'fix', text: 'Asegurada la limpieza de caché de despliegue.' },
-        ]
-    },
-    {
         version: '1.7.5',
-        date: '25 de noviembre de 2025',
+        date: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }),
         changes: [
             { type: 'fix', text: 'Migración completa a Variables de Entorno para configuración de Supabase.' },
             { type: 'improvement', text: 'Eliminación de configuración manual en index.html por seguridad.' },

@@ -202,7 +202,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
             const [packsResult, salidasResult] = await Promise.all([
                 supabase!.from('wine_packs').select('id, modelId:model_id, modelName:model_name, orderId:order_id, quantity, creationDate:creation_date, contents, suppliesUsed:supplies_used, additionalComponents:additional_components, packImage:pack_image, status, created_at').order('created_at', { ascending: false }),
-                // UPDATE: Added dispatchDetails to select query
                 supabase!.from('dispatch_notes').select('id, dispatchDate:dispatch_date, customer, destination, carrier, truckPlate:truck_plate, driver, packIds:pack_ids, dispatchDetails:dispatch_details, status, created_at').order('created_at', { ascending: false })
             ]);
             if (packsResult.error) throw packsResult.error;
@@ -275,7 +274,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         }
     }, [session.user]);
     
-    // ... useEffect, products, inventoryStock remain same ...
     useEffect(() => {
         if (session.user) {
             fetchData();
@@ -432,6 +430,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         }
         await addAuditLog(`Registró la entrada "${albaran.id}"`);
     };
+    
+    // ... updateAlbaran, deleteAlbaran, addNewSupply, addSupplyStock, updateSupply, deleteSupply, updateSupplyLot, updateSupplyDetails, mergeSupplies, updateProductDetails, mergeProducts ...
     
     const updateAlbaran = async (albaran: Albaran) => {
         const { pallets, ...albaranData } = albaran;
@@ -666,7 +666,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                     const itemName = item.productName || item.name;
                     if (itemName && itemName === oldName) {
                         changed = true;
-                        // Keep code if it's there or if we are not managing it strictly in JSON
                         return { ...item, ...(item.productName ? { productName: upperNewName } : { name: upperNewName }) };
                     }
                     return item;
@@ -778,9 +777,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const { error } = await supabase!.from('dispatch_notes').insert(dbNote);
         if (error) throw error;
         
-        // Removed automatic update of wine_packs status to 'Despachado' to allow partial dispatching.
-        // Status updates should be logic-based or manual if needed.
-        
         await addAuditLog(`Creó la salida "${id}" para el cliente "${dispatchData.customer}"`);
     };
 
@@ -859,6 +855,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await fetchData();
     };
 
+    // ... updateUser, deleteUser, updateCurrentUserPassword, updateUserPasswordByAdmin, addRole, updateRole, deleteRole ...
+    
     const updateUser = async (user: User) => {
         const { error } = await supabase!.from('users').update({ full_name: user.name, role_id: user.roleId }).eq('id', user.id);
         if (error) throw error;
