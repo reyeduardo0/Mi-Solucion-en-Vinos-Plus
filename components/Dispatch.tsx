@@ -205,7 +205,20 @@ const Dispatch: React.FC = () => {
                             
                             <div className="pt-4 border-t"><h4 className="font-semibold text-gray-800 mb-2">Datos de Transporte</h4>
                                 <div><label className="block text-sm font-medium">Transportista*</label><input type="text" value={carrier} onChange={e => setCarrier(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
-                                <div><label className="block text-sm font-medium mt-2">Nº Palets</label><input type="number" value={totalPallets} onChange={e => setTotalPallets(Number(e.target.value))} placeholder="0" min="0" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                                <div>
+                                    <label className="block text-sm font-medium mt-2">Nº Palets</label>
+                                    <input 
+                                        type="number" 
+                                        value={totalPallets} 
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            setTotalPallets(val === '' ? '' : Math.max(0, parseInt(val, 10)));
+                                        }} 
+                                        placeholder="0" 
+                                        min="0" 
+                                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" 
+                                    />
+                                </div>
                                 <div><label className="block text-sm font-medium mt-2">Matrícula Camión</label><input type="text" value={truckPlate} onChange={e => setTruckPlate(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
                                 <div><label className="block text-sm font-medium mt-2">Conductor</label><input type="text" value={driver} onChange={e => setDriver(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
                             </div>

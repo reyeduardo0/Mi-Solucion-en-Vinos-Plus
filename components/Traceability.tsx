@@ -104,6 +104,7 @@ const Traceability: React.FC = () => {
                                 <InfoPair label="Cliente" value={traceabilityData.dispatch.customer} />
                                 <InfoPair label="Destino" value={traceabilityData.dispatch.destination} />
                                 <InfoPair label="Transportista" value={traceabilityData.dispatch.carrier} />
+                                <InfoPair label="Nº Palets" value={traceabilityData.dispatch.totalPallets} />
                             </TimelineStep>
                         )}
                     </ul>
