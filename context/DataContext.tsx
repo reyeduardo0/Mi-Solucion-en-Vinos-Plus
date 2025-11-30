@@ -28,6 +28,7 @@ import {
   ProductionReport,
 } from '../types';
 import { getErrorMessage } from '../utils/helpers';
+import { getEnv } from '../utils/helpers';
 
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
 
@@ -401,9 +402,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         return result.sort((a, b) => a.name.localeCompare(b.name) || (a.lot || '').localeCompare(b.lot || ''));
     }, [albaranes, supplies, packs, mermas]);
 
-    // ... functions (addAlbaran, updateAlbaran, etc...) - keeping existing logic but focusing on updateProductDetails
-
-    // ... (keep existing addAlbaran, updateAlbaran, etc.) ...
     const addAlbaran = async (albaran: Albaran) => {
         const { pallets, ...albaranData } = albaran;
         const dbAlbaran = { id: albaranData.id, entry_date: albaranData.entryDate, truck_plate: albaranData.truckPlate, origin: albaranData.origin, carrier: albaranData.carrier, driver: albaranData.driver, status: albaranData.status, incident_details: albaranData.incidentDetails, incident_images: albaranData.incidentImages };
@@ -846,7 +844,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     
     const addUser = async (userData: Omit<User, 'id'> & { password?: string }) => {
         if (!userData.password) throw new Error("La contraseña es obligatoria para nuevos usuarios.");
-        const tempSupabase = createClient((import.meta as any).env.VITE_SUPABASE_URL, (import.meta as any).env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+        const tempSupabase = createClient(getEnv('VITE_SUPABASE_URL'), getEnv('VITE_SUPABASE_ANON_KEY'), { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
         const { data: authData, error: authError } = await tempSupabase.auth.signUp({ email: userData.email, password: userData.password, options: { data: { full_name: userData.name, role_id: userData.roleId } } });
         if (authError) throw authError;
         if (!authData.user) throw new Error("No se pudo crear el usuario en Supabase Auth.");
