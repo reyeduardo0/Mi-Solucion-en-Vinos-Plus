@@ -202,8 +202,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
             const [packsResult, salidasResult] = await Promise.all([
                 supabase!.from('wine_packs').select('id, modelId:model_id, modelName:model_name, orderId:order_id, quantity, creationDate:creation_date, contents, suppliesUsed:supplies_used, additionalComponents:additional_components, packImage:pack_image, status, created_at').order('created_at', { ascending: false }),
-                // UPDATE: Added dispatchDetails to select query
-                supabase!.from('dispatch_notes').select('id, dispatchDate:dispatch_date, customer, destination, carrier, truckPlate:truck_plate, driver, packIds:pack_ids, dispatchDetails:dispatch_details, status, created_at').order('created_at', { ascending: false })
+                // UPDATE: Added dispatch_note_id and total_pallets to select query
+                supabase!.from('dispatch_notes').select('id, dispatchNoteId:dispatch_note_id, dispatchDate:dispatch_date, customer, destination, carrier, truckPlate:truck_plate, driver, totalPallets:total_pallets, packIds:pack_ids, dispatchDetails:dispatch_details, status, created_at').order('created_at', { ascending: false })
             ]);
             if (packsResult.error) throw packsResult.error;
             if (salidasResult.error) throw salidasResult.error;
@@ -761,16 +761,18 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     const handleDispatch = async (dispatchData: Omit<DispatchNote, 'id' | 'created_at' | 'status'>) => {
         const id = `SAL-${Date.now()}`;
         const note: DispatchNote = { ...dispatchData, id, status: 'Despachado' };
-        // UPDATE: Destructure dispatchDetails and save to DB
-        const { dispatchDate, customer, destination, carrier, truckPlate, driver, packIds, status, dispatchDetails } = note;
+        // UPDATE: Destructure new fields and map to snake_case for DB insertion
+        const { dispatchDate, customer, destination, carrier, truckPlate, driver, packIds, status, dispatchDetails, dispatchNoteId, totalPallets } = note;
         const dbNote = { 
             id, 
+            dispatch_note_id: dispatchNoteId,
             dispatch_date: dispatchDate, 
             customer, 
             destination, 
             carrier, 
             truck_plate: truckPlate, 
             driver, 
+            total_pallets: totalPallets,
             pack_ids: packIds, 
             dispatch_details: dispatchDetails,
             status 
@@ -778,10 +780,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const { error } = await supabase!.from('dispatch_notes').insert(dbNote);
         if (error) throw error;
         
-        // Removed automatic update of wine_packs status to 'Despachado' to allow partial dispatching.
-        // Status updates should be logic-based or manual if needed.
-        
-        await addAuditLog(`Creó la salida "${id}" para el cliente "${dispatchData.customer}"`);
+        await addAuditLog(`Creó la salida "${id}" (Albarán: ${dispatchNoteId}) para el cliente "${dispatchData.customer}"`);
     };
 
     const addMerma = async (merma: Omit<Merma, 'id' | 'created_at'>) => {

@@ -182,13 +182,15 @@ export interface WinePack {
 }
 
 export interface DispatchNote {
-    id: string;
+    id: string; // Internal system ID
+    dispatchNoteId?: string; // User provided: Nº Albarán Salida (e.g. SDHM912500029)
     dispatchDate: string;
     customer: string;
     destination: string;
     carrier: string;
     truckPlate?: string;
     driver?: string;
+    totalPallets?: number; // User provided: Nº Palets
     packIds: string[]; // Array of IDs of the WinePacks included (kept for reference)
     dispatchDetails?: { // NEW: Detailed breakdown for partial dispatch
         packId: string;

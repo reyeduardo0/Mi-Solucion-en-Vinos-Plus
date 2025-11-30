@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { WinePack, Albaran, DispatchNote, Pallet } from '../types';
 import Card from './ui/Card';
@@ -98,7 +99,8 @@ const Traceability: React.FC = () => {
                         {traceabilityData.dispatch && (
                             <TimelineStep icon={<ExitIcon />} title="Despacho" isLast={true}>
                                 <InfoPair label="Fecha de Salida" value={formatDateTimeSafe(traceabilityData.dispatch.dispatchDate)} />
-                                <InfoPair label="ID Nota de Salida" value={traceabilityData.dispatch.id} />
+                                <InfoPair label="ID Salida (Sistema)" value={traceabilityData.dispatch.id} />
+                                <InfoPair label="Nº Albarán Salida" value={traceabilityData.dispatch.dispatchNoteId} />
                                 <InfoPair label="Cliente" value={traceabilityData.dispatch.customer} />
                                 <InfoPair label="Destino" value={traceabilityData.dispatch.destination} />
                                 <InfoPair label="Transportista" value={traceabilityData.dispatch.carrier} />

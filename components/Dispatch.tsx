@@ -5,11 +5,17 @@ import { DispatchNote } from '../types';
 import Card from './ui/Card';
 import Button from './ui/Button';
 import { useData } from '../context/DataContext';
+import { toDateTimeLocalInput } from '../utils/helpers';
 
 const Dispatch: React.FC = () => {
     const navigate = useNavigate();
     const { packs, handleDispatch, productionReports, salidas } = useData();
 
+    // New Fields
+    const [dispatchNoteId, setDispatchNoteId] = useState('');
+    const [dispatchDate, setDispatchDate] = useState(toDateTimeLocalInput());
+    const [totalPallets, setTotalPallets] = useState<number | ''>('');
+    
     const [customer, setCustomer] = useState('');
     const [destination, setDestination] = useState('');
     const [carrier, setCarrier] = useState('');
@@ -84,8 +90,8 @@ const Dispatch: React.FC = () => {
 
     const handleConfirmDispatch = async () => {
         const selectionKeys = Object.keys(selectedQuantities);
-        if (!customer || !destination || !carrier || selectionKeys.length === 0) {
-            alert("Por favor, complete los datos del cliente, destino, transportista y seleccione al menos una cantidad a despachar.");
+        if (!dispatchNoteId || !customer || !destination || !carrier || selectionKeys.length === 0) {
+            alert("Por favor, complete el Nº de Albarán, cliente, destino, transportista y seleccione al menos una cantidad a despachar.");
             return;
         }
 
@@ -103,12 +109,14 @@ const Dispatch: React.FC = () => {
         const uniquePackIds = Array.from(new Set(dispatchDetails.map(d => d.packId)));
 
         await handleDispatch({
-            dispatchDate: new Date().toISOString(),
+            dispatchNoteId,
+            dispatchDate,
             customer,
             destination,
             carrier,
             truckPlate: truckPlate || undefined,
             driver: driver || undefined,
+            totalPallets: totalPallets === '' ? undefined : totalPallets,
             packIds: uniquePackIds,
             dispatchDetails // New detailed structure
         });
@@ -183,12 +191,23 @@ const Dispatch: React.FC = () => {
                 <div className="lg:col-span-1">
                     <Card title="Detalles de la Salida">
                         <div className="space-y-4">
-                            <div><label className="block text-sm font-medium">Cliente</label><input type="text" value={customer} onChange={e => setCustomer(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
-                             <div><label className="block text-sm font-medium">Destino</label><input type="text" value={destination} onChange={e => setDestination(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700">Nº Albarán de Salida*</label>
+                                <input type="text" value={dispatchNoteId} onChange={e => setDispatchNoteId(e.target.value)} placeholder="Ej: SDHM912500029" required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2 bg-yellow-50 font-mono" />
+                            </div>
+                             <div>
+                                <label className="block text-sm font-medium">Fecha y Hora de Salida*</label>
+                                <input type="datetime-local" value={dispatchDate} onChange={e => setDispatchDate(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" />
+                            </div>
+                            
+                            <div><label className="block text-sm font-medium">Cliente*</label><input type="text" value={customer} onChange={e => setCustomer(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                             <div><label className="block text-sm font-medium">Destino*</label><input type="text" value={destination} onChange={e => setDestination(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                            
                             <div className="pt-4 border-t"><h4 className="font-semibold text-gray-800 mb-2">Datos de Transporte</h4>
-                                <div><label className="block text-sm font-medium">Transportista</label><input type="text" value={carrier} onChange={e => setCarrier(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
-                                <div><label className="block text-sm font-medium mt-2">Matrícula Camión (Opcional)</label><input type="text" value={truckPlate} onChange={e => setTruckPlate(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
-                                <div><label className="block text-sm font-medium mt-2">Conductor (Opcional)</label><input type="text" value={driver} onChange={e => setDriver(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                                <div><label className="block text-sm font-medium">Transportista*</label><input type="text" value={carrier} onChange={e => setCarrier(e.target.value)} required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                                <div><label className="block text-sm font-medium mt-2">Nº Palets</label><input type="number" value={totalPallets} onChange={e => setTotalPallets(Number(e.target.value))} placeholder="0" min="0" className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                                <div><label className="block text-sm font-medium mt-2">Matrícula Camión</label><input type="text" value={truckPlate} onChange={e => setTruckPlate(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
+                                <div><label className="block text-sm font-medium mt-2">Conductor</label><input type="text" value={driver} onChange={e => setDriver(e.target.value)} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2" /></div>
                             </div>
                             
                             <div className="pt-4 border-t">

@@ -34,8 +34,18 @@ const Reports: React.FC = () => {
                 data = albaranes.filter(a => dateFilter(a.entryDate) && (!reportFilters.carrier || a.carrier === reportFilters.carrier) && (reportFilters.status === 'all' || a.status === reportFilters.status)).map(a => [a.id, formatDateSafe(a.entryDate), a.carrier, a.driver || 'N/A', a.pallets?.length || 0, a.status]);
                 break;
             case 'dispatches':
-                headers = ['ID Salida', 'Fecha', 'Cliente', 'Destino', 'Transportista', '# Packs'];
-                data = salidas.filter(s => dateFilter(s.dispatchDate) && (!reportFilters.customer || s.customer === reportFilters.customer) && (!reportFilters.carrier || s.carrier === reportFilters.carrier)).map(s => [s.id, formatDateSafe(s.dispatchDate), s.customer, s.destination, s.carrier, s.packIds?.length || 0]);
+                // Updated to show new fields
+                headers = ['ID Salida (Sistema)', 'Nº Albarán Salida', 'Fecha', 'Cliente', 'Destino', 'Transportista', '# Packs', 'Nº Palets'];
+                data = salidas.filter(s => dateFilter(s.dispatchDate) && (!reportFilters.customer || s.customer === reportFilters.customer) && (!reportFilters.carrier || s.carrier === reportFilters.carrier)).map(s => [
+                    s.id, 
+                    s.dispatchNoteId || '-',
+                    formatDateTimeSafe(s.dispatchDate), 
+                    s.customer, 
+                    s.destination, 
+                    s.carrier, 
+                    s.packIds?.length || 0,
+                    s.totalPallets || '-'
+                ]);
                 break;
             case 'incidents':
                 headers = ['ID Incidencia', 'Fecha', 'Tipo', 'ID Relacionado', 'Estado', 'Descripción'];
