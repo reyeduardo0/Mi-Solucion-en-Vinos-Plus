@@ -14,12 +14,13 @@ const fileToGenerativePart = async (file: File) => {
 };
 
 export const extractDataFromImage = async (imageFile: File, prompt: string): Promise<any> => {
-  // SECURITY UPDATE: Strictly use process.env.API_KEY from environment variables as per guidelines
-  const apiKey = process.env.API_KEY;
+  // SECURITY UPDATE: Strictly use VITE_GEMINI_API_KEY from environment variables.
+  // FIX: Cast import.meta to any to avoid TypeScript error 'Property env does not exist on type ImportMeta'
+  const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
   
   if (!apiKey) {
-    console.error("API_KEY is missing from environment variables.");
-    throw new Error("La configuración de seguridad está incompleta. Falta la variable API_KEY en las variables de entorno.");
+    console.error("VITE_GEMINI_API_KEY is missing from environment variables.");
+    throw new Error("La configuración de seguridad está incompleta. Falta la variable VITE_GEMINI_API_KEY en las variables de entorno.");
   }
 
   try {

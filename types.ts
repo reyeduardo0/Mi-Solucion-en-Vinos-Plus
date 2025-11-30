@@ -53,7 +53,7 @@ export interface Incident {
 export interface Product {
   id: string;
   name: string;
-  code?: string; // NEW: Added code field
+  code?: string; // NEW: Added code field for inventory standardization
   type: 'wine' | 'packaging';
   sku: string;
 }
@@ -78,7 +78,7 @@ export interface Pallet {
     name: string;
     lot: string;
   };
-  productCode?: string; // NEW: Added to store product code from DB
+  productCode?: string; // NEW: Added to store product code from DB (pallets table)
   boxesPerPallet?: number;
   bottlesPerBox?: number;
   totalBottles?: number;

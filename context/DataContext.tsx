@@ -401,7 +401,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         return result.sort((a, b) => a.name.localeCompare(b.name) || (a.lot || '').localeCompare(b.lot || ''));
     }, [albaranes, supplies, packs, mermas]);
 
-    // ... helper functions ...
+    // ... functions (addAlbaran, updateAlbaran, etc...) - keeping existing logic but focusing on updateProductDetails
+
+    // ... (keep existing addAlbaran, updateAlbaran, etc.) ...
     const addAlbaran = async (albaran: Albaran) => {
         const { pallets, ...albaranData } = albaran;
         const dbAlbaran = { id: albaranData.id, entry_date: albaranData.entryDate, truck_plate: albaranData.truckPlate, origin: albaranData.origin, carrier: albaranData.carrier, driver: albaranData.driver, status: albaranData.status, incident_details: albaranData.incidentDetails, incident_images: albaranData.incidentImages };
@@ -430,8 +432,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         }
         await addAuditLog(`Registró la entrada "${albaran.id}"`);
     };
-    
-    // ... updateAlbaran, deleteAlbaran, addNewSupply, addSupplyStock, updateSupply, deleteSupply, updateSupplyLot, updateSupplyDetails, mergeSupplies, updateProductDetails, mergeProducts ...
     
     const updateAlbaran = async (albaran: Albaran) => {
         const { pallets, ...albaranData } = albaran;
@@ -637,6 +637,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await fetchData();
     };
 
+    // NEW: Update Product Details (Name and Code)
     const updateProductDetails = async (oldName: string, newName: string, newCode?: string) => {
         const upperNewName = newName.toUpperCase();
         const upperCode = newCode ? newCode.toUpperCase() : null;
@@ -687,6 +688,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
     const mergeProducts = async (masterName: string, sourceNames: string[]) => {
         for (const sourceName of sourceNames) {
+            // Merge logic basically renames source to master
+            // We get the code from the master (current products list logic) or default to existing
             await updateProductDetails(sourceName, masterName); 
         }
         await addAuditLog(`Fusionó productos en "${masterName}"`);
@@ -855,8 +858,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await fetchData();
     };
 
-    // ... updateUser, deleteUser, updateCurrentUserPassword, updateUserPasswordByAdmin, addRole, updateRole, deleteRole ...
-    
     const updateUser = async (user: User) => {
         const { error } = await supabase!.from('users').update({ full_name: user.name, role_id: user.roleId }).eq('id', user.id);
         if (error) throw error;
