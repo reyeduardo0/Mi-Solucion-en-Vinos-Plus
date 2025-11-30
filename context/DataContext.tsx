@@ -28,7 +28,6 @@ import {
   ProductionReport,
 } from '../types';
 import { getErrorMessage } from '../utils/helpers';
-import { getEnv } from '../utils/helpers';
 
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
 
@@ -203,6 +202,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
             const [packsResult, salidasResult] = await Promise.all([
                 supabase!.from('wine_packs').select('id, modelId:model_id, modelName:model_name, orderId:order_id, quantity, creationDate:creation_date, contents, suppliesUsed:supplies_used, additionalComponents:additional_components, packImage:pack_image, status, created_at').order('created_at', { ascending: false }),
+                // UPDATE: Added dispatchDetails to select query
                 supabase!.from('dispatch_notes').select('id, dispatchDate:dispatch_date, customer, destination, carrier, truckPlate:truck_plate, driver, packIds:pack_ids, dispatchDetails:dispatch_details, status, created_at').order('created_at', { ascending: false })
             ]);
             if (packsResult.error) throw packsResult.error;
@@ -275,6 +275,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         }
     }, [session.user]);
     
+    // ... useEffect, products, inventoryStock remain same ...
     useEffect(() => {
         if (session.user) {
             fetchData();
@@ -402,6 +403,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         return result.sort((a, b) => a.name.localeCompare(b.name) || (a.lot || '').localeCompare(b.lot || ''));
     }, [albaranes, supplies, packs, mermas]);
 
+    // ... helper functions ...
     const addAlbaran = async (albaran: Albaran) => {
         const { pallets, ...albaranData } = albaran;
         const dbAlbaran = { id: albaranData.id, entry_date: albaranData.entryDate, truck_plate: albaranData.truckPlate, origin: albaranData.origin, carrier: albaranData.carrier, driver: albaranData.driver, status: albaranData.status, incident_details: albaranData.incidentDetails, incident_images: albaranData.incidentImages };
@@ -635,7 +637,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await fetchData();
     };
 
-    // NEW: Update Product Details (Name and Code)
     const updateProductDetails = async (oldName: string, newName: string, newCode?: string) => {
         const upperNewName = newName.toUpperCase();
         const upperCode = newCode ? newCode.toUpperCase() : null;
@@ -665,6 +666,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                     const itemName = item.productName || item.name;
                     if (itemName && itemName === oldName) {
                         changed = true;
+                        // Keep code if it's there or if we are not managing it strictly in JSON
                         return { ...item, ...(item.productName ? { productName: upperNewName } : { name: upperNewName }) };
                     }
                     return item;
@@ -686,8 +688,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
     const mergeProducts = async (masterName: string, sourceNames: string[]) => {
         for (const sourceName of sourceNames) {
-            // Merge logic basically renames source to master
-            // We get the code from the master (current products list logic) or default to existing
             await updateProductDetails(sourceName, masterName); 
         }
         await addAuditLog(`Fusionó productos en "${masterName}"`);
@@ -778,6 +778,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const { error } = await supabase!.from('dispatch_notes').insert(dbNote);
         if (error) throw error;
         
+        // Removed automatic update of wine_packs status to 'Despachado' to allow partial dispatching.
+        // Status updates should be logic-based or manual if needed.
+        
         await addAuditLog(`Creó la salida "${id}" para el cliente "${dispatchData.customer}"`);
     };
 
@@ -844,7 +847,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     
     const addUser = async (userData: Omit<User, 'id'> & { password?: string }) => {
         if (!userData.password) throw new Error("La contraseña es obligatoria para nuevos usuarios.");
-        const tempSupabase = createClient(getEnv('VITE_SUPABASE_URL'), getEnv('VITE_SUPABASE_ANON_KEY'), { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+        const tempSupabase = createClient((import.meta as any).env.VITE_SUPABASE_URL, (import.meta as any).env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
         const { data: authData, error: authError } = await tempSupabase.auth.signUp({ email: userData.email, password: userData.password, options: { data: { full_name: userData.name, role_id: userData.roleId } } });
         if (authError) throw authError;
         if (!authData.user) throw new Error("No se pudo crear el usuario en Supabase Auth.");

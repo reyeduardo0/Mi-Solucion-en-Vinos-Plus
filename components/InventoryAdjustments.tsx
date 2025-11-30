@@ -234,7 +234,7 @@ const InventoryAdjustments: React.FC = () => {
                                                 type="text" 
                                                 value={currentCode}
                                                 onChange={e => handleEditChange(id, 'code', e.target.value.toUpperCase())}
-                                                placeholder={activeTab === 'supplies' ? "Ej: EMB..." : "Ej: PTA..."}
+                                                placeholder="Ej: PTA..."
                                                 className="w-full p-1 border border-gray-300 rounded text-sm uppercase font-mono"
                                             />
                                         </td>

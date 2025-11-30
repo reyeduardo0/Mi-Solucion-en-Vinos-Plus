@@ -90,17 +90,3 @@ export const generateUUID = (): string => {
         return v.toString(16);
     });
 };
-
-export const getEnv = (key: string): string => {
-    // Safe access to import.meta.env for Vite
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-        // @ts-ignore
-        return import.meta.env[key] || '';
-    }
-    // Fallback to process.env for compatibility
-    if (typeof process !== 'undefined' && process.env) {
-        return process.env[key] || '';
-    }
-    return '';
-};

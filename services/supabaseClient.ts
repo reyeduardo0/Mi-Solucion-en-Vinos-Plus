@@ -1,10 +1,17 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Access Environment Variables safely using Vite's import.meta.env
-// FIX: Cast import.meta to any to avoid TypeScript error 'Property env does not exist on type ImportMeta'
-const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
-const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
+declare global {
+  interface Window {
+    SUPABASE_CONFIG?: {
+      URL: string;
+      ANON_KEY: string;
+    };
+  }
+}
+
+const supabaseUrl = window.SUPABASE_CONFIG?.URL;
+const supabaseAnonKey = window.SUPABASE_CONFIG?.ANON_KEY;
 
 const isValidSupabaseUrl = (url?: string): url is string => {
     return !!url && (url.startsWith('http://') || url.startsWith('https://'));
@@ -12,13 +19,15 @@ const isValidSupabaseUrl = (url?: string): url is string => {
 
 export const isSupabaseConfigured = 
     isValidSupabaseUrl(supabaseUrl) && 
-    !!supabaseAnonKey;
+    !!supabaseAnonKey && 
+    supabaseAnonKey !== 'TU_SUPABASE_ANON_KEY';
 
 function createSupabaseClient(): SupabaseClient | null {
     if (isSupabaseConfigured) {
+        // We can now safely assert that supabaseUrl and supabaseAnonKey are valid strings
         return createClient(supabaseUrl, supabaseAnonKey);
     }
-    console.warn("Supabase not configured. Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in environment variables.");
+    // No need to log an error, the UI will handle showing the notice.
     return null;
 }
 
