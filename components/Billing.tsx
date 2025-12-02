@@ -186,14 +186,15 @@ const Billing: React.FC = () => {
     };
 
     const handleExportCSV = () => {
-        const headers = ['Status', 'Fecha Prod.', 'Fecha Envío', 'Albarán Salida', 'Descripción', 'Lote', 'Cantidad', 'Tarifa', 'Extras (H)', 'Total', 'Notas'];
+        const headers = ['Status', 'Fecha Prod.', 'Fecha Envío', 'Parte Montaje', 'Descripción Artículo', 'Lote Exp.', 'Nº Albarán Salida', 'Cantidad', 'Tarifa', 'Extras (H)', 'Total', 'Notas'];
         const rows = billedData.map(item => [
             item.status, 
             formatDateSafe(item.productionDate), 
-            formatDateSafe(item.shipDate || ''), 
-            item.dispatchNoteId || '',
+            formatDateSafe(item.shipDate || ''),
+            item.id, // Parte de Montaje
             item.description, 
-            item.lot, 
+            item.lot || '', 
+            item.dispatchNoteId || '',
             item.qty, 
             item.rate.toFixed(2), 
             item.overtime || 0,
@@ -218,14 +219,15 @@ const Billing: React.FC = () => {
 
         autoTable(doc, {
             startY: 25,
-            head: [['Status', 'F. Prod', 'F. Envío', 'Albarán', 'Descripción', 'Lote', 'Cant.', 'Tarifa', 'Total', 'Notas']],
+            head: [['Status', 'F. Prod', 'F. Envío', 'Parte', 'Descripción', 'Lote Exp.', 'Albarán', 'Cant.', 'Tarifa', 'Total', 'Notas']],
             body: billedData.map(item => [
                 item.status,
                 formatDateSafe(item.productionDate),
                 formatDateSafe(item.shipDate),
-                item.dispatchNoteId || '-',
+                item.id,
                 item.description,
                 item.lot || '-',
+                item.dispatchNoteId || '-',
                 item.qty,
                 item.rate.toFixed(2),
                 item.totalAmount.toFixed(2),
@@ -277,8 +279,9 @@ const Billing: React.FC = () => {
                                         <input type="checkbox" onChange={handleSelectAllPending} checked={pendingData.length > 0 && selectedPendingIds.size === pendingData.length} />
                                     </th>
                                     <th className="px-3 py-2 text-left">Fecha Prod.</th>
+                                    <th className="px-3 py-2 text-left">Parte Montaje</th>
                                     <th className="px-3 py-2 text-left">Modelo / Artículo</th>
-                                    <th className="px-3 py-2 text-left">Lote</th>
+                                    <th className="px-3 py-2 text-left">Lote Exp.</th>
                                     <th className="px-3 py-2 text-right">Cantidad</th>
                                     <th className="px-3 py-2 text-right">Tarifa Est.</th>
                                     <th className="px-3 py-2 text-right">Total Est.</th>
@@ -292,8 +295,9 @@ const Billing: React.FC = () => {
                                             <input type="checkbox" checked={selectedPendingIds.has(row.id)} onChange={() => handleSelectPending(row.id)} />
                                         </td>
                                         <td className="px-3 py-2">{formatDateSafe(row.productionDate)}</td>
+                                        <td className="px-3 py-2 font-mono text-xs text-gray-500">{row.id}</td>
                                         <td className="px-3 py-2 font-medium">{row.description}</td>
-                                        <td className="px-3 py-2 font-mono text-xs">{row.lot}</td>
+                                        <td className="px-3 py-2 font-mono text-xs">{row.lot || '-'}</td>
                                         <td className="px-3 py-2 text-right">{row.qty}</td>
                                         <td className="px-3 py-2 text-right">{row.rate.toFixed(2)} €</td>
                                         <td className="px-3 py-2 text-right font-bold">{row.totalAmount.toFixed(2)} €</td>
@@ -301,7 +305,7 @@ const Billing: React.FC = () => {
                                     </tr>
                                 ))}
                                 {pendingData.length === 0 && (
-                                    <tr><td colSpan={8} className="text-center py-8 text-gray-500">No hay producción pendiente de facturar.</td></tr>
+                                    <tr><td colSpan={9} className="text-center py-8 text-gray-500">No hay producción pendiente de facturar.</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -329,8 +333,9 @@ const Billing: React.FC = () => {
                                     <th className="px-3 py-2 text-left">Status</th>
                                     <th className="px-3 py-2 text-left">F. Prod.</th>
                                     <th className="px-3 py-2 text-left">F. Envío</th>
+                                    <th className="px-3 py-2 text-left">Parte Montaje</th>
                                     <th className="px-3 py-2 text-left">Descripción Artículo</th>
-                                    <th className="px-3 py-2 text-left">Lote</th>
+                                    <th className="px-3 py-2 text-left">Lote Exp.</th>
                                     <th className="px-3 py-2 text-left">Nº Albarán</th>
                                     <th className="px-3 py-2 text-right">Cant.</th>
                                     <th className="px-3 py-2 text-right">Tarifa</th>
@@ -344,8 +349,9 @@ const Billing: React.FC = () => {
                                         <td className="px-3 py-2">{row.status}</td>
                                         <td className="px-3 py-2">{formatDateSafe(row.productionDate)}</td>
                                         <td className="px-3 py-2">{formatDateSafe(row.shipDate)}</td>
+                                        <td className="px-3 py-2 font-mono text-xs text-gray-500">{row.id}</td>
                                         <td className="px-3 py-2 font-medium">{row.description}</td>
-                                        <td className="px-3 py-2 font-mono text-xs">{row.lot}</td>
+                                        <td className="px-3 py-2 font-mono text-xs">{row.lot || '-'}</td>
                                         <td className="px-3 py-2 font-mono text-xs">{row.dispatchNoteId}</td>
                                         <td className="px-3 py-2 text-right">{row.qty}</td>
                                         <td className="px-3 py-2 text-right">{row.rate.toFixed(2)} €</td>
@@ -354,12 +360,12 @@ const Billing: React.FC = () => {
                                     </tr>
                                 ))}
                                 {billedData.length === 0 && (
-                                    <tr><td colSpan={10} className="text-center py-8 text-gray-500">No hay datos facturados en este mes.</td></tr>
+                                    <tr><td colSpan={11} className="text-center py-8 text-gray-500">No hay datos facturados en este mes.</td></tr>
                                 )}
                             </tbody>
                             <tfoot className="bg-gray-100 font-bold">
                                 <tr>
-                                    <td colSpan={8} className="px-3 py-3 text-right">TOTAL FACTURACIÓN:</td>
+                                    <td colSpan={9} className="px-3 py-3 text-right">TOTAL FACTURACIÓN:</td>
                                     <td className="px-3 py-3 text-right text-lg text-blue-700">{totalBilling.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}</td>
                                     <td></td>
                                 </tr>
