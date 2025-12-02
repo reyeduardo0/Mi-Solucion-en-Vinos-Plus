@@ -1,5 +1,5 @@
 
-/* Force Git Sync: v1.6.2 - Ensure supply name update logic is deployed */
+/* Force Git Sync: v1.6.3 - Fix Manual Row Selection & Input Focus */
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
@@ -61,8 +61,6 @@ const CreateProductionReport: React.FC = () => {
     // Filtrar packs disponibles
     const availablePacks = useMemo(() => {
         // Allow selection if editing or if it's a new report (partial production allows multiple reports per pack)
-        // Ideally we filter completed packs, but "completed" is subjective if partials are allowed.
-        // For now, list all 'Ensamblado' packs.
         return packs.filter(p => p.status === 'Ensamblado');
     }, [packs]);
 
@@ -100,7 +98,7 @@ const CreateProductionReport: React.FC = () => {
                         name: c.productName,
                         type: 'product',
                         lot: c.lot,
-                        quantityConsumed: c.quantity, // This logic might need adjustment for partials: total_needed / total_packs * current_packs
+                        quantityConsumed: c.quantity, 
                         quantityWaste: 0
                     });
                 });
@@ -150,11 +148,8 @@ const CreateProductionReport: React.FC = () => {
                          return { ...c, quantityConsumed: req.quantity * producedQuantity };
                      }
                  }
-                 // For products (wines), recalculate based on pack definition (assumes uniform distribution)
+                 // For products (wines), recalculate based on pack definition
                  if (c.type === 'product' && selectedPack.contents) {
-                     // Find original requirement per pack. 
-                     // Pack contents stores TOTAL for the ORDER. We need per-pack unit.
-                     // Unit per pack = content.quantity / pack.quantity
                      const content = selectedPack.contents.find(k => k.productName === c.name && k.lot === c.lot);
                      if (content && selectedPack.quantity) {
                          const unitPerPack = content.quantity / selectedPack.quantity;
@@ -167,18 +162,50 @@ const CreateProductionReport: React.FC = () => {
     }, [producedQuantity, selectedPack, packModels]);
 
 
+    // Safe state update using functional form to avoid race conditions
     const handleConsumptionChange = (index: number, field: keyof ProductionConsumption, value: any) => {
-        const updated = [...consumptions];
-        updated[index] = { ...updated[index], [field]: value };
-        setConsumptions(updated);
+        setConsumptions(prev => {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], [field]: value };
+            return updated;
+        });
+    };
+
+    // Specific handler for Manual Item Selection to update Name and ID atomically
+    const handleManualItemChange = (index: number, val: string) => {
+        const found = supplies.find(s => s.name.trim().toLowerCase() === val.trim().toLowerCase());
+        
+        setConsumptions(prev => {
+            const updated = [...prev];
+            const currentItem = updated[index];
+            
+            if (found) {
+                let displayName = found.name;
+                if (found.code) displayName = `[${found.code}] ${displayName}`;
+                
+                updated[index] = {
+                    ...currentItem,
+                    name: displayName, // Use canonical name for display
+                    itemId: found.id,
+                    type: 'supply'
+                };
+            } else {
+                updated[index] = {
+                    ...currentItem,
+                    name: val, // Keep typing
+                    itemId: '', // Reset ID if not matched
+                };
+            }
+            return updated;
+        });
     };
 
     const handleAddRow = () => {
-        setConsumptions([...consumptions, { itemId: '', name: '', type: 'supply', lot: '', quantityConsumed: 0, quantityWaste: 0 }]);
+        setConsumptions(prev => [...prev, { itemId: '', name: '', type: 'supply', lot: '', quantityConsumed: 0, quantityWaste: 0 }]);
     };
 
     const handleRemoveRow = (index: number) => {
-        setConsumptions(consumptions.filter((_, i) => i !== index));
+        setConsumptions(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleSubmit = async () => {
@@ -190,7 +217,7 @@ const CreateProductionReport: React.FC = () => {
         const reportData = {
             packId: selectedPackId,
             reportDate,
-            expeditionLot, // New Field
+            expeditionLot, 
             producedQuantity,
             consumptions,
             isHoliday,
@@ -272,6 +299,7 @@ const CreateProductionReport: React.FC = () => {
                                         type="number" 
                                         value={producedQuantity} 
                                         onChange={e => setProducedQuantity(Number(e.target.value))} 
+                                        onFocus={(e) => e.target.select()}
                                         className="mt-1 block w-full p-2 border border-gray-300 rounded bg-yellow-50 font-bold text-lg text-center"
                                     />
                                 </div>
@@ -309,7 +337,7 @@ const CreateProductionReport: React.FC = () => {
                                 </label>
                                 <div className="flex items-center space-x-2 border p-2 rounded bg-white">
                                     <span className="font-semibold text-sm">Horas Extras:</span>
-                                    <input type="number" step="0.5" min="0" value={overtimeHours} onChange={e => setOvertimeHours(Number(e.target.value))} className="w-20 p-1 border rounded text-right"/>
+                                    <input type="number" step="0.5" min="0" value={overtimeHours} onChange={e => setOvertimeHours(Number(e.target.value))} onFocus={(e) => e.target.select()} className="w-20 p-1 border rounded text-right"/>
                                 </div>
                             </div>
 
@@ -338,15 +366,7 @@ const CreateProductionReport: React.FC = () => {
                                                             placeholder="Buscar consumible..." 
                                                             list="supply-list"
                                                             value={item.name} 
-                                                            onChange={e => {
-                                                                const val = e.target.value;
-                                                                const found = supplies.find(s => s.name === val);
-                                                                handleConsumptionChange(index, 'name', val);
-                                                                if(found) {
-                                                                    handleConsumptionChange(index, 'itemId', found.id);
-                                                                    handleConsumptionChange(index, 'type', 'supply');
-                                                                }
-                                                            }}
+                                                            onChange={e => handleManualItemChange(index, e.target.value)}
                                                             className="w-full p-1 border border-gray-300 rounded text-sm"
                                                          />
                                                     ) : (
@@ -364,16 +384,18 @@ const CreateProductionReport: React.FC = () => {
                                                 <td className="px-3 py-2 border-r border-gray-200 text-right">
                                                      <input 
                                                         type="number" 
-                                                        value={item.quantityConsumed} 
+                                                        value={item.quantityConsumed || 0} 
                                                         onChange={e => handleConsumptionChange(index, 'quantityConsumed', Number(e.target.value))}
+                                                        onFocus={(e) => e.target.select()}
                                                         className="w-full p-1 border border-gray-300 rounded text-sm text-right bg-gray-50"
                                                     />
                                                 </td>
                                                 <td className="px-3 py-2 border-r border-gray-200 text-right bg-yellow-50">
                                                     <input 
                                                         type="number" 
-                                                        value={item.quantityWaste} 
+                                                        value={item.quantityWaste || 0} 
                                                         onChange={e => handleConsumptionChange(index, 'quantityWaste', Number(e.target.value))}
+                                                        onFocus={(e) => e.target.select()}
                                                         className="w-full p-1 border border-yellow-300 rounded text-sm text-right focus:ring-yellow-500 font-bold"
                                                         min="0"
                                                     />
