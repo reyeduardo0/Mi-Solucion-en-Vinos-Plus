@@ -30,6 +30,7 @@ import Changelog from './components/Changelog';
 import ProductionReports from './components/ProductionReports';
 import CreateProductionReport from './components/CreateProductionReport';
 import InventoryAdjustments from './components/InventoryAdjustments';
+import Billing from './components/Billing';
 
 // --- Hooks and Context ---
 import { PermissionsProvider } from './hooks/usePermissions';
@@ -199,6 +200,7 @@ const AppLayout: React.FC = () => {
                             <Route path="etiquetas" element={<GenerateLabels />} />
                             <Route path="incidencias" element={<Incidents />} />
                             <Route path="reportes" element={<Reports />} />
+                            <Route path="facturacion" element={<Billing />} />
                             <Route path="usuarios" element={<Users />} />
                             <Route path="trazabilidad" element={<Traceability />} />
                             <Route path="auditoria" element={<Audit />} />

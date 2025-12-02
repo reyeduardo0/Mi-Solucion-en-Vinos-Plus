@@ -26,6 +26,7 @@ import {
   IncidentType,
   Pallet,
   ProductionReport,
+  PriceList,
 } from '../types';
 import { getErrorMessage } from '../utils/helpers';
 
@@ -44,6 +45,7 @@ interface DataContextType {
     incidents: Incident[];
     mermas: Merma[];
     productionReports: ProductionReport[];
+    priceLists: PriceList[];
     auditLogs: any[]; 
     inventoryStock: InventoryStockItem[];
     loading: boolean;
@@ -78,6 +80,11 @@ interface DataContextType {
     addProductionReport: (report: Omit<ProductionReport, 'created_at'>) => Promise<void>;
     updateProductionReport: (report: ProductionReport) => Promise<void>;
     deleteProductionReport: (id: string, packId: string) => Promise<void>;
+    assignBillingMonth: (reportIds: string[], month: string) => Promise<void>;
+
+    addPriceList: (priceList: Omit<PriceList, 'id' | 'created_at'>) => Promise<void>;
+    updatePriceList: (priceList: PriceList) => Promise<void>;
+    deletePriceList: (id: string) => Promise<void>;
 
     addIncident: (incidentData: Omit<Incident, 'id'|'date'|'resolved'|'created_at'>) => Promise<void>;
     resolveIncident: (incident: Incident) => Promise<void>;
@@ -124,6 +131,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     const [incidents, setIncidents] = useState<Incident[]>([]);
     const [mermas, setMermas] = useState<Merma[]>([]);
     const [productionReports, setProductionReports] = useState<ProductionReport[]>([]);
+    const [priceLists, setPriceLists] = useState<PriceList[]>([]);
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
     
     const addAuditLog = useCallback(async (action: string, userId?: string, userName?: string) => {
@@ -219,12 +227,24 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
             let fetchedProdReports: any[] = [];
             try {
-                const prodReportsResult = await supabase!.from('production_reports').select('id, packId:pack_id, reportDate:report_date, producedQuantity:produced_quantity, expeditionLot:expedition_lot, consumptions, notes, created_at').order('created_at', { ascending: false });
+                // ADDED: Billing fields fetch (billing_status, assigned_billing_month)
+                const prodReportsResult = await supabase!.from('production_reports').select('id, packId:pack_id, reportDate:report_date, producedQuantity:produced_quantity, expeditionLot:expedition_lot, consumptions, notes, isHoliday:is_holiday, isNightShift:is_night_shift, overtimeHours:overtime_hours, billingStatus:billing_status, assignedBillingMonth:assigned_billing_month, created_at').order('created_at', { ascending: false });
                 if (!prodReportsResult.error) {
                     fetchedProdReports = prodReportsResult.data || [];
                 }
             } catch (e) {
                 console.warn("Could not fetch production reports, table might be missing:", e);
+            }
+
+            // Fetch Price Lists
+            let fetchedPriceLists: any[] = [];
+            try {
+                const priceListsResult = await supabase!.from('price_lists').select('id, modelId:model_id, startDate:start_date, endDate:end_date, basePrice:base_price, holidaySurchargePercent:holiday_surcharge_percent, nightSurchargePercent:night_surcharge_percent, overtimePrice:overtime_price, created_at');
+                if(!priceListsResult.error) {
+                    fetchedPriceLists = priceListsResult.data || [];
+                }
+            } catch (e) {
+                console.warn("Could not fetch price lists", e);
             }
 
             const fetchedAlbaranesRaw = (albaranesResult.data as any[]) || [];
@@ -266,6 +286,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             setIncidents(fetchedIncidents);
             setMermas(fetchedMermas);
             setProductionReports(fetchedProdReports);
+            setPriceLists(fetchedPriceLists);
             setAuditLogs(fetchedAuditLogs);
 
         } catch (e: any) {
@@ -295,6 +316,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         };
     }, [session.user, fetchData]);
 
+    // ... Products and InventoryStock Memos remain identical ...
     const products = useMemo(() => {
         const productMap = new Map<string, { code: string }>();
         albaranes.forEach(albaran => {
@@ -403,7 +425,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         return result.sort((a, b) => a.name.localeCompare(b.name) || (a.lot || '').localeCompare(b.lot || ''));
     }, [albaranes, supplies, packs, mermas]);
 
-    // ... helper functions ...
+    // ... helper functions (addAlbaran, updateAlbaran, etc.) remain the same ...
     const addAlbaran = async (albaran: Albaran) => {
         const { pallets, ...albaranData } = albaran;
         const dbAlbaran = { id: albaranData.id, entry_date: albaranData.entryDate, truck_plate: albaranData.truckPlate, origin: albaranData.origin, carrier: albaranData.carrier, driver: albaranData.driver, status: albaranData.status, incident_details: albaranData.incidentDetails, incident_images: albaranData.incidentImages };
@@ -432,7 +454,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         }
         await addAuditLog(`Registró la entrada "${albaran.id}"`);
     };
-    
     const updateAlbaran = async (albaran: Albaran) => {
         const { pallets, ...albaranData } = albaran;
         const dbAlbaranUpdate = { entry_date: albaranData.entryDate, truck_plate: albaranData.truckPlate, origin: albaranData.origin, carrier: albaranData.carrier, driver: albaranData.driver, status: albaranData.status, incident_details: albaranData.incidentDetails, incident_images: albaranData.incidentImages };
@@ -463,13 +484,11 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         }
         await addAuditLog(`Actualizó la entrada "${albaran.id}"`);
     };
-
     const deleteAlbaran = async (albaran: Albaran) => {
         const { error } = await supabase!.from('albaranes').delete().eq('id', albaran.id);
         if (error) throw error;
         await addAuditLog(`Eliminó la entrada "${albaran.id}"`);
     };
-    
     const addNewSupply = async (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }) => {
         const dbData = { name: supplyData.name.toUpperCase(), code: supplyData.code?.toUpperCase(), type: supplyData.type, unit: supplyData.unit, min_stock: supplyData.minStock, quantity: 0 };
         const { data, error } = await supabase!.from('supplies').insert(dbData).select().single();
@@ -481,7 +500,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await fetchData();
         return data.id;
     };
-
     const addSupplyStock = async (supplyId: string, quantity: number, lot: string) => {
         const supply = supplies.find(s => s.id === supplyId);
         if (!supply) throw new Error('Consumible no encontrado');
@@ -500,38 +518,25 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         if (error) throw error;
         await addAuditLog(`Actualizó el consumible "${supply.name}"`);
     };
-
     const updateSupplyDetails = async (id: string, newName: string, newCode: string, oldName: string) => {
         const upperName = newName.toUpperCase();
         const upperCode = newCode ? newCode.toUpperCase() : '';
         const lowerOldName = oldName.trim().toLowerCase();
-        
-        const { error: supplyError } = await supabase!.from('supplies')
-            .update({ name: upperName, code: upperCode })
-            .eq('id', id);
+        const { error: supplyError } = await supabase!.from('supplies').update({ name: upperName, code: upperCode }).eq('id', id);
         if (supplyError) throw supplyError;
-
         if (oldName !== upperName) {
-            await supabase!.from('pallets')
-                .update({ product_name: upperName })
-                .eq('product_name', oldName);
-                
-            await supabase!.from('mermas')
-                .update({ item_name: upperName })
-                .eq('item_name', oldName);
+            await supabase!.from('pallets').update({ product_name: upperName }).eq('product_name', oldName);
+            await supabase!.from('mermas').update({ item_name: upperName }).eq('item_name', oldName);
         }
-
         const updateJsonbField = async (table: string, column: string, selectQuery: string = '*') => {
              const { data: rows } = await supabase!.from(table).select(selectQuery);
              if (!rows) return;
-             
              for (const row of rows) {
                 let changed = false;
                 const list = row[column] || [];
                 const newList = list.map((item: any) => {
                     const itemId = item.supplyId || item.itemId; 
                     const itemName = item.name;
-                    
                     if (itemId === id || (itemName && itemName.trim().toLowerCase() === lowerOldName)) {
                         changed = true;
                         return { 
@@ -544,41 +549,28 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                     }
                     return item;
                 });
-
                 if (changed) {
                     await supabase!.from(table).update({ [column]: newList }).eq('id', row.id);
                 }
              }
         };
-
         await updateJsonbField('pack_models', 'supply_requirements');
         await updateJsonbField('wine_packs', 'supplies_used');
         await updateJsonbField('production_reports', 'consumptions');
-        
         await addAuditLog(`Actualizó detalles del consumible (Global): ${oldName} -> ${upperName}`);
         await fetchData();
     };
-
     const mergeSupplies = async (masterId: string, sourceIds: string[]) => {
         const masterSupply = supplies.find(s => s.id === masterId);
         if (!masterSupply) throw new Error("Consumible maestro no encontrado");
-
         for (const sourceId of sourceIds) {
             const sourceSupply = supplies.find(s => s.id === sourceId);
             if (!sourceSupply) continue;
-
             const newQuantity = (masterSupply.quantity || 0) + (sourceSupply.quantity || 0);
             await supabase!.from('supplies').update({ quantity: newQuantity }).eq('id', masterId);
             masterSupply.quantity = newQuantity; 
-
-            await supabase!.from('pallets')
-                .update({ product_name: masterSupply.name })
-                .eq('product_name', sourceSupply.name);
-
-            await supabase!.from('mermas')
-                .update({ item_name: masterSupply.name })
-                .eq('item_name', sourceSupply.name);
-
+            await supabase!.from('pallets').update({ product_name: masterSupply.name }).eq('product_name', sourceSupply.name);
+            await supabase!.from('mermas').update({ item_name: masterSupply.name }).eq('item_name', sourceSupply.name);
             const { data: models } = await supabase!.from('pack_models').select('*');
             if (models) {
                 for (const model of models) {
@@ -595,7 +587,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                     }
                 }
             }
-
             const { data: packsData } = await supabase!.from('wine_packs').select('*');
             if (packsData) {
                 for (const pack of packsData) {
@@ -612,7 +603,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                     }
                 }
             }
-
             const { data: reports } = await supabase!.from('production_reports').select('*');
             if (reports) {
                 for (const report of reports) {
@@ -629,36 +619,21 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                     }
                 }
             }
-
             await supabase!.from('supplies').delete().eq('id', sourceId);
         }
-        
         await addAuditLog(`Fusionó consumibles en "${masterSupply.name}"`);
         await fetchData();
     };
-
     const updateProductDetails = async (oldName: string, newName: string, newCode?: string) => {
         const upperNewName = newName.toUpperCase();
         const upperCode = newCode ? newCode.toUpperCase() : null;
-        
-        // 1. Update Pallets (Name AND Code)
-        const { error: palletError } = await supabase!.from('pallets')
-            .update({ product_name: upperNewName, product_code: upperCode })
-            .eq('product_name', oldName);
+        const { error: palletError } = await supabase!.from('pallets').update({ product_name: upperNewName, product_code: upperCode }).eq('product_name', oldName);
         if (palletError) throw palletError;
-
-        // 2. Update Mermas
-        const { error: mermaError } = await supabase!.from('mermas')
-            .update({ item_name: upperNewName })
-            .eq('item_name', oldName)
-            .eq('item_type', 'product');
+        const { error: mermaError } = await supabase!.from('mermas').update({ item_name: upperNewName }).eq('item_name', oldName).eq('item_type', 'product');
         if (mermaError) throw mermaError;
-
-        // 3. Update JSONB fields (Pack Models, Packs, Reports)
         const updateJsonbField = async (table: string, column: string, selectQuery: string = '*') => {
              const { data: rows } = await supabase!.from(table).select(selectQuery);
              if (!rows) return;
-             
              for (const row of rows) {
                 let changed = false;
                 const list = row[column] || [];
@@ -666,26 +641,21 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                     const itemName = item.productName || item.name;
                     if (itemName && itemName === oldName) {
                         changed = true;
-                        // Keep code if it's there or if we are not managing it strictly in JSON
                         return { ...item, ...(item.productName ? { productName: upperNewName } : { name: upperNewName }) };
                     }
                     return item;
                 });
-
                 if (changed) {
                     await supabase!.from(table).update({ [column]: newList }).eq('id', row.id);
                 }
              }
         };
-
         await updateJsonbField('pack_models', 'product_requirements');
         await updateJsonbField('wine_packs', 'contents');
         await updateJsonbField('production_reports', 'consumptions');
-
         await addAuditLog(`Actualizó producto (Global): ${oldName} -> ${upperNewName} [Code: ${upperCode || '-'}]`);
         await fetchData();
     };
-
     const mergeProducts = async (masterName: string, sourceNames: string[]) => {
         for (const sourceName of sourceNames) {
             await updateProductDetails(sourceName, masterName); 
@@ -693,7 +663,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await addAuditLog(`Fusionó productos en "${masterName}"`);
         await fetchData();
     };
-
     const deleteSupply = async (supplyId: string, supplyName: string) => {
         const { error } = await supabase!.from('supplies').delete().eq('id', supplyId);
         if (error) throw error;
@@ -707,7 +676,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         }
         await addAuditLog(`Renombró el lote "${originalLot}" a "${newLot}" para el consumible "${supplyName}"`);
     };
-    
     const addPackModel = async (model: Omit<PackModel, 'id'|'created_at'>) => {
         const { name, description, productRequirements, supplyRequirements } = model;
         const dbModel = { name, description, product_requirements: productRequirements, supply_requirements: supplyRequirements };
@@ -716,7 +684,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await addAuditLog(`Creó el modelo de pack "${model.name}"`);
         await fetchData();
     };
-
     const updatePackModel = async (model: PackModel) => {
         const { id, name, description, productRequirements, supplyRequirements } = model;
         const dbModel = { name, description, product_requirements: productRequirements, supply_requirements: supplyRequirements };
@@ -725,14 +692,12 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await addAuditLog(`Actualizó el modelo de pack "${model.name}"`);
         await fetchData();
     };
-
     const deletePackModel = async (id: string, name: string) => {
         const { error } = await supabase!.from('pack_models').delete().eq('id', id);
         if (error) throw error;
         await addAuditLog(`Eliminó el modelo de pack "${name}"`);
         await fetchData();
     };
-
     const addPack = async (pack: WinePack) => {
         const { id, modelId, modelName, orderId, quantity, creationDate, contents, suppliesUsed, additionalComponents, packImage, status } = pack;
         const dbPack = { id, model_id: modelId, model_name: modelName, order_id: orderId, quantity, creation_date: creationDate, contents, supplies_used: suppliesUsed, additional_components: additionalComponents, pack_image: packImage, status };
@@ -741,7 +706,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await addAuditLog(`Ensambló el pack "${pack.id}" para la orden "${pack.orderId}"`);
         await fetchData();
     };
-
     const updatePack = async (pack: WinePack) => {
         const { id, modelId, modelName, orderId, quantity, creationDate, contents, suppliesUsed, additionalComponents, packImage, status } = pack;
         const dbPack = { model_id: modelId, model_name: modelName, order_id: orderId, quantity, creation_date: creationDate, contents, supplies_used: suppliesUsed, additional_components: additionalComponents, pack_image: packImage, status };
@@ -750,18 +714,15 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await addAuditLog(`Actualizó el pack "${pack.id}"`);
         await fetchData();
     };
-
     const deletePack = async (id: string) => {
         const { error } = await supabase!.from('wine_packs').delete().eq('id', id);
         if (error) throw error;
         await addAuditLog(`Eliminó el pack "${id}"`);
         await fetchData();
     };
-
     const handleDispatch = async (dispatchData: Omit<DispatchNote, 'id' | 'created_at' | 'status'>) => {
         const id = `SAL-${Date.now()}`;
         const note: DispatchNote = { ...dispatchData, id, status: 'Despachado' };
-        // UPDATE: Destructure new fields and map to snake_case for DB insertion
         const { dispatchDate, customer, destination, carrier, truckPlate, driver, packIds, status, dispatchDetails, dispatchNoteId, totalPallets } = note;
         const dbNote = { 
             id, 
@@ -779,10 +740,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         };
         const { error } = await supabase!.from('dispatch_notes').insert(dbNote);
         if (error) throw error;
-        
         await addAuditLog(`Creó la salida "${id}" (Albarán: ${dispatchNoteId}) para el cliente "${dispatchData.customer}"`);
     };
-
     const addMerma = async (merma: Omit<Merma, 'id' | 'created_at'>) => {
         const { itemName, itemType, lot, quantity, reason } = merma;
         const dbMerma = { item_name: itemName, item_type: itemType, lot, quantity, reason };
@@ -790,14 +749,23 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         if (error) throw error;
         await addAuditLog(`Registró una merma de ${merma.quantity} para "${merma.itemName}"`);
     };
-
     const addProductionReport = async (report: Omit<ProductionReport, 'created_at'>) => {
-        const { id, packId, reportDate, producedQuantity, consumptions, notes, expeditionLot } = report;
-        const dbReport = { id, pack_id: packId, report_date: reportDate, expedition_lot: expeditionLot, produced_quantity: producedQuantity, consumptions, notes };
-        
+        const { id, packId, reportDate, producedQuantity, consumptions, notes, expeditionLot, isHoliday, isNightShift, overtimeHours } = report;
+        const dbReport = { 
+            id, 
+            pack_id: packId, 
+            report_date: reportDate, 
+            expedition_lot: expeditionLot, 
+            produced_quantity: producedQuantity, 
+            consumptions, 
+            notes,
+            is_holiday: isHoliday,
+            is_night_shift: isNightShift,
+            overtime_hours: overtimeHours,
+            billing_status: 'pending' // Default to pending
+        };
         const { error } = await supabase!.from('production_reports').insert(dbReport);
         if (error) throw error;
-
         for (const item of consumptions) {
             if (item.quantityWaste > 0) {
                 await addMerma({
@@ -809,25 +777,88 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 });
             }
         }
-
         await addAuditLog(`Creó parte de montaje para pack "${packId}"`);
         await fetchData();
     };
-    
     const updateProductionReport = async (report: ProductionReport) => {
-        const { id, producedQuantity, consumptions, reportDate, notes, expeditionLot } = report;
-        const dbReport = { produced_quantity: producedQuantity, consumptions, report_date: reportDate, notes, expedition_lot: expeditionLot };
+        const { id, producedQuantity, consumptions, reportDate, notes, expeditionLot, isHoliday, isNightShift, overtimeHours } = report;
+        const dbReport = { 
+            produced_quantity: producedQuantity, 
+            consumptions, 
+            report_date: reportDate, 
+            notes, 
+            expedition_lot: expeditionLot,
+            is_holiday: isHoliday,
+            is_night_shift: isNightShift,
+            overtime_hours: overtimeHours
+        };
         const { error } = await supabase!.from('production_reports').update(dbReport).eq('id', id);
         if (error) throw error;
-        
         await addAuditLog(`Actualizó parte de montaje "${id}"`);
         await fetchData();
     };
-
     const deleteProductionReport = async (id: string, packId: string) => {
         const { error } = await supabase!.from('production_reports').delete().eq('id', id);
         if (error) throw error;
         await addAuditLog(`Eliminó parte de montaje "${id}"`);
+        await fetchData();
+    };
+    
+    // NEW FUNCTION: Assign Billing Month
+    const assignBillingMonth = async (reportIds: string[], month: string) => {
+        if (reportIds.length === 0) return;
+        const { error } = await supabase!
+            .from('production_reports')
+            .update({ 
+                billing_status: 'billed', 
+                assigned_billing_month: month 
+            })
+            .in('id', reportIds);
+            
+        if (error) throw error;
+        await addAuditLog(`Asignó ${reportIds.length} partes de montaje a facturación de ${month}`);
+        await fetchData();
+    };
+
+    // --- PRICE LIST CRUD ---
+    const addPriceList = async (priceList: Omit<PriceList, 'id' | 'created_at'>) => {
+        const newId = `PRC-${Date.now()}`;
+        const dbPriceList = {
+            id: newId,
+            model_id: priceList.modelId,
+            start_date: priceList.startDate,
+            end_date: priceList.endDate,
+            base_price: priceList.basePrice,
+            holiday_surcharge_percent: priceList.holidaySurchargePercent,
+            night_surcharge_percent: priceList.nightSurchargePercent,
+            overtime_price: priceList.overtimePrice
+        };
+        const { error } = await supabase!.from('price_lists').insert(dbPriceList);
+        if(error) throw error;
+        await addAuditLog(`Creó una tarifa de precios para el modelo "${priceList.modelId}"`);
+        await fetchData();
+    };
+
+    const updatePriceList = async (priceList: PriceList) => {
+        const dbPriceList = {
+            model_id: priceList.modelId,
+            start_date: priceList.startDate,
+            end_date: priceList.endDate,
+            base_price: priceList.basePrice,
+            holiday_surcharge_percent: priceList.holidaySurchargePercent,
+            night_surcharge_percent: priceList.nightSurchargePercent,
+            overtime_price: priceList.overtimePrice
+        };
+        const { error } = await supabase!.from('price_lists').update(dbPriceList).eq('id', priceList.id);
+        if(error) throw error;
+        await addAuditLog(`Actualizó la tarifa "${priceList.id}"`);
+        await fetchData();
+    };
+
+    const deletePriceList = async (id: string) => {
+        const { error } = await supabase!.from('price_lists').delete().eq('id', id);
+        if(error) throw error;
+        await addAuditLog(`Eliminó la tarifa "${id}"`);
         await fetchData();
     };
 
@@ -843,7 +874,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         if (error) throw error;
         await addAuditLog(`Resolvió la incidencia "${incident.id}"`);
     };
-    
     const addUser = async (userData: Omit<User, 'id'> & { password?: string }) => {
         if (!userData.password) throw new Error("La contraseña es obligatoria para nuevos usuarios.");
         const tempSupabase = createClient((import.meta as any).env.VITE_SUPABASE_URL, (import.meta as any).env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
@@ -857,33 +887,28 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         await addAuditLog(`Creó el usuario "${userData.name}" (${userData.email})`);
         await fetchData();
     };
-
     const updateUser = async (user: User) => {
         const { error } = await supabase!.from('users').update({ full_name: user.name, role_id: user.roleId }).eq('id', user.id);
         if (error) throw error;
         await addAuditLog(`Actualizó los datos del usuario "${user.name}"`);
         await fetchData();
     };
-
     const deleteUser = async (userId: string, userName: string) => {
         const { error } = await supabase!.rpc('delete_user_by_admin', { target_user_id: userId });
         if (error) throw error;
         await addAuditLog(`Eliminó al usuario "${userName}"`);
         await fetchData();
     };
-
     const updateCurrentUserPassword = async (newPassword: string) => {
         const { error } = await supabase!.auth.updateUser({ password: newPassword });
         if (error) throw error;
         await addAuditLog("Actualizó su propia contraseña");
     };
-
     const updateUserPasswordByAdmin = async (userId: string, newPassword: string) => {
         const { error } = await supabase!.rpc('update_password_by_admin', { target_user_id: userId, new_password: newPassword });
         if (error) throw error;
         await addAuditLog(`Actualizó la contraseña del usuario ${userId} (Admin Reset)`);
     };
-    
     const addRole = async (roleData: Omit<Role, 'id' | 'created_at'>) => {
         const { error } = await supabase!.from('roles').insert(roleData);
         if (error) throw error;
@@ -904,13 +929,16 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     };
 
     const value = {
-        currentUser, users, roles, albaranes, supplies, products, packModels, packs, salidas, incidents, mermas, productionReports, auditLogs, inventoryStock, loading, error,
+        currentUser, users, roles, albaranes, supplies, products, packModels, packs, salidas, incidents, mermas, productionReports, priceLists, auditLogs, inventoryStock, loading, error,
         addAlbaran, updateAlbaran, deleteAlbaran,
         addNewSupply, addSupplyStock, updateSupply, deleteSupply, updateSupplyLot,
         updateSupplyDetails, mergeSupplies, 
         updateProductDetails, mergeProducts, 
         addPackModel, updatePackModel, deletePackModel,
-        addPack, updatePack, deletePack, handleDispatch, addMerma, addProductionReport, updateProductionReport, deleteProductionReport,
+        addPack, updatePack, deletePack, handleDispatch, addMerma, 
+        addProductionReport, updateProductionReport, deleteProductionReport,
+        assignBillingMonth, // Exported new function
+        addPriceList, updatePriceList, deletePriceList,
         addIncident, resolveIncident,
         addUser, updateUser, deleteUser, updateCurrentUserPassword, updateUserPasswordByAdmin,
         addRole, updateRole, deleteRole

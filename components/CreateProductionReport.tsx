@@ -21,6 +21,11 @@ const CreateProductionReport: React.FC = () => {
     const [expeditionLot, setExpeditionLot] = useState('');
     const [consumptions, setConsumptions] = useState<ProductionConsumption[]>([]);
     
+    // New Fields for Billing
+    const [isHoliday, setIsHoliday] = useState(false);
+    const [isNightShift, setIsNightShift] = useState(false);
+    const [overtimeHours, setOvertimeHours] = useState<number>(0);
+
     // If editing, we load the existing report data
     useEffect(() => {
         if (isEditing && id) {
@@ -30,6 +35,9 @@ const CreateProductionReport: React.FC = () => {
                 setReportDate(existingReport.reportDate.split('T')[0]);
                 setProducedQuantity(existingReport.producedQuantity);
                 setExpeditionLot(existingReport.expeditionLot || '');
+                setIsHoliday(existingReport.isHoliday || false);
+                setIsNightShift(existingReport.isNightShift || false);
+                setOvertimeHours(existingReport.overtimeHours || 0);
                 
                 // REFRESH LOGIC: Ensure consumption names match current inventory names
                 const refreshedConsumptions = existingReport.consumptions.map(c => {
@@ -184,7 +192,10 @@ const CreateProductionReport: React.FC = () => {
             reportDate,
             expeditionLot, // New Field
             producedQuantity,
-            consumptions
+            consumptions,
+            isHoliday,
+            isNightShift,
+            overtimeHours
         };
 
         try {
@@ -283,6 +294,22 @@ const CreateProductionReport: React.FC = () => {
                                         onChange={e => setReportDate(e.target.value)} 
                                         className="mt-1 block w-full p-2 border border-gray-300 rounded bg-yellow-50 text-center"
                                     />
+                                </div>
+                            </div>
+
+                            {/* BILLING CONDITIONS */}
+                            <div className="p-4 border-b border-gray-300 bg-gray-50 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <label className="flex items-center space-x-2 border p-2 rounded bg-white cursor-pointer">
+                                    <input type="checkbox" checked={isHoliday} onChange={e => setIsHoliday(e.target.checked)} className="h-5 w-5 text-green-600 rounded"/>
+                                    <span className="font-semibold text-sm">¿Trabajado en Festivo?</span>
+                                </label>
+                                <label className="flex items-center space-x-2 border p-2 rounded bg-white cursor-pointer">
+                                    <input type="checkbox" checked={isNightShift} onChange={e => setIsNightShift(e.target.checked)} className="h-5 w-5 text-blue-600 rounded"/>
+                                    <span className="font-semibold text-sm">¿Turno Nocturno?</span>
+                                </label>
+                                <div className="flex items-center space-x-2 border p-2 rounded bg-white">
+                                    <span className="font-semibold text-sm">Horas Extras:</span>
+                                    <input type="number" step="0.5" min="0" value={overtimeHours} onChange={e => setOvertimeHours(Number(e.target.value))} className="w-20 p-1 border rounded text-right"/>
                                 </div>
                             </div>
 

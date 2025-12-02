@@ -15,7 +15,8 @@ export type Permission =
   | 'reports:view'
   | 'traceability:view'
   | 'audit:view'
-  | 'inventory:adjust'; // New permission
+  | 'inventory:adjust'
+  | 'billing:manage'; // New permission
 
 
 export interface Role {
@@ -243,5 +244,25 @@ export interface ProductionReport {
     producedQuantity: number; // Actual good packs produced
     consumptions: ProductionConsumption[];
     notes?: string;
+    // Billing Fields
+    isHoliday?: boolean;
+    isNightShift?: boolean;
+    overtimeHours?: number;
+    // Billing Management
+    billingStatus?: 'pending' | 'billed';
+    assignedBillingMonth?: string; // YYYY-MM
+    created_at?: string;
+}
+
+// --- NUEVO: Facturación (Tarifas) ---
+export interface PriceList {
+    id: string;
+    modelId: string;
+    startDate: string;
+    endDate?: string;
+    basePrice: number;
+    holidaySurchargePercent: number; // e.g. 20 for 20%
+    nightSurchargePercent: number; // e.g. 15 for 15%
+    overtimePrice: number; // Price per hour
     created_at?: string;
 }

@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
@@ -17,7 +16,8 @@ import {
   AuditIcon,
   ChangelogIcon,
   ProductionIcon,
-  AdjustmentsIcon
+  AdjustmentsIcon,
+  BillingIcon
 } from '../../constants';
 import { usePermissions } from '../../hooks/usePermissions';
 
@@ -40,6 +40,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onLinkClick }) => {
         { path: '/incidencias', label: 'Incidencias', icon: <IncidentIcon />, permission: can('incidents:manage') },
         { path: '/reportes', label: 'Reportes', icon: <ReportsIcon />, permission: can('reports:view') },
         { path: '/trazabilidad', label: 'Trazabilidad', icon: <TraceabilityIcon />, permission: can('traceability:view') },
+        { path: '/facturacion', label: 'Facturación', icon: <BillingIcon />, permission: can('billing:manage') },
     ];
     
     const adminLinks = [
