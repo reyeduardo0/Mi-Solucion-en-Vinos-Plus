@@ -192,10 +192,12 @@ export interface DispatchNote {
     truckPlate?: string;
     driver?: string;
     totalPallets?: number; // User provided: Nº Palets
-    packIds: string[]; // Array of IDs of the WinePacks included (kept for reference)
-    dispatchDetails?: { // NEW: Detailed breakdown for partial dispatch
-        packId: string;
-        expeditionLot: string;
+    packIds: string[]; // Array of IDs of the WinePacks included (kept for reference/legacy)
+    dispatchDetails?: { // NEW: Detailed breakdown for partial dispatch & supplies
+        type: 'pack' | 'supply'; // Discriminator
+        id: string; // packId OR supplyId
+        name: string; // modelName OR supplyName
+        lot: string; // expeditionLot OR supplyLot
         quantity: number;
     }[];
     status: 'Pendiente' | 'Despachado';
@@ -221,6 +223,7 @@ export interface InventoryStockItem {
   total: number;
   inPacks: number;
   inMerma: number;
+  inDispatch?: number; // NEW: Track supplies sent directly in dispatches
   available: number;
   minStock?: number;
 }

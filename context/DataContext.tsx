@@ -316,7 +316,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         };
     }, [session.user, fetchData]);
 
-    // ... Products and InventoryStock Memos remain identical ...
+    // ... Products Memo remains identical ...
     const products = useMemo(() => {
         const productMap = new Map<string, { code: string }>();
         albaranes.forEach(albaran => {
@@ -334,6 +334,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         return Array.from(productMap.entries()).map(([name, details]) => ({ id: name, name, code: details.code, type: 'wine' as const, sku: '' }));
     }, [albaranes]);
     
+    // UPDATED Inventory Calculation to include Supplies dispatched
     const inventoryStock = useMemo((): InventoryStockItem[] => {
         const stockMap = new Map<string, InventoryStockItem>();
 
@@ -342,7 +343,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 if (pallet.type === 'product' && pallet.product?.name && pallet.product?.lot) {
                     const key = `product-${pallet.product.name}-${pallet.product.lot}`;
                     if (!stockMap.has(key)) {
-                        stockMap.set(key, { name: pallet.product.name, code: pallet.productCode, type: 'Producto', lot: pallet.product.lot, unit: 'botellas', total: 0, inPacks: 0, inMerma: 0, available: 0 });
+                        stockMap.set(key, { name: pallet.product.name, code: pallet.productCode, type: 'Producto', lot: pallet.product.lot, unit: 'botellas', total: 0, inPacks: 0, inMerma: 0, inDispatch: 0, available: 0 });
                     }
                     stockMap.get(key)!.total += pallet.totalBottles || 0;
                 } else if (pallet.type === 'consumable' && pallet.supplyName) {
@@ -351,7 +352,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                         const lot = pallet.supplyLot || 'SIN LOTE';
                         const key = `supply-${supplyInfo.name}-${lot}`;
                         if (!stockMap.has(key)) {
-                            stockMap.set(key, { name: supplyInfo.name, code: supplyInfo.code, type: 'Consumible', lot: lot, unit: supplyInfo.unit, total: 0, inPacks: 0, inMerma: 0, available: 0, minStock: supplyInfo.minStock });
+                            stockMap.set(key, { name: supplyInfo.name, code: supplyInfo.code, type: 'Consumible', lot: lot, unit: supplyInfo.unit, total: 0, inPacks: 0, inMerma: 0, inDispatch: 0, available: 0, minStock: supplyInfo.minStock });
                         }
                         stockMap.get(key)!.total += pallet.supplyQuantity || 0;
                      }
@@ -363,7 +364,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             if (supply.quantity > 0) {
                  const key = `supply-${supply.name}-SIN LOTE`;
                  if (!stockMap.has(key)) {
-                    stockMap.set(key, { name: supply.name, code: supply.code, type: 'Consumible', lot: 'SIN LOTE', unit: supply.unit, total: 0, inPacks: 0, inMerma: 0, available: 0, minStock: supply.minStock });
+                    stockMap.set(key, { name: supply.name, code: supply.code, type: 'Consumible', lot: 'SIN LOTE', unit: supply.unit, total: 0, inPacks: 0, inMerma: 0, inDispatch: 0, available: 0, minStock: supply.minStock });
                 }
                 stockMap.get(key)!.total += supply.quantity || 0;
             }
@@ -415,15 +416,42 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             }
         });
 
+        // NEW: Deduct items from Dispatch Notes (Salidas) if they are explicitly listed as supply items
+        salidas.forEach(salida => {
+            if (Array.isArray(salida.dispatchDetails)) {
+                salida.dispatchDetails.forEach(detail => {
+                    // Only deduct if it is a supply type
+                    if (detail.type === 'supply') {
+                        const lot = detail.lot || 'SIN LOTE';
+                        // Try to find exact match
+                        let key = `supply-${detail.name}-${lot}`;
+                        
+                        if (stockMap.has(key)) {
+                            stockMap.get(key)!.inDispatch = (stockMap.get(key)!.inDispatch || 0) + detail.quantity;
+                        } else {
+                            // Fallback try finding by name only if lot mismatch or legacy data
+                            const itemsByName = Array.from(stockMap.values()).filter(i => i.type === 'Consumible' && i.name === detail.name);
+                            if(itemsByName.length > 0) {
+                                // Just deduct from the first one found (approximation) or the SIN LOTE one
+                                const target = itemsByName.find(i => i.lot === 'SIN LOTE') || itemsByName[0];
+                                target.inDispatch = (target.inDispatch || 0) + detail.quantity;
+                            }
+                        }
+                    }
+                });
+            }
+        });
+
         const result = Array.from(stockMap.values());
         result.forEach(item => {
             const total = Number(item.total || 0);
             const inPacks = Number(item.inPacks || 0);
             const inMerma = Number(item.inMerma || 0);
-            item.available = total - inPacks - inMerma;
+            const inDispatch = Number(item.inDispatch || 0);
+            item.available = total - inPacks - inMerma - inDispatch;
         });
         return result.sort((a, b) => a.name.localeCompare(b.name) || (a.lot || '').localeCompare(b.lot || ''));
-    }, [albaranes, supplies, packs, mermas]);
+    }, [albaranes, supplies, packs, mermas, salidas]);
 
     // ... helper functions (addAlbaran, updateAlbaran, etc.) remain the same ...
     const addAlbaran = async (albaran: Albaran) => {

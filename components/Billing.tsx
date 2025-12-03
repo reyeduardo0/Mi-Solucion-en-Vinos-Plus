@@ -97,7 +97,10 @@ const Billing: React.FC = () => {
             const model = pack ? packModels.find(m => m.id === pack.modelId) : null;
             
             // Find Dispatch info
-            const dispatch = salidas.find(s => s.packIds?.includes(report.packId) || s.dispatchDetails?.some(d => d.packId === report.packId));
+            const dispatch = salidas.find(s => 
+                s.packIds?.includes(report.packId) || 
+                s.dispatchDetails?.some(d => d.type === 'pack' && d.id === report.packId)
+            );
 
             // Find effective price list based on REPORT DATE (Production Date)
             const reportDateObj = new Date(report.reportDate);
