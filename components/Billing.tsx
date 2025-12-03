@@ -14,6 +14,7 @@ const PencilIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-4 
 const CsvIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>;
 const PdfIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
 const CheckIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>;
+const SearchIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>;
 
 const PriceListModal: React.FC<{ 
     onClose: () => void; 
@@ -77,6 +78,7 @@ const Billing: React.FC = () => {
     const [showRateModal, setShowRateModal] = useState(false);
     const [rateToEdit, setRateToEdit] = useState<PriceList | null>(null);
     const [reportMonth, setReportMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+    const [searchTerm, setSearchTerm] = useState('');
     
     // Pending Tab State
     const [selectedPendingIds, setSelectedPendingIds] = useState<Set<string>>(new Set());
@@ -124,6 +126,7 @@ const Billing: React.FC = () => {
 
             return {
                 id: report.id,
+                packOrderId: pack?.orderId || report.packId, // Use Pack Order ID as visible identifier
                 status: dispatch ? 'Expedido' : 'Terminado',
                 productionDate: report.reportDate,
                 orderDate: pack?.creationDate,
@@ -140,15 +143,29 @@ const Billing: React.FC = () => {
         });
     };
 
+    const filterData = (data: ReturnType<typeof calculateRowData>) => {
+        if (!searchTerm) return data;
+        const lower = searchTerm.toLowerCase();
+        return data.filter(item => 
+            item.packOrderId.toLowerCase().includes(lower) ||
+            item.description?.toLowerCase().includes(lower) ||
+            item.lot?.toLowerCase().includes(lower) ||
+            item.dispatchNoteId?.toLowerCase().includes(lower) ||
+            item.id.toLowerCase().includes(lower)
+        );
+    };
+
     const pendingData = useMemo(() => {
         const pendingReports = productionReports.filter(r => !r.billingStatus || r.billingStatus === 'pending');
-        return calculateRowData(pendingReports).sort((a, b) => new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime());
-    }, [productionReports, packs, salidas, priceLists, packModels]);
+        const calculated = calculateRowData(pendingReports);
+        return filterData(calculated).sort((a, b) => new Date(a.productionDate).getTime() - new Date(b.productionDate).getTime());
+    }, [productionReports, packs, salidas, priceLists, packModels, searchTerm]);
 
     const billedData = useMemo(() => {
         const billedReports = productionReports.filter(r => r.billingStatus === 'billed' && r.assignedBillingMonth === reportMonth);
-        return calculateRowData(billedReports).sort((a, b) => new Date(a.shipDate || '0').getTime() - new Date(b.shipDate || '0').getTime());
-    }, [productionReports, packs, salidas, priceLists, packModels, reportMonth]);
+        const calculated = calculateRowData(billedReports);
+        return filterData(calculated).sort((a, b) => new Date(a.shipDate || '0').getTime() - new Date(b.shipDate || '0').getTime());
+    }, [productionReports, packs, salidas, priceLists, packModels, reportMonth, searchTerm]);
 
     const totalBilling = billedData.reduce((sum, item) => sum + item.totalAmount, 0);
 
@@ -191,7 +208,7 @@ const Billing: React.FC = () => {
             item.status, 
             formatDateSafe(item.productionDate), 
             formatDateSafe(item.shipDate || ''),
-            item.id, // Parte de Montaje
+            item.packOrderId, // Show Order ID
             item.description, 
             item.lot || '', 
             item.dispatchNoteId || '',
@@ -224,7 +241,7 @@ const Billing: React.FC = () => {
                 item.status,
                 formatDateSafe(item.productionDate),
                 formatDateSafe(item.shipDate),
-                item.id,
+                item.packOrderId, // Show Order ID
                 item.description,
                 item.lot || '-',
                 item.dispatchNoteId || '-',
@@ -258,6 +275,22 @@ const Billing: React.FC = () => {
                     </button>
                 </nav>
             </div>
+
+            {/* Global Search Bar for Reporting Tabs */}
+            {activeTab !== 'rates' && (
+                <div className="mb-6 relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <SearchIcon />
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Buscar por Parte de Montaje, Artículo, Lote, Albarán..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className="pl-10 w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500"
+                    />
+                </div>
+            )}
 
             {activeTab === 'pending' && (
                 <Card title="Selección de Producción para Facturar">
@@ -295,7 +328,7 @@ const Billing: React.FC = () => {
                                             <input type="checkbox" checked={selectedPendingIds.has(row.id)} onChange={() => handleSelectPending(row.id)} />
                                         </td>
                                         <td className="px-3 py-2">{formatDateSafe(row.productionDate)}</td>
-                                        <td className="px-3 py-2 font-mono text-xs text-gray-500">{row.id}</td>
+                                        <td className="px-3 py-2 font-mono text-xs text-gray-900 font-bold">{row.packOrderId}</td>
                                         <td className="px-3 py-2 font-medium">{row.description}</td>
                                         <td className="px-3 py-2 font-mono text-xs">{row.lot || '-'}</td>
                                         <td className="px-3 py-2 text-right">{row.qty}</td>
@@ -349,7 +382,7 @@ const Billing: React.FC = () => {
                                         <td className="px-3 py-2">{row.status}</td>
                                         <td className="px-3 py-2">{formatDateSafe(row.productionDate)}</td>
                                         <td className="px-3 py-2">{formatDateSafe(row.shipDate)}</td>
-                                        <td className="px-3 py-2 font-mono text-xs text-gray-500">{row.id}</td>
+                                        <td className="px-3 py-2 font-mono text-xs text-gray-900 font-bold">{row.packOrderId}</td>
                                         <td className="px-3 py-2 font-medium">{row.description}</td>
                                         <td className="px-3 py-2 font-mono text-xs">{row.lot || '-'}</td>
                                         <td className="px-3 py-2 font-mono text-xs">{row.dispatchNoteId}</td>
