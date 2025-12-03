@@ -75,6 +75,9 @@ interface DataContextType {
     deletePack: (id: string) => Promise<void>;
 
     handleDispatch: (dispatchData: Omit<DispatchNote, 'id' | 'created_at' | 'status'>) => Promise<void>;
+    updateDispatch: (dispatch: DispatchNote) => Promise<void>;
+    deleteDispatch: (id: string) => Promise<void>;
+
     addMerma: (merma: Omit<Merma, 'id' | 'created_at'>) => Promise<void>;
     
     addProductionReport: (report: Omit<ProductionReport, 'created_at'>) => Promise<void>;
@@ -210,7 +213,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
             const [packsResult, salidasResult] = await Promise.all([
                 supabase!.from('wine_packs').select('id, modelId:model_id, modelName:model_name, orderId:order_id, quantity, creationDate:creation_date, contents, suppliesUsed:supplies_used, additionalComponents:additional_components, packImage:pack_image, status, created_at').order('created_at', { ascending: false }),
-                // UPDATE: Added dispatch_note_id and total_pallets to select query
                 supabase!.from('dispatch_notes').select('id, dispatchNoteId:dispatch_note_id, dispatchDate:dispatch_date, customer, destination, carrier, truckPlate:truck_plate, driver, totalPallets:total_pallets, packIds:pack_ids, dispatchDetails:dispatch_details, status, created_at').order('created_at', { ascending: false })
             ]);
             if (packsResult.error) throw packsResult.error;
@@ -227,7 +229,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
 
             let fetchedProdReports: any[] = [];
             try {
-                // ADDED: Billing fields fetch (billing_status, assigned_billing_month)
                 const prodReportsResult = await supabase!.from('production_reports').select('id, packId:pack_id, reportDate:report_date, producedQuantity:produced_quantity, expeditionLot:expedition_lot, consumptions, notes, isHoliday:is_holiday, isNightShift:is_night_shift, overtimeHours:overtime_hours, billingStatus:billing_status, assignedBillingMonth:assigned_billing_month, created_at').order('created_at', { ascending: false });
                 if (!prodReportsResult.error) {
                     fetchedProdReports = prodReportsResult.data || [];
@@ -236,7 +237,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
                 console.warn("Could not fetch production reports, table might be missing:", e);
             }
 
-            // Fetch Price Lists
             let fetchedPriceLists: any[] = [];
             try {
                 const priceListsResult = await supabase!.from('price_lists').select('id, modelId:model_id, startDate:start_date, endDate:end_date, basePrice:base_price, holidaySurchargePercent:holiday_surcharge_percent, nightSurchargePercent:night_surcharge_percent, overtimePrice:overtime_price, created_at');
@@ -742,6 +742,29 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         if (error) throw error;
         await addAuditLog(`Creó la salida "${id}" (Albarán: ${dispatchNoteId}) para el cliente "${dispatchData.customer}"`);
     };
+    const updateDispatch = async (dispatch: DispatchNote) => {
+        const { id, dispatchDate, customer, destination, carrier, truckPlate, driver, dispatchNoteId, totalPallets } = dispatch;
+        const dbNote = {
+            dispatch_note_id: dispatchNoteId,
+            dispatch_date: dispatchDate,
+            customer,
+            destination,
+            carrier,
+            truck_plate: truckPlate,
+            driver,
+            total_pallets: totalPallets
+        };
+        const { error } = await supabase!.from('dispatch_notes').update(dbNote).eq('id', id);
+        if (error) throw error;
+        await addAuditLog(`Actualizó la salida "${id}"`);
+        await fetchData();
+    };
+    const deleteDispatch = async (id: string) => {
+        const { error } = await supabase!.from('dispatch_notes').delete().eq('id', id);
+        if (error) throw error;
+        await addAuditLog(`Eliminó la salida "${id}"`);
+        await fetchData();
+    };
     const addMerma = async (merma: Omit<Merma, 'id' | 'created_at'>) => {
         const { itemName, itemType, lot, quantity, reason } = merma;
         const dbMerma = { item_name: itemName, item_type: itemType, lot, quantity, reason };
@@ -749,6 +772,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         if (error) throw error;
         await addAuditLog(`Registró una merma de ${merma.quantity} para "${merma.itemName}"`);
     };
+    // ... addProductionReport, updateProductionReport, deleteProductionReport, assignBillingMonth, addPriceList, updatePriceList, deletePriceList, addIncident, resolveIncident, addUser, updateUser, deleteUser, updateCurrentUserPassword, updateUserPasswordByAdmin, addRole, updateRole, deleteRole remain the same ...
+    
     const addProductionReport = async (report: Omit<ProductionReport, 'created_at'>) => {
         const { id, packId, reportDate, producedQuantity, consumptions, notes, expeditionLot, isHoliday, isNightShift, overtimeHours } = report;
         const dbReport = { 
@@ -935,7 +960,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         updateSupplyDetails, mergeSupplies, 
         updateProductDetails, mergeProducts, 
         addPackModel, updatePackModel, deletePackModel,
-        addPack, updatePack, deletePack, handleDispatch, addMerma, 
+        addPack, updatePack, deletePack, handleDispatch, updateDispatch, deleteDispatch, addMerma, 
         addProductionReport, updateProductionReport, deleteProductionReport,
         assignBillingMonth, // Exported new function
         addPriceList, updatePriceList, deletePriceList,
