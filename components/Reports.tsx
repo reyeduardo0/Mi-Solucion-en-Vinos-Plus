@@ -1,6 +1,6 @@
 
-/* Force Git Sync: v1.6.2 - Ensure Stock Detailed and Aggregated reports are deployed */
-import React, { useState } from 'react';
+/* Force Git Sync: v1.8.3 - Full Implementation of Item History (Kardex) */
+import React, { useState, useMemo } from 'react';
 import { Albaran, Incident, WinePack, DispatchNote, Supply } from '../types';
 import Card from './ui/Card';
 import Button from './ui/Button';
@@ -14,8 +14,20 @@ const CsvIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5
 const PdfIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
 
 const Reports: React.FC = () => {
-    const { albaranes, incidents, salidas, supplies, inventoryStock, productionReports, packs, mermas } = useData();
-    const [reportFilters, setReportFilters] = useState({ type: 'entries', startDate: '', endDate: '', carrier: '', customer: '', status: 'all' });
+    const { albaranes, incidents, salidas, supplies, inventoryStock, productionReports, packs, mermas, products } = useData();
+    
+    // Extended filters to support Kardex
+    const [reportFilters, setReportFilters] = useState({ 
+        type: 'entries', 
+        startDate: '', 
+        endDate: '', 
+        carrier: '', 
+        customer: '', 
+        status: 'all',
+        itemType: 'product', // 'product' | 'supply'
+        itemId: '' // Product Name or Supply ID
+    });
+    
     const [generatedReport, setGeneratedReport] = useState<{ headers: string[], data: (string|number)[][] } | null>(null);
 
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setReportFilters(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -24,8 +36,10 @@ const Reports: React.FC = () => {
         let headers: string[] = [], data: (string|number)[][] = [];
         const startDate = reportFilters.startDate ? new Date(reportFilters.startDate) : null;
         const endDate = reportFilters.endDate ? new Date(reportFilters.endDate) : null;
+        
         if(startDate) startDate.setHours(0,0,0,0);
         if(endDate) endDate.setHours(23,59,59,999);
+        
         const dateFilter = (dateStr: string) => { if (!startDate && !endDate) return true; const itemDate = new Date(dateStr); return !isNaN(itemDate.getTime()) && (!startDate || itemDate >= startDate) && (!endDate || itemDate <= endDate); }
 
         switch (reportFilters.type) {
@@ -34,7 +48,6 @@ const Reports: React.FC = () => {
                 data = albaranes.filter(a => dateFilter(a.entryDate) && (!reportFilters.carrier || a.carrier === reportFilters.carrier) && (reportFilters.status === 'all' || a.status === reportFilters.status)).map(a => [a.id, formatDateSafe(a.entryDate), a.carrier, a.driver || 'N/A', a.pallets?.length || 0, a.status]);
                 break;
             case 'dispatches':
-                // Updated to show new fields
                 headers = ['ID Salida (Sistema)', 'Nº Albarán Salida', 'Fecha', 'Cliente', 'Destino', 'Transportista', '# Packs', 'Nº Palets'];
                 data = salidas.filter(s => dateFilter(s.dispatchDate) && (!reportFilters.customer || s.customer === reportFilters.customer) && (!reportFilters.carrier || s.carrier === reportFilters.carrier)).map(s => [
                     s.id, 
@@ -61,7 +74,6 @@ const Reports: React.FC = () => {
                 });
                 break;
             case 'stock_detailed':
-                // Inventario Actual Detallado por Lote
                 headers = ['Código', 'Artículo', 'Tipo', 'Lote', 'Stock Total', 'Disponible', 'En Packs', 'En Merma'];
                 data = inventoryStock.map(i => [
                     i.code || '-',
@@ -75,7 +87,6 @@ const Reports: React.FC = () => {
                 ]);
                 break;
             case 'stock_aggregated':
-                // Inventario Actual Agrupado por Producto
                 headers = ['Código', 'Artículo', 'Tipo', 'Stock Total', 'Disponible', 'En Packs', 'En Merma'];
                 const aggregatedStock = inventoryStock.reduce((acc, curr) => {
                     const key = curr.name;
@@ -123,7 +134,6 @@ const Reports: React.FC = () => {
                 break;
             case 'mermas_total':
                 headers = ['Artículo', 'Tipo', 'Total Merma', 'Veces Reportado'];
-                // Agrupar mermas por nombre
                 const groupedMermas = mermas.filter(m => dateFilter(m.created_at)).reduce((acc, curr) => {
                     const key = curr.itemName;
                     if (!acc[key]) acc[key] = { name: curr.itemName, type: curr.itemType, total: 0, count: 0 };
@@ -135,7 +145,6 @@ const Reports: React.FC = () => {
                 break;
             case 'production_by_model':
                 headers = ['Modelo de Pack', 'Unidades Producidas', 'Nº de Partes (Lotes)'];
-                // Agrupar producción por nombre del modelo del pack
                 const groupedProd = productionReports.filter(r => dateFilter(r.reportDate)).reduce((acc, curr) => {
                     const pack = packs.find(p => p.id === curr.packId);
                     const name = pack ? pack.modelName : 'Modelo Desconocido';
@@ -145,6 +154,177 @@ const Reports: React.FC = () => {
                     return acc;
                 }, {} as Record<string, any>);
                 data = Object.values(groupedProd).map(p => [p.name, p.totalQty, p.batches]);
+                break;
+                
+            case 'item_history':
+                // --- ITEM HISTORY (KARDEX) LOGIC ---
+                headers = ['Fecha', 'Tipo Movimiento', 'Documento / Ref', 'Detalle / Lanzamiento', 'Entrada (+)', 'Salida (-)', 'Saldo'];
+                
+                const targetId = reportFilters.itemId;
+                if (!targetId) {
+                    alert("Por favor, seleccione un artículo.");
+                    return;
+                }
+
+                const isProduct = reportFilters.itemType === 'product';
+                let targetName = targetId; // For products, ID is usually the Name
+                
+                // If supply, resolve name from ID
+                if (!isProduct) {
+                    const s = supplies.find(sup => sup.id === targetId);
+                    targetName = s ? s.name : targetId;
+                }
+
+                interface Movement {
+                    date: Date;
+                    type: 'Entrada' | 'Producción' | 'Salida' | 'Merma';
+                    ref: string;
+                    detail: string;
+                    qty: number; // Positive (In), Negative (Out)
+                }
+                const movements: Movement[] = [];
+
+                // 1. ENTRIES (Albaranes)
+                albaranes.forEach(alb => {
+                    alb.pallets?.forEach(p => {
+                        const pName = p.type === 'product' ? p.product?.name : p.supplyName;
+                        // Loose comparison
+                        if (pName && pName.trim().toUpperCase() === targetName.trim().toUpperCase()) {
+                            const qty = p.type === 'product' ? (p.totalBottles || 0) : (p.supplyQuantity || 0);
+                            movements.push({
+                                date: new Date(alb.entryDate),
+                                type: 'Entrada',
+                                ref: alb.id,
+                                detail: `Prov: ${alb.carrier}`,
+                                qty: qty
+                            });
+                        }
+                    });
+                });
+
+                // 2. PRODUCTION (Usage in Production Reports)
+                productionReports.forEach(rep => {
+                    // Check if the item was consumed in this report
+                    // Method A: Check explicit consumptions list (most accurate for both supplies and wines if recorded)
+                    const consumption = rep.consumptions.find(c => 
+                        (c.type === 'supply' && c.itemId === targetId) || 
+                        c.name.trim().toUpperCase() === targetName.trim().toUpperCase()
+                    );
+
+                    // Method B: If product (wine), check if it belongs to the pack model (fallback if consumption not explicit)
+                    const pack = packs.find(p => p.id === rep.packId);
+                    
+                    let qtyConsumed = 0;
+                    let qtyWaste = 0;
+
+                    if (consumption) {
+                        qtyConsumed = consumption.quantityConsumed;
+                        qtyWaste = consumption.quantityWaste;
+                    } 
+                    // Fallback for Wines if not in consumptions list but implied by Pack Model (legacy data support)
+                    else if (isProduct && pack) {
+                         const content = pack.contents.find(c => c.productName.trim().toUpperCase() === targetName.trim().toUpperCase());
+                         if (content && pack.quantity > 0) {
+                             const perPack = content.quantity / pack.quantity;
+                             qtyConsumed = Math.ceil(perPack * rep.producedQuantity);
+                         }
+                    }
+
+                    if (qtyConsumed > 0) {
+                        movements.push({
+                            date: new Date(rep.reportDate),
+                            type: 'Producción',
+                            ref: rep.id,
+                            detail: pack ? `Lanzamiento: ${pack.orderId} (${pack.modelName})` : 'Producción',
+                            qty: -qtyConsumed
+                        });
+                    }
+                    
+                    if (qtyWaste > 0) {
+                         movements.push({
+                            date: new Date(rep.reportDate),
+                            type: 'Merma',
+                            ref: rep.id,
+                            detail: 'Merma en Producción',
+                            qty: -qtyWaste
+                        });
+                    }
+                });
+
+                // 3. DISPATCHES (Direct dispatch of Supplies)
+                // Note: Wines usually leave as Packs, not as individual bottles. 
+                // If the user selects a Supply (Pallet), it might leave here.
+                salidas.forEach(sal => {
+                    sal.dispatchDetails?.forEach(d => {
+                        let isMatch = false;
+                        if (!isProduct && d.type === 'supply') {
+                            isMatch = (d.id === targetId || d.name.trim().toUpperCase() === targetName.trim().toUpperCase());
+                        }
+                        
+                        if (isMatch) {
+                            movements.push({
+                                date: new Date(sal.dispatchDate),
+                                type: 'Salida',
+                                ref: sal.dispatchNoteId || sal.id,
+                                detail: `Cliente: ${sal.customer}`,
+                                qty: -(d.quantity || 0)
+                            });
+                        }
+                    });
+                });
+
+                // 4. MANUAL ADJUSTMENTS (Mermas)
+                mermas.forEach(m => {
+                    if (m.itemName.trim().toUpperCase() === targetName.trim().toUpperCase()) {
+                        // Avoid double counting production waste if captured above
+                        if (!m.reason?.includes('Parte de Montaje') && !m.reason?.includes('Producción')) {
+                             movements.push({
+                                date: new Date(m.created_at),
+                                type: 'Merma',
+                                ref: 'Ajuste/Rotura',
+                                detail: m.reason || 'Sin motivo',
+                                qty: -(m.quantity || 0)
+                            });
+                        }
+                    }
+                });
+
+                // Sort Chronologically
+                movements.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+                // Calculate Balances
+                let runningBalance = 0;
+                let balanceBeforeStart = 0;
+                const rows: (string|number)[][] = [];
+
+                movements.forEach(m => {
+                    if (startDate && m.date < startDate) {
+                        balanceBeforeStart += m.qty;
+                    } 
+                    
+                    runningBalance += m.qty;
+
+                    if ((!startDate || m.date >= startDate) && (!endDate || m.date <= endDate)) {
+                        rows.push([
+                            formatDateTimeSafe(m.date.toISOString()),
+                            m.type,
+                            m.ref,
+                            m.detail,
+                            m.qty > 0 ? m.qty : '-',
+                            m.qty < 0 ? Math.abs(m.qty) : '-',
+                            runningBalance
+                        ]);
+                    }
+                });
+
+                if (startDate) {
+                    data = [
+                        ['-', 'Saldo Anterior', '-', 'Acumulado antes de fecha inicio', '-', '-', balanceBeforeStart],
+                        ...rows
+                    ];
+                } else {
+                    data = rows;
+                }
                 break;
         }
         setGeneratedReport({ headers, data });
@@ -166,6 +346,7 @@ const Reports: React.FC = () => {
             case 'production': title = "Reporte de Partes de Montaje"; break;
             case 'mermas_total': title = "Resumen Total de Mermas"; break;
             case 'production_by_model': title = "Resumen de Producción por Modelo"; break;
+            case 'item_history': title = `Historial de Artículo: ${reportFilters.itemId}`; break;
         }
 
         const dateStr = new Date().toLocaleDateString('es-ES');
@@ -229,13 +410,47 @@ const Reports: React.FC = () => {
                                 <option value="production">Listado Partes de Montaje</option>
                                 <option value="mermas_total">Total Mermas (Agrupado)</option>
                                 <option value="production_by_model">Producción por Modelo (Agrupado)</option>
+                                <option value="item_history">Historial de Artículo (Kardex)</option>
                             </select>
                         </div>
+                        
                         <div><label className="block text-sm font-medium mb-1">Fecha Desde</label><input type="date" name="startDate" value={reportFilters.startDate} onChange={handleFilterChange} className="w-full p-2 border rounded-md"/></div>
                         <div><label className="block text-sm font-medium mb-1">Fecha Hasta</label><input type="date" name="endDate" value={reportFilters.endDate} onChange={handleFilterChange} className="w-full p-2 border rounded-md"/></div>
+                        
+                        {/* Dynamic Filters based on Report Type */}
                         {(reportFilters.type === 'entries' || reportFilters.type === 'dispatches') && <div><label className="block text-sm font-medium mb-1">Transportista</label><select name="carrier" value={reportFilters.carrier} onChange={handleFilterChange} className="w-full p-2 border rounded-md"><option value="">Todos</option>{uniqueCarriers.map(c => <option key={c} value={c}>{c}</option>)}</select></div>}
                         {(reportFilters.type === 'dispatches') && <div><label className="block text-sm font-medium mb-1">Cliente</label><select name="customer" value={reportFilters.customer} onChange={handleFilterChange} className="w-full p-2 border rounded-md"><option value="">Todos</option>{uniqueCustomers.map(c => <option key={c} value={c}>{c}</option>)}</select></div>}
                         {(reportFilters.type === 'entries' || reportFilters.type === 'incidents') && <div><label className="block text-sm font-medium mb-1">Estado</label><select name="status" value={reportFilters.status} onChange={handleFilterChange} className="w-full p-2 border rounded-md"><option value="all">Todos</option>{reportFilters.type === 'entries' ? <><option value="verified">Verificado</option><option value="incident">Incidencia</option></> : <><option value="pending">Pendiente</option><option value="resolved">Resuelta</option></>}</select></div>}
+                        
+                        {/* Kardex Filters */}
+                        {reportFilters.type === 'item_history' && (
+                            <>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Tipo Artículo</label>
+                                    <select name="itemType" value={reportFilters.itemType} onChange={handleFilterChange} className="w-full p-2 border rounded-md">
+                                        <option value="product">Producto (Vino)</option>
+                                        <option value="supply">Consumible</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Seleccionar Artículo</label>
+                                    <input 
+                                        list="items-list" 
+                                        name="itemId" 
+                                        value={reportFilters.itemId} 
+                                        onChange={handleFilterChange} 
+                                        className="w-full p-2 border rounded-md" 
+                                        placeholder="Escribe para buscar..."
+                                    />
+                                    <datalist id="items-list">
+                                        {reportFilters.itemType === 'product' 
+                                            ? products.map(p => <option key={p.name} value={p.name} />)
+                                            : supplies.map(s => <option key={s.id} value={s.id}>{s.name}</option>)
+                                        }
+                                    </datalist>
+                                </div>
+                            </>
+                        )}
                     </div>
                     <div className="mt-4 flex justify-end"><Button onClick={handleGenerateReport}>Generar Reporte</Button></div>
                 </Card>
