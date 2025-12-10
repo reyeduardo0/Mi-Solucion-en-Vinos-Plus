@@ -85,7 +85,9 @@ const GoodsReceipt: React.FC = () => {
     const initialType = searchParams.get('type') === 'consumable' ? 'consumable' : 'product';
     const isAIAvailable = useMemo(() => !!(window as any).process?.env?.API_KEY, []);
 
-    const assignedPalletsCount = useMemo(() => palletGroups.reduce((acc, group) => acc + (group.palletCount || 0), [palletGroups]));
+    // FIX: Correctly calculate the sum of pallets. Initial value for reduce must be 0.
+    const assignedPalletsCount = useMemo(() => palletGroups.reduce((acc, group) => acc + (group.palletCount || 0), 0), [palletGroups]);
+    
     const isPalletCountMismatch = totalPallets > 0 && totalPallets !== assignedPalletsCount;
 
     // Initialize with a group if new entry
