@@ -66,13 +66,10 @@ const AppRoutes: React.FC = () => {
             } catch (error: any) {
                 console.error("Auth initialization error:", error.message);
                 
-                // FIX: If the refresh token is invalid or not found (stale local storage),
-                // force a sign out to clear the browser's storage and allow a fresh login.
-                if (error.message && (error.message.includes("Refresh Token") || error.message.includes("Invalid"))) {
-                    console.warn("Clearing invalid session data...");
-                    await supabase!.auth.signOut();
-                }
-                
+                // CRITICAL FIX: If "Invalid Refresh Token" or any session error occurs,
+                // we must forcefully sign out to clear the stale local storage token.
+                // Otherwise, the app gets stuck in a loop trying to use the bad token.
+                await supabase!.auth.signOut();
                 setSession(null);
             } finally {
                 setLoading(false);
@@ -81,10 +78,11 @@ const AppRoutes: React.FC = () => {
         
         initializeAuth();
 
-        const { data: { subscription } } = supabase!.auth.onAuthStateChange((event, session) => {
+        const { data: { subscription } } = supabase!.auth.onAuthStateChange(async (event, session) => {
             if (event === 'TOKEN_REFRESH_PREVIOUSLY_FAILED') {
-                // Handle specific refresh failure event
-                console.warn("Token refresh failed, clearing session.");
+                // Handle specific refresh failure event explicitly
+                console.warn("Token refresh failed, clearing session and storage.");
+                await supabase!.auth.signOut(); 
                 setSession(null);
             } else if (event === 'SIGNED_OUT') {
                 setSession(null);
