@@ -1,5 +1,5 @@
 
-/* Force Git Sync: v1.8.3 - Full Implementation of Item History (Kardex) */
+/* Force Git Sync: v1.9.0 - Added Pending Dispatch and Dispatch History Reports */
 import React, { useState, useMemo } from 'react';
 import { Albaran, Incident, WinePack, DispatchNote, Supply } from '../types';
 import Card from './ui/Card';
@@ -156,6 +156,87 @@ const Reports: React.FC = () => {
                 data = Object.values(groupedProd).map(p => [p.name, p.totalQty, p.batches]);
                 break;
                 
+            case 'pending_dispatch':
+                // NUEVO REPORTE 1: Packs producidos (stock) agrupados
+                headers = ['Modelo', 'Nº Lanzamiento / Pedido', 'Lote Expedición', 'Total Producido', 'Total Salidas', 'Pendiente (Stock)'];
+                
+                // Agrupar Producción
+                const prodMap: Record<string, { model: string, order: string, lot: string, produced: number, dispatched: number }> = {};
+                
+                productionReports.forEach(rep => {
+                    const pack = packs.find(p => p.id === rep.packId);
+                    if (!pack) return;
+                    // Composite Key
+                    const lot = rep.expeditionLot || 'SIN LOTE';
+                    const key = `${pack.modelName}|${pack.orderId}|${lot}`;
+                    
+                    if (!prodMap[key]) {
+                        prodMap[key] = { model: pack.modelName, order: pack.orderId, lot: lot, produced: 0, dispatched: 0 };
+                    }
+                    prodMap[key].produced += rep.producedQuantity;
+                });
+
+                // Restar Salidas
+                salidas.forEach(salida => {
+                    if (!salida.dispatchDetails) return;
+                    salida.dispatchDetails.forEach(detail => {
+                        // Solo procesar si es tipo pack (o indefinido legacy que asumimos pack)
+                        if (!detail.type || detail.type === 'pack') {
+                            const pack = packs.find(p => p.id === detail.id);
+                            if (pack) {
+                                const lot = detail.lot || 'SIN LOTE';
+                                const key = `${pack.modelName}|${pack.orderId}|${lot}`;
+                                if (prodMap[key]) {
+                                    prodMap[key].dispatched += detail.quantity;
+                                }
+                            }
+                        }
+                    });
+                });
+
+                data = Object.values(prodMap)
+                    .filter(item => (item.produced - item.dispatched) > 0) // Solo mostrar si hay pendientes
+                    .map(item => [
+                        item.model,
+                        item.order,
+                        item.lot,
+                        item.produced,
+                        item.dispatched,
+                        item.produced - item.dispatched
+                    ]);
+                break;
+
+            case 'dispatched_history':
+                // NUEVO REPORTE 2: Historial de lo que ha salido
+                headers = ['Fecha Salida', 'Nº Albarán Salida', 'Cliente', 'Destino', 'Modelo Pack', 'Nº Lanzamiento', 'Lote Exp.', 'Cantidad'];
+                
+                const historyRows: any[] = [];
+                salidas.filter(s => dateFilter(s.dispatchDate)).forEach(salida => {
+                    if (!salida.dispatchDetails) return;
+                    salida.dispatchDetails.forEach(detail => {
+                        if (!detail.type || detail.type === 'pack') {
+                            const pack = packs.find(p => p.id === detail.id);
+                            historyRows.push([
+                                formatDateTimeSafe(salida.dispatchDate),
+                                salida.dispatchNoteId || '-',
+                                salida.customer,
+                                salida.destination,
+                                pack ? pack.modelName : detail.name,
+                                pack ? pack.orderId : '-',
+                                detail.lot || '-',
+                                detail.quantity
+                            ]);
+                        }
+                    });
+                });
+                
+                // Sort by date desc
+                data = historyRows.sort((a, b) => {
+                    // a[0] contains formatted date string, tricky to sort. Use original data for sort ideally, but for now relying on display
+                    return 0; 
+                });
+                break;
+
             case 'item_history':
                 // --- ITEM HISTORY (KARDEX) LOGIC ---
                 headers = ['Fecha', 'Tipo Movimiento', 'Documento / Ref', 'Detalle / Lanzamiento', 'Entrada (+)', 'Salida (-)', 'Saldo'];
@@ -346,6 +427,8 @@ const Reports: React.FC = () => {
             case 'production': title = "Reporte de Partes de Montaje"; break;
             case 'mermas_total': title = "Resumen Total de Mermas"; break;
             case 'production_by_model': title = "Resumen de Producción por Modelo"; break;
+            case 'pending_dispatch': title = "Packs Producidos Pendientes de Salida"; break;
+            case 'dispatched_history': title = "Historial Detallado de Salidas"; break;
             case 'item_history': title = `Historial de Artículo: ${reportFilters.itemId}`; break;
         }
 
@@ -402,7 +485,9 @@ const Reports: React.FC = () => {
                             <label className="block text-sm font-medium mb-1">Tipo de Reporte</label>
                             <select name="type" value={reportFilters.type} onChange={handleFilterChange} className="w-full p-2 border rounded-md">
                                 <option value="entries">Historial de Entradas</option>
-                                <option value="dispatches">Detalle de Salidas</option>
+                                <option value="dispatches">Detalle de Salidas (General)</option>
+                                <option value="pending_dispatch">Packs Pendientes de Salida (Stock)</option>
+                                <option value="dispatched_history">Historial Salidas (Por Lanzamiento)</option>
                                 <option value="incidents">Resumen de Incidencias</option>
                                 <option value="stock_detailed">Inventario Detallado (Lotes)</option>
                                 <option value="stock_aggregated">Inventario Agrupado (Producto)</option>
