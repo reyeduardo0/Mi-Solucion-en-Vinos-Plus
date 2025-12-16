@@ -1,5 +1,5 @@
 
-/* Force Git Sync: v1.9.0 - Added Pending Dispatch and Dispatch History Reports */
+/* Force Git Sync: v1.9.1 - Added Search in Report Results */
 import React, { useState, useMemo } from 'react';
 import { Albaran, Incident, WinePack, DispatchNote, Supply } from '../types';
 import Card from './ui/Card';
@@ -12,6 +12,7 @@ import autoTable from 'jspdf-autotable';
 const ReportsIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>;
 const CsvIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>;
 const PdfIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
+const SearchIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>;
 
 const Reports: React.FC = () => {
     const { albaranes, incidents, salidas, supplies, inventoryStock, productionReports, packs, mermas, products } = useData();
@@ -29,10 +30,14 @@ const Reports: React.FC = () => {
     });
     
     const [generatedReport, setGeneratedReport] = useState<{ headers: string[], data: (string|number)[][] } | null>(null);
+    
+    // Search within results
+    const [resultSearchTerm, setResultSearchTerm] = useState('');
 
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setReportFilters(prev => ({ ...prev, [e.target.name]: e.target.value }));
     
     const handleGenerateReport = () => {
+        setResultSearchTerm(''); // Reset search when generating new report
         let headers: string[] = [], data: (string|number)[][] = [];
         const startDate = reportFilters.startDate ? new Date(reportFilters.startDate) : null;
         const endDate = reportFilters.endDate ? new Date(reportFilters.endDate) : null;
@@ -411,8 +416,19 @@ const Reports: React.FC = () => {
         setGeneratedReport({ headers, data });
     };
 
+    // Filter results locally
+    const filteredResults = useMemo(() => {
+        if (!generatedReport) return null;
+        if (!resultSearchTerm) return generatedReport.data;
+        
+        const term = resultSearchTerm.toLowerCase();
+        return generatedReport.data.filter(row => 
+            row.some(cell => String(cell).toLowerCase().includes(term))
+        );
+    }, [generatedReport, resultSearchTerm]);
+
     const handleExportPDF = () => {
-        if (!generatedReport) return;
+        if (!generatedReport || !filteredResults) return;
 
         const doc = new jsPDF();
         
@@ -442,11 +458,14 @@ const Reports: React.FC = () => {
         if (reportFilters.startDate || reportFilters.endDate) {
             doc.text(`Filtro de fecha: ${reportFilters.startDate || 'Inicio'} - ${reportFilters.endDate || 'Fin'}`, 14, 34);
         }
+        if (resultSearchTerm) {
+            doc.text(`Filtro aplicado: "${resultSearchTerm}"`, 14, 38);
+        }
 
         autoTable(doc, {
             startY: 40,
             head: [generatedReport.headers],
-            body: generatedReport.data,
+            body: filteredResults, // Use filtered results
             headStyles: { fillColor: [251, 191, 36], textColor: [17, 24, 39] },
             styles: { fontSize: 8 },
         });
@@ -456,10 +475,10 @@ const Reports: React.FC = () => {
     };
 
     const handleExportCSV = () => {
-        if (!generatedReport) return;
+        if (!generatedReport || !filteredResults) return;
         const csvContent = [
             generatedReport.headers.join(','),
-            ...generatedReport.data.map(row => row.join(','))
+            ...filteredResults.map(row => row.join(',')) // Use filtered results
         ].join('\n');
         
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -544,15 +563,31 @@ const Reports: React.FC = () => {
                         <h3 className="text-lg font-semibold">Resultados del Reporte</h3>
                         {generatedReport && <div className="space-x-2"><Button variant="secondary" onClick={handleExportCSV}><CsvIcon/>Exportar a CSV</Button><Button variant="secondary" onClick={handleExportPDF}><PdfIcon/>Exportar a PDF</Button></div>}
                     </div>
+                    
+                    {generatedReport && (
+                        <div className="mb-4 relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <SearchIcon />
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Filtrar resultados..."
+                                value={resultSearchTerm}
+                                onChange={(e) => setResultSearchTerm(e.target.value)}
+                                className="pl-10 w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500"
+                            />
+                        </div>
+                    )}
+
                     <div className="overflow-x-auto">
-                        {generatedReport ? (
-                            generatedReport.data.length > 0 ? (
+                        {generatedReport && filteredResults ? (
+                            filteredResults.length > 0 ? (
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gray-50">
                                         <tr>{generatedReport.headers.map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase">{h}</th>)}</tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-200">
-                                        {generatedReport.data.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j} className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{cell as React.ReactNode}</td>)}</tr>)}
+                                        {filteredResults.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j} className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">{cell as React.ReactNode}</td>)}</tr>)}
                                     </tbody>
                                 </table>
                             ) : (
