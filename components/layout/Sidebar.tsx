@@ -54,11 +54,17 @@ const Sidebar: React.FC<SidebarProps> = ({ onLinkClick }) => {
     ]
 
   return (
-    <aside className="bg-brand-dark text-brand-light w-64 space-y-6 py-7 px-2 flex flex-col justify-between h-screen">
-      <div>
-        <div className="text-white font-bold text-center text-lg mb-8">
-            Mi Solución en Vinos
+    <aside className="bg-brand-dark text-brand-light w-64 flex flex-col h-full overflow-hidden select-none border-r border-gray-800 shadow-xl">
+      {/* Brand Header */}
+      <div className="py-5 px-4 flex items-center justify-center border-b border-brand-gray-dark/50 flex-shrink-0">
+        <div className="flex items-center space-x-2">
+            <span className="w-2 h-5 bg-brand-yellow rounded-full inline-block"></span>
+            <span className="text-white font-bold text-lg tracking-tight">Mi Solución en Vinos</span>
         </div>
+      </div>
+
+      {/* Scrollable Navigation Area */}
+      <div className="flex-1 overflow-y-auto sidebar-scroll px-3 py-4 space-y-5 min-h-0">
         <nav className="space-y-1">
             {navLinks.filter(link => link.permission).map((link) => (
                 <NavLink
@@ -67,20 +73,21 @@ const Sidebar: React.FC<SidebarProps> = ({ onLinkClick }) => {
                     end={link.path === '/'}
                     onClick={onLinkClick}
                     className={({ isActive }) =>
-                      `flex items-center space-x-3 p-2 rounded-md font-medium text-sm transition-colors duration-200 ${
+                      `flex items-center space-x-3 px-3 py-2 rounded-md font-medium text-sm transition-colors duration-150 ${
                         isActive
-                          ? 'bg-brand-yellow text-brand-dark'
-                          : 'hover:bg-brand-gray-dark hover:text-white'
+                          ? 'bg-brand-yellow text-brand-dark font-semibold shadow-sm'
+                          : 'hover:bg-brand-gray-dark hover:text-white text-gray-300'
                       }`
                     }
                 >
-                    {link.icon}
-                    <span>{link.label}</span>
+                    <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">{link.icon}</span>
+                    <span className="truncate">{link.label}</span>
                 </NavLink>
             ))}
         </nav>
-        <div className="mt-6 pt-6 border-t border-brand-gray-dark">
-             <h3 className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Administración</h3>
+
+        <div className="pt-4 border-t border-brand-gray-dark/60">
+             <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Administración</h3>
              <div className="space-y-1">
                 {adminLinks.filter(link => link.permission).map((link) => (
                     <NavLink
@@ -88,21 +95,22 @@ const Sidebar: React.FC<SidebarProps> = ({ onLinkClick }) => {
                         to={link.path}
                         onClick={onLinkClick}
                         className={({ isActive }) =>
-                        `flex items-center space-x-3 p-2 rounded-md font-medium text-sm transition-colors duration-200 ${
+                        `flex items-center space-x-3 px-3 py-2 rounded-md font-medium text-sm transition-colors duration-150 ${
                             isActive
-                            ? 'bg-brand-yellow text-brand-dark'
-                            : 'hover:bg-brand-gray-dark hover:text-white'
+                            ? 'bg-brand-yellow text-brand-dark font-semibold shadow-sm'
+                            : 'hover:bg-brand-gray-dark hover:text-white text-gray-300'
                         }`
                         }
                     >
-                        {link.icon}
-                        <span>{link.label}</span>
+                        <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">{link.icon}</span>
+                        <span className="truncate">{link.label}</span>
                     </NavLink>
                 ))}
              </div>
         </div>
-         <div className="mt-6 pt-6 border-t border-brand-gray-dark">
-             <h3 className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Sistema</h3>
+
+        <div className="pt-4 border-t border-brand-gray-dark/60">
+             <h3 className="px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Sistema</h3>
              <div className="space-y-1">
                 {systemLinks.filter(link => link.permission).map((link) => (
                     <NavLink
@@ -110,23 +118,25 @@ const Sidebar: React.FC<SidebarProps> = ({ onLinkClick }) => {
                         to={link.path}
                         onClick={onLinkClick}
                         className={({ isActive }) =>
-                        `flex items-center space-x-3 p-2 rounded-md font-medium text-sm transition-colors duration-200 ${
+                        `flex items-center space-x-3 px-3 py-2 rounded-md font-medium text-sm transition-colors duration-150 ${
                             isActive
-                            ? 'bg-brand-yellow text-brand-dark'
-                            : 'hover:bg-brand-gray-dark hover:text-white'
+                            ? 'bg-brand-yellow text-brand-dark font-semibold shadow-sm'
+                            : 'hover:bg-brand-gray-dark hover:text-white text-gray-300'
                         }`
                         }
                     >
-                        {link.icon}
-                        <span>{link.label}</span>
+                        <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">{link.icon}</span>
+                        <span className="truncate">{link.label}</span>
                     </NavLink>
                 ))}
              </div>
         </div>
       </div>
-      <div className="px-2 pb-2 text-left">
-          <p className="text-xs text-gray-500">Desarrollado por:</p>
-          <p className="text-sm font-medium text-gray-400">Msc. Ing. Eduardo Rey</p>
+
+      {/* Sticky Bottom Footer */}
+      <div className="p-4 border-t border-brand-gray-dark/60 bg-brand-dark flex-shrink-0 text-left">
+          <p className="text-xs text-gray-400">Desarrollado por:</p>
+          <p className="text-sm font-semibold text-gray-200 truncate">Msc. Ing. Eduardo Rey</p>
       </div>
     </aside>
   );

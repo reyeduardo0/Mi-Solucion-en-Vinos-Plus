@@ -3,9 +3,55 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate icon" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mi Solución en Vinos - Gestión Inteligente</title>
+    <title>Mi Solución en Vinos Plus</title>
+    <meta name="description" content="An intuitive web application for comprehensive wine inventory management, from truck arrival and incident tracking to pack creation and dispatch. It leverages AI to streamline data entry from delivery notes and pallet labels." />
+    <meta property="og:title" content="Mi Solución en Vinos Plus" />
+    <meta property="og:description" content="An intuitive web application for comprehensive wine inventory management, from truck arrival and incident tracking to pack creation and dispatch. It leverages AI to streamline data entry from delivery notes and pallet labels." />
+    <!-- Fix: Ensure window.fetch has both getter and setter so assigning to fetch does not throw TypeError -->
+    <script>
+      (function() {
+        try {
+          var originalFetch = typeof window !== 'undefined' && window.fetch ? window.fetch.bind(window) : undefined;
+          var _fetch = originalFetch;
+
+          var desc = Object.getOwnPropertyDescriptor(window, 'fetch');
+          if (!desc || !desc.set || !desc.writable) {
+            try {
+              Object.defineProperty(window, 'fetch', {
+                get: function() {
+                  return _fetch;
+                },
+                set: function(fn) {
+                  _fetch = fn;
+                },
+                configurable: true,
+                enumerable: true
+              });
+            } catch (e1) {
+              try {
+                if (typeof Window !== 'undefined' && Window.prototype) {
+                  Object.defineProperty(Window.prototype, 'fetch', {
+                    get: function() {
+                      return _fetch;
+                    },
+                    set: function(fn) {
+                      _fetch = fn;
+                    },
+                    configurable: true,
+                    enumerable: true
+                  });
+                }
+              } catch (e2) {}
+            }
+          }
+        } catch (err) {
+          console.warn('Fetch setter initialization warning:', err);
+        }
+      })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -48,6 +94,7 @@
 }
 </script>
     <!-- SECURITY FIX: Clean version for V1.7.0 -->
+<link rel="stylesheet" href="/index.css">
 </head>
   <body class="bg-brand-light">
     <div id="root"></div>

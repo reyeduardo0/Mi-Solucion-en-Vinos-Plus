@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <!-- Radial gradient for badge background -->
+    <radialGradient id="bgGrad" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#1F2937" />
+      <stop offset="100%" stop-color="#0B0F17" />
+    </radialGradient>
+    <!-- Wine liquid gradient -->
+    <linearGradient id="wineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#BE123C" />
+      <stop offset="50%" stop-color="#881337" />
+      <stop offset="100%" stop-color="#4C0519" />
+    </linearGradient>
+    <!-- Gold accent gradient -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE047" />
+      <stop offset="100%" stop-color="#EAB308" />
+    </linearGradient>
+    <!-- Glass reflection -->
+    <linearGradient id="glassReflection" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.45" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.05" />
+    </linearGradient>
+  </defs>
+
+  <!-- Circular background badge with border -->
+  <circle cx="32" cy="32" r="30" fill="url(#bgGrad)" stroke="url(#goldGrad)" stroke-width="2.5" />
+
+  <!-- Wine Bottle (back left) -->
+  <g id="wine-bottle">
+    <!-- Bottle body -->
+    <path d="M19 28 C19 25, 23 23, 23 18 L23 11 L27 11 L27 18 C27 23, 31 25, 31 28 L31 46 C31 48, 29 50, 27 50 L23 50 C21 50, 19 48, 19 46 Z" 
+          fill="#1E293B" stroke="#475569" stroke-width="1.2" />
+    <!-- Foil capsule / neck top -->
+    <path d="M23 11 L27 11 L27 17 L23 17 Z" fill="url(#wineGrad)" />
+    <path d="M22.5 11.5 L27.5 11.5" stroke="url(#goldGrad)" stroke-width="1" />
+    <!-- Label on bottle -->
+    <rect x="20.5" y="31" width="9" height="12" rx="1" fill="#FEF3C7" stroke="#F59E0B" stroke-width="0.8" />
+    <!-- Small grape crest on bottle label -->
+    <circle cx="25" cy="35" r="1.5" fill="#881337" />
+    <circle cx="23.8" cy="37" r="1.2" fill="#881337" />
+    <circle cx="26.2" cy="37" r="1.2" fill="#881337" />
+    <circle cx="25" cy="39" r="1" fill="#881337" />
+  </g>
+
+  <!-- Wine Glass (front right) -->
+  <g id="wine-glass">
+    <!-- Glass Base -->
+    <ellipse cx="40" cy="51" rx="8" ry="2" fill="none" stroke="#CBD5E1" stroke-width="1.5" />
+    <path d="M36 51 L44 51" stroke="#FFFFFF" stroke-width="1" stroke-linecap="round" opacity="0.8" />
+    
+    <!-- Glass Stem -->
+    <line x1="40" y1="39" x2="40" y2="51" stroke="#E2E8F0" stroke-width="2" stroke-linecap="round" />
+
+    <!-- Glass Bowl Outer Contour -->
+    <path d="M31 22 C31 35, 35 40, 40 40 C45 40, 49 35, 49 22 Z" 
+          fill="none" stroke="#E2E8F0" stroke-width="1.5" stroke-linejoin="round" />
+
+    <!-- Red Wine Liquid -->
+    <path d="M32 26 C35 28, 45 28, 48 26 C48.5 32.5, 45 38.5, 40 38.5 C35 38.5, 31.5 32.5, 32 26 Z" 
+          fill="url(#wineGrad)" />
+    <!-- Wine surface meniscus -->
+    <ellipse cx="40" cy="26" rx="8" ry="2.2" fill="#E11D48" opacity="0.9" />
+
+    <!-- Glass Highlights / Sheen -->
+    <path d="M33 24 C32.5 29, 34 35, 36.5 37" 
+          fill="none" stroke="url(#glassReflection)" stroke-width="1.5" stroke-linecap="round" />
+    <ellipse cx="45" cy="24" rx="1.5" ry="0.6" fill="#FFFFFF" opacity="0.6" />
+  </g>
+
+  <!-- Little sparkle star -->
+  <path d="M47 16 Q47 19 49 19 Q47 19 47 22 Q47 19 45 19 Q47 19 47 16 Z" fill="url(#goldGrad)" />
+</svg>

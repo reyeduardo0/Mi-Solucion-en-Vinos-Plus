@@ -12,14 +12,25 @@ const fileToGenerativePart = async (file: File) => {
   };
 };
 
+export const getGeminiApiKey = (): string => {
+  return (
+    (import.meta as any).env?.VITE_API_KEY || 
+    (import.meta as any).env?.VITE_GEMINI_API_KEY || 
+    (typeof process !== 'undefined' && process.env ? (process.env.GEMINI_API_KEY || process.env.API_KEY) : '') ||
+    ((typeof window !== 'undefined' && (window as any).process?.env?.API_KEY) || '')
+  );
+};
+
+export const isGeminiAvailable = (): boolean => {
+  return !!getGeminiApiKey();
+};
+
 export const extractDataFromImage = async (imageFile: File, prompt: string): Promise<any> => {
-  // SECURITY UPDATE: Strictly use VITE_API_KEY injected by Netlify build process.
-  // We cast import.meta to any to avoid TypeScript errors in some environments.
-  const apiKey = (import.meta as any).env?.VITE_API_KEY;
+  const apiKey = getGeminiApiKey();
   
   if (!apiKey) {
-    console.error("VITE_API_KEY is missing from environment variables.");
-    throw new Error("La configuración de seguridad está incompleta. Falta la variable VITE_API_KEY en Netlify.");
+    console.error("API Key is missing from environment variables.");
+    throw new Error("La configuración está incompleta. Falta la variable VITE_API_KEY o GEMINI_API_KEY.");
   }
 
   try {

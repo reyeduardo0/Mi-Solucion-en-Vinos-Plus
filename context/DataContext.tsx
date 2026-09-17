@@ -481,6 +481,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             if (palletsError) throw palletsError;
         }
         await addAuditLog(`Registró la entrada "${albaran.id}"`);
+        await fetchData();
     };
     const updateAlbaran = async (albaran: Albaran) => {
         const { pallets, ...albaranData } = albaran;
@@ -511,11 +512,14 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             if (insertError) throw insertError;
         }
         await addAuditLog(`Actualizó la entrada "${albaran.id}"`);
+        await fetchData();
     };
     const deleteAlbaran = async (albaran: Albaran) => {
+        await supabase!.from('pallets').delete().eq('albaran_id', albaran.id);
         const { error } = await supabase!.from('albaranes').delete().eq('id', albaran.id);
         if (error) throw error;
         await addAuditLog(`Eliminó la entrada "${albaran.id}"`);
+        await fetchData();
     };
     const addNewSupply = async (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }) => {
         const dbData = { name: supplyData.name.toUpperCase(), code: supplyData.code?.toUpperCase(), type: supplyData.type, unit: supplyData.unit, min_stock: supplyData.minStock, quantity: 0 };
@@ -769,9 +773,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const { error } = await supabase!.from('dispatch_notes').insert(dbNote);
         if (error) throw error;
         await addAuditLog(`Creó la salida "${id}" (Albarán: ${dispatchNoteId}) para el cliente "${dispatchData.customer}"`);
+        await fetchData();
     };
     const updateDispatch = async (dispatch: DispatchNote) => {
-        const { id, dispatchDate, customer, destination, carrier, truckPlate, driver, dispatchNoteId, totalPallets } = dispatch;
+        const { id, dispatchDate, customer, destination, carrier, truckPlate, driver, dispatchNoteId, totalPallets, packIds, dispatchDetails, status } = dispatch;
         const dbNote = {
             dispatch_note_id: dispatchNoteId,
             dispatch_date: dispatchDate,
@@ -780,7 +785,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             carrier,
             truck_plate: truckPlate,
             driver,
-            total_pallets: totalPallets
+            total_pallets: totalPallets,
+            pack_ids: packIds,
+            dispatch_details: dispatchDetails,
+            status: status || 'Despachado'
         };
         const { error } = await supabase!.from('dispatch_notes').update(dbNote).eq('id', id);
         if (error) throw error;
@@ -799,6 +807,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const { error } = await supabase!.from('mermas').insert(dbMerma);
         if (error) throw error;
         await addAuditLog(`Registró una merma de ${merma.quantity} para "${merma.itemName}"`);
+        await fetchData();
     };
     // ... addProductionReport, updateProductionReport, deleteProductionReport, assignBillingMonth, addPriceList, updatePriceList, deletePriceList, addIncident, resolveIncident, addUser, updateUser, deleteUser, updateCurrentUserPassword, updateUserPasswordByAdmin, addRole, updateRole, deleteRole remain the same ...
     
@@ -921,11 +930,13 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         const { error } = await supabase!.from('incidents').insert(newIncident);
         if (error) throw error;
         await addAuditLog(`Registró una incidencia para "${incidentData.relatedId}"`);
+        await fetchData();
     };
     const resolveIncident = async (incident: Incident) => {
         const { error } = await supabase!.from('incidents').update({ resolved: true }).eq('id', incident.id);
         if (error) throw error;
         await addAuditLog(`Resolvió la incidencia "${incident.id}"`);
+        await fetchData();
     };
     const addUser = async (userData: Omit<User, 'id'> & { password?: string }) => {
         if (!userData.password) throw new Error("La contraseña es obligatoria para nuevos usuarios.");

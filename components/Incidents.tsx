@@ -13,7 +13,7 @@ const PlusIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-
 const CheckCircleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
 
 const IncidentModal: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
-    const { addIncident, albaranes, packs } = useData();
+    const { addIncident, albaranes, packs, salidas } = useData();
     const [newIncidentType, setNewIncidentType] = useState<IncidentType>(IncidentType.Receiving);
     const [newIncidentDescription, setNewIncidentDescription] = useState('');
     const [newIncidentRelatedId, setNewIncidentRelatedId] = useState('');
@@ -24,10 +24,10 @@ const IncidentModal: React.FC<{ onClose: () => void; }> = ({ onClose }) => {
         switch (newIncidentType) {
             case IncidentType.Receiving: return albaranes.map(a => ({ value: a.id, label: `Albarán ${a.id}` }));
             case IncidentType.Packing: return packs.map(p => ({ value: p.id, label: `Pack ${p.id}` }));
-            case IncidentType.Dispatch: return []; // Assuming dispatch notes are not selectable yet
+            case IncidentType.Dispatch: return salidas.map(s => ({ value: s.id, label: `Salida ${s.dispatchNoteId || s.id} - ${s.customer || 'Cliente'}` }));
             default: return [];
         }
-    }, [newIncidentType, albaranes, packs]);
+    }, [newIncidentType, albaranes, packs, salidas]);
 
     const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {

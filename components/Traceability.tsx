@@ -107,9 +107,28 @@ const Traceability: React.FC = () => {
         }
 
         // 3. Find Dispatch (Forward Traceability)
+        // BUG FIX: Enhanced logic to find dispatch. 
+        // Checks ID, OR checks Expedition Lot if available.
         const dispatch = salidas.find(s => 
+            // 1. Check legacy simple ID array
             (s.packIds && s.packIds.includes(foundPack!.id)) ||
-            (s.dispatchDetails && s.dispatchDetails.some(d => d.type === 'pack' && d.id === foundPack!.id))
+            // 2. Check dispatch details object
+            (s.dispatchDetails && s.dispatchDetails.some(d => {
+                // Ensure we are looking at a pack (or undefined legacy type which defaults to pack)
+                const isPackType = !d.type || d.type === 'pack';
+                if (!isPackType) return false;
+
+                // Match A: Strict ID match
+                if (d.id === foundPack!.id) return true;
+
+                // Match B: Expedition Lot Match (Critical for robustness)
+                // If we found the production report and it has a lot, check if the dispatch line has that same lot.
+                if (foundReport?.expeditionLot && d.lot && d.lot.trim().toUpperCase() === foundReport.expeditionLot.trim().toUpperCase()) {
+                    return true;
+                }
+
+                return false;
+            }))
         );
 
         setTraceData({

@@ -9,7 +9,7 @@ import ConfirmationModal from './ui/ConfirmationModal';
 import PalletInput from './goods-receipt/PalletInput';
 import { useData } from '../context/DataContext';
 import { toDateTimeLocalInput, fileToBase64, capitalizeWords, getErrorMessage, generateUUID } from '../utils/helpers';
-import { extractDataFromImage } from '../services/geminiService';
+import { extractDataFromImage, isGeminiAvailable } from '../services/geminiService';
 
 interface PalletGroup {
     id: string; // for react key
@@ -83,7 +83,7 @@ const GoodsReceipt: React.FC = () => {
     
     const isEditing = !!albaranIdFromParams;
     const initialType = searchParams.get('type') === 'consumable' ? 'consumable' : 'product';
-    const isAIAvailable = useMemo(() => !!(window as any).process?.env?.API_KEY, []);
+    const isAIAvailable = useMemo(() => isGeminiAvailable(), []);
 
     // FIX: Correctly calculate the sum of pallets. Initial value for reduce must be 0.
     const assignedPalletsCount = useMemo(() => palletGroups.reduce((acc, group) => acc + (group.palletCount || 0), 0), [palletGroups]);

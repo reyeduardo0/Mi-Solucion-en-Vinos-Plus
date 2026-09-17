@@ -68,8 +68,13 @@ const AppRoutes: React.FC = () => {
                 
                 // CRITICAL FIX: If "Invalid Refresh Token" or any session error occurs,
                 // we must forcefully sign out to clear the stale local storage token.
-                // Otherwise, the app gets stuck in a loop trying to use the bad token.
-                await supabase!.auth.signOut();
+                // We wrap this in a try/catch because signOut itself might throw if the token is invalid,
+                // preventing setSession(null) from running if uncaught.
+                try {
+                    await supabase!.auth.signOut();
+                } catch (signOutError) {
+                    console.warn("SignOut failed during cleanup (expected if token is invalid):", signOutError);
+                }
                 setSession(null);
             } finally {
                 setLoading(false);
@@ -82,7 +87,11 @@ const AppRoutes: React.FC = () => {
             if (event === 'TOKEN_REFRESH_PREVIOUSLY_FAILED') {
                 // Handle specific refresh failure event explicitly
                 console.warn("Token refresh failed, clearing session and storage.");
-                await supabase!.auth.signOut(); 
+                try {
+                    await supabase!.auth.signOut();
+                } catch (e) {
+                    // Ignore signout errors here
+                }
                 setSession(null);
             } else if (event === 'SIGNED_OUT') {
                 setSession(null);
@@ -132,7 +141,11 @@ const AppLayout: React.FC = () => {
     const { currentUser, roles, error } = useData();
 
     const handleLogout = async () => {
-        await supabase!.auth.signOut();
+        try {
+            await supabase!.auth.signOut();
+        } catch (error) {
+            console.error("Error signing out:", error);
+        }
         navigate('/login');
     };
 
@@ -148,9 +161,9 @@ const AppLayout: React.FC = () => {
 
     return (
         <PermissionsProvider user={currentUser} roles={roles}>
-            <div className="relative flex h-screen bg-gray-100">
+            <div className="relative flex h-screen bg-gray-100 overflow-hidden">
                 {/* Desktop Sidebar */}
-                <div className="hidden md:flex flex-shrink-0">
+                <div className="hidden md:flex flex-shrink-0 h-full">
                     <Sidebar />
                 </div>
                 
