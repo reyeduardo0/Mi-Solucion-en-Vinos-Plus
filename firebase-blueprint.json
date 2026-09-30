@@ -1,0 +1,252 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Application user account",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 150 },
+        "email": { "type": "string", "maxLength": 150 },
+        "roleId": { "type": "string", "maxLength": 128 },
+        "created_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "name", "email", "roleId"]
+    },
+    "Role": {
+      "title": "Role",
+      "description": "User permission role",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "permissions": { "type": "array" },
+        "created_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "name", "permissions"]
+    },
+    "Albaran": {
+      "title": "Albaran",
+      "description": "Delivery receiving note",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "orderId": { "type": "string", "maxLength": 128 },
+        "entryDate": { "type": "string", "maxLength": 50 },
+        "truckPlate": { "type": "string", "maxLength": 50 },
+        "origin": { "type": "string", "maxLength": 150 },
+        "carrier": { "type": "string", "maxLength": 150 },
+        "driver": { "type": "string", "maxLength": 150 },
+        "pallets": { "type": "array" },
+        "status": { "type": "string", "maxLength": 50 },
+        "incidentDetails": { "type": "string", "maxLength": 5000 },
+        "incidentImages": { "type": "array" },
+        "created_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "entryDate", "truckPlate", "carrier", "status"]
+    },
+    "Supply": {
+      "title": "Supply",
+      "description": "Consumables and packaging supplies",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "code": { "type": "string", "maxLength": 100 },
+        "type": { "type": "string", "maxLength": 50 },
+        "unit": { "type": "string", "maxLength": 50 },
+        "quantity": { "type": "number" },
+        "minStock": { "type": "number" },
+        "created_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "name", "type", "unit", "quantity"]
+    },
+    "PackModel": {
+      "title": "PackModel",
+      "description": "Wine pack model recipe and bill of materials",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "productRequirements": { "type": "array" },
+        "supplyRequirements": { "type": "array" },
+        "created_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "name"]
+    },
+    "WinePack": {
+      "title": "WinePack",
+      "description": "Assembled or planned wine pack lot",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "modelId": { "type": "string", "maxLength": 128 },
+        "modelName": { "type": "string", "maxLength": 200 },
+        "orderId": { "type": "string", "maxLength": 128 },
+        "quantity": { "type": "number" },
+        "creationDate": { "type": "string", "maxLength": 50 },
+        "contents": { "type": "array" },
+        "suppliesUsed": { "type": "array" },
+        "additionalComponents": { "type": "string", "maxLength": 1000 },
+        "packImage": { "type": "string", "maxLength": 2000000 },
+        "status": { "type": "string", "maxLength": 50 },
+        "created_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "modelId", "modelName", "orderId", "creationDate", "status"]
+    },
+    "DispatchNote": {
+      "title": "DispatchNote",
+      "description": "Outbound delivery and shipping dispatch",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "dispatchNoteId": { "type": "string", "maxLength": 128 },
+        "dispatchDate": { "type": "string", "maxLength": 50 },
+        "customer": { "type": "string", "maxLength": 200 },
+        "destination": { "type": "string", "maxLength": 200 },
+        "carrier": { "type": "string", "maxLength": 200 },
+        "truckPlate": { "type": "string", "maxLength": 50 },
+        "driver": { "type": "string", "maxLength": 150 },
+        "totalPallets": { "type": "number" },
+        "packIds": { "type": "array" },
+        "dispatchDetails": { "type": "array" },
+        "status": { "type": "string", "maxLength": 50 },
+        "created_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "dispatchDate", "customer", "destination", "carrier", "status"]
+    },
+    "Incident": {
+      "title": "Incident",
+      "description": "Log of warehouse or quality incidents",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "maxLength": 50 },
+        "description": { "type": "string", "maxLength": 5000 },
+        "images": { "type": "array" },
+        "date": { "type": "string", "maxLength": 50 },
+        "resolved": { "type": "boolean" },
+        "relatedId": { "type": "string", "maxLength": 128 },
+        "created_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "type", "description", "date", "resolved"]
+    },
+    "Merma": {
+      "title": "Merma",
+      "description": "Waste and shrinkage records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "itemName": { "type": "string", "maxLength": 200 },
+        "itemType": { "type": "string", "maxLength": 50 },
+        "lot": { "type": "string", "maxLength": 100 },
+        "quantity": { "type": "number" },
+        "reason": { "type": "string", "maxLength": 1000 },
+        "created_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "itemName", "itemType", "quantity"]
+    },
+    "ProductionReport": {
+      "title": "ProductionReport",
+      "description": "Assembly and production work report",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "packId": { "type": "string", "maxLength": 128 },
+        "reportDate": { "type": "string", "maxLength": 50 },
+        "expeditionLot": { "type": "string", "maxLength": 100 },
+        "producedQuantity": { "type": "number" },
+        "consumptions": { "type": "array" },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "isHoliday": { "type": "boolean" },
+        "isNightShift": { "type": "boolean" },
+        "overtimeHours": { "type": "number" },
+        "billingStatus": { "type": "string", "maxLength": 50 },
+        "assignedBillingMonth": { "type": "string", "maxLength": 50 },
+        "created_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "packId", "reportDate", "producedQuantity"]
+    },
+    "PriceList": {
+      "title": "PriceList",
+      "description": "Service pricing and surcharges",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "modelId": { "type": "string", "maxLength": 128 },
+        "startDate": { "type": "string", "maxLength": 50 },
+        "endDate": { "type": "string", "maxLength": 50 },
+        "basePrice": { "type": "number" },
+        "holidaySurchargePercent": { "type": "number" },
+        "nightSurchargePercent": { "type": "number" },
+        "overtimePrice": { "type": "number" },
+        "created_at": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "modelId", "startDate", "basePrice"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "System event audit trail",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userid": { "type": "string", "maxLength": 128 },
+        "username": { "type": "string", "maxLength": 150 },
+        "action": { "type": "string", "maxLength": 1000 },
+        "timestamp": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["action"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles"
+    },
+    "/roles/{roleId}": {
+      "schema": { "$ref": "#/entities/Role" },
+      "description": "User access roles and permissions"
+    },
+    "/albaranes/{albaranId}": {
+      "schema": { "$ref": "#/entities/Albaran" },
+      "description": "Receiving delivery notes"
+    },
+    "/supplies/{supplyId}": {
+      "schema": { "$ref": "#/entities/Supply" },
+      "description": "Packaging and consumable supplies inventory"
+    },
+    "/pack_models/{modelId}": {
+      "schema": { "$ref": "#/entities/PackModel" },
+      "description": "Pack models and bills of materials"
+    },
+    "/wine_packs/{packId}": {
+      "schema": { "$ref": "#/entities/WinePack" },
+      "description": "Pack production orders"
+    },
+    "/dispatch_notes/{noteId}": {
+      "schema": { "$ref": "#/entities/DispatchNote" },
+      "description": "Outbound dispatches"
+    },
+    "/incidents/{incidentId}": {
+      "schema": { "$ref": "#/entities/Incident" },
+      "description": "Warehouse incidents"
+    },
+    "/mermas/{mermaId}": {
+      "schema": { "$ref": "#/entities/Merma" },
+      "description": "Material waste records"
+    },
+    "/production_reports/{reportId}": {
+      "schema": { "$ref": "#/entities/ProductionReport" },
+      "description": "Production and assembly reports"
+    },
+    "/price_lists/{priceListId}": {
+      "schema": { "$ref": "#/entities/PriceList" },
+      "description": "Price lists for billing"
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "System audit trail entries"
+    }
+  }
+}

@@ -7,9 +7,17 @@ interface HeaderProps {
     onLogout: () => void;
     toggleSidebar: () => void;
     onOpenProfile: () => void;
+    onOpenNeonModal?: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ user, roleName, onLogout, toggleSidebar, onOpenProfile }) => {
+const Header: React.FC<HeaderProps> = ({ 
+    user, 
+    roleName, 
+    onLogout, 
+    toggleSidebar, 
+    onOpenProfile,
+    onOpenNeonModal 
+}) => {
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -33,6 +41,19 @@ const Header: React.FC<HeaderProps> = ({ user, roleName, onLogout, toggleSidebar
             <div className="flex-grow"></div>
             
             <div className="flex items-center space-x-3">
+                {/* Neon / Cloud DB Status Button */}
+                {onOpenNeonModal && (
+                    <button
+                        onClick={onOpenNeonModal}
+                        title="Ver configuración y script SQL para Neon.tech (spring-mode-84627543)"
+                        className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition shadow-sm"
+                    >
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span className="hidden sm:inline">Neon DB:</span>
+                        <span className="font-mono font-semibold">spring-mode-84627543</span>
+                    </button>
+                )}
+
                 <div className="relative" ref={dropdownRef}>
                     <button onClick={() => setDropdownOpen(!dropdownOpen)} className="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-100 transition-colors focus:outline-none">
                         <div className="text-right hidden sm:block">
@@ -49,6 +70,11 @@ const Header: React.FC<HeaderProps> = ({ user, roleName, onLogout, toggleSidebar
                                     <p className="text-sm font-medium text-gray-900 truncate">{user.name}</p>
                                     <p className="text-sm text-gray-500 truncate">{user.email}</p>
                                 </div>
+                                {onOpenNeonModal && (
+                                    <a href="#" onClick={(e) => { e.preventDefault(); onOpenNeonModal(); setDropdownOpen(false); }} className="text-emerald-700 font-medium block px-4 py-2 text-sm hover:bg-emerald-50" role="menuitem">
+                                        ⚡ Migración Neon.tech
+                                    </a>
+                                )}
                                 <a href="#" onClick={(e) => { e.preventDefault(); onOpenProfile(); setDropdownOpen(false); }} className="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100" role="menuitem">Cambiar Contraseña</a>
                                 <a href="#" onClick={(e) => { e.preventDefault(); onLogout(); }} className="text-gray-700 block w-full text-left px-4 py-2 text-sm hover:bg-gray-100" role="menuitem">Cerrar Sesión</a>
                             </div>

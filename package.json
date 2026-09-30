@@ -9,14 +9,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google/genai": "^1.25.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "firebase": "^12.19.0",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@google/genai": "^1.25.0",
     "react-router-dom": "^7.9.4",
-    "recharts": "^3.3.0",
-    "@supabase/supabase-js": "^2.45.0",
-    "jspdf": "^2.5.1",
-    "jspdf-autotable": "^3.8.2"
+    "recharts": "^3.3.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

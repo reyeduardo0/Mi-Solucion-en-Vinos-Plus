@@ -1,9 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
-// FIX: Changed to a type-only import for Session.
-import type { Session } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured } from './services/supabaseClient';
+import { auth, onAuthStateChanged, fbSignOut, FirebaseUser } from './services/firebase';
 
 // --- Components ---
 import Sidebar from './components/layout/Sidebar';
@@ -21,7 +18,6 @@ import Incidents from './components/Incidents';
 import Reports from './components/Reports';
 import Users from './components/Users';
 import Login from './components/Login';
-import SupabaseConfigNotice from './components/SupabaseConfigNotice';
 import Spinner from './components/ui/Spinner';
 import ProfileModal from './components/users/ProfileModal';
 import Traceability from './components/Traceability';
@@ -31,16 +27,13 @@ import ProductionReports from './components/ProductionReports';
 import CreateProductionReport from './components/CreateProductionReport';
 import InventoryAdjustments from './components/InventoryAdjustments';
 import Billing from './components/Billing';
+import NeonMigrationModal from './components/NeonMigrationModal';
 
 // --- Hooks and Context ---
 import { PermissionsProvider } from './hooks/usePermissions';
 import { DataProvider, useData } from './context/DataContext';
 
 const App: React.FC = () => {
-    if (!isSupabaseConfigured) {
-        return <SupabaseConfigNotice />;
-    }
-
     return (
         <HashRouter>
             <AppRoutes />
@@ -49,62 +42,25 @@ const App: React.FC = () => {
 };
 
 const AppRoutes: React.FC = () => {
-    const [session, setSession] = useState<Session | null>(null);
+    const [user, setUser] = useState<FirebaseUser | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const initializeAuth = async () => {
-            try {
-                // More robust session fetching with error handling.
-                const { data, error } = await supabase!.auth.getSession();
-                
-                if (error) {
-                    throw error;
-                }
-                
-                setSession(data.session);
-            } catch (error: any) {
-                console.error("Auth initialization error:", error.message);
-                
-                // CRITICAL FIX: If "Invalid Refresh Token" or any session error occurs,
-                // we must forcefully sign out to clear the stale local storage token.
-                // We wrap this in a try/catch because signOut itself might throw if the token is invalid,
-                // preventing setSession(null) from running if uncaught.
-                try {
-                    await supabase!.auth.signOut();
-                } catch (signOutError) {
-                    console.warn("SignOut failed during cleanup (expected if token is invalid):", signOutError);
-                }
-                setSession(null);
-            } finally {
-                setLoading(false);
-            }
-        };
-        
-        initializeAuth();
-
-        const { data: { subscription } } = supabase!.auth.onAuthStateChange(async (event, session) => {
-            if (event === 'TOKEN_REFRESH_PREVIOUSLY_FAILED') {
-                // Handle specific refresh failure event explicitly
-                console.warn("Token refresh failed, clearing session and storage.");
-                try {
-                    await supabase!.auth.signOut();
-                } catch (e) {
-                    // Ignore signout errors here
-                }
-                setSession(null);
-            } else if (event === 'SIGNED_OUT') {
-                setSession(null);
-            } else {
-                setSession(session);
-            }
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+            setLoading(false);
         });
 
-        return () => subscription.unsubscribe();
+        return () => unsubscribe();
     }, []);
 
     if (loading) {
-        return <div className="min-h-screen bg-brand-dark flex justify-center items-center"><Spinner /></div>;
+        return (
+          <div className="min-h-screen bg-brand-dark flex flex-col justify-center items-center text-white">
+            <Spinner />
+            <p className="mt-4 text-sm text-gray-400">Cargando Mi Solución en Vinos...</p>
+          </div>
+        );
     }
 
     return (
@@ -112,14 +68,14 @@ const AppRoutes: React.FC = () => {
             <Route 
                 path="/login" 
                 element={
-                    session ? <Navigate to="/" replace /> : <Login />
+                    user ? <Navigate to="/" replace /> : <Login />
                 } 
             />
             <Route 
                 path="/*"
                 element={
-                    session ? (
-                        <DataProvider session={session}>
+                    user ? (
+                        <DataProvider authUser={user}>
                             <AppLayout />
                         </DataProvider>
                     ) : (
@@ -131,18 +87,18 @@ const AppRoutes: React.FC = () => {
     );
 };
 
-
 const AppLayout: React.FC = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isProfileModalOpen, setProfileModalOpen] = useState(false);
+    const [isNeonModalOpen, setIsNeonModalOpen] = useState(false);
     const navigate = useNavigate();
     
-    // Consume the centralized data and user context
+    // Centralized data and user context
     const { currentUser, roles, error } = useData();
 
     const handleLogout = async () => {
         try {
-            await supabase!.auth.signOut();
+            await fbSignOut(auth);
         } catch (error) {
             console.error("Error signing out:", error);
         }
@@ -150,12 +106,14 @@ const AppLayout: React.FC = () => {
     };
 
     if (!currentUser || roles.length === 0) {
-        // This can happen briefly while the DataProvider is loading its own user data
-        return <div className="min-h-screen bg-brand-light flex justify-center items-center"><Spinner /></div>;
+        return (
+          <div className="min-h-screen bg-brand-light flex flex-col justify-center items-center">
+            <Spinner />
+            <p className="mt-4 text-sm text-gray-600">Sincronizando datos de bodega...</p>
+          </div>
+        );
     }
 
-    // DEFINITIVE FIX: This robust check prevents a crash if the user's role is deleted by another admin.
-    // It safely finds the role first, then accesses the name, avoiding `undefined.name`.
     const userRole = roles.find(r => r.id === currentUser.roleId);
     const roleName = userRole ? userRole.name : 'Sin Rol Asignado';
 
@@ -186,10 +144,11 @@ const AppLayout: React.FC = () => {
                         onLogout={handleLogout} 
                         toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} 
                         onOpenProfile={() => setProfileModalOpen(true)}
+                        onOpenNeonModal={() => setIsNeonModalOpen(true)}
                     />
-                     {error && (
+                    {error && (
                         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mx-4 mt-4" role="alert">
-                            <p className="font-bold">Error de Carga de Datos</p>
+                            <p className="font-bold">Aviso del Sistema</p>
                             <p>{error}</p>
                         </div>
                     )}
@@ -221,6 +180,7 @@ const AppLayout: React.FC = () => {
                     </main>
                 </div>
                 {isProfileModalOpen && <ProfileModal onClose={() => setProfileModalOpen(false)} />}
+                {isNeonModalOpen && <NeonMigrationModal isOpen={isNeonModalOpen} onClose={() => setIsNeonModalOpen(false)} />}
             </div>
         </PermissionsProvider>
     );

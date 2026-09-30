@@ -1,5 +1,3 @@
-
-// ... imports remain the same ...
 import React, {
   createContext,
   useContext,
@@ -9,8 +7,17 @@ import React, {
   ReactNode,
   useMemo,
 } from 'react';
-import { Session, createClient } from '@supabase/supabase-js';
-import { supabase } from '../services/supabaseClient';
+import { FirebaseUser } from '../services/firebase';
+import {
+  checkAndSeedInitialDatabase,
+  subscribeToCollection,
+  setItem,
+  updateItem,
+  deleteItem,
+  logAudit,
+  getCollectionItems,
+  SYSTEM_USER_ID
+} from '../services/firestoreService';
 import {
   User,
   Role,
@@ -23,14 +30,13 @@ import {
   Merma,
   InventoryStockItem,
   Product,
-  IncidentType,
   Pallet,
   ProductionReport,
   PriceList,
 } from '../types';
 import { getErrorMessage } from '../utils/helpers';
 
-const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000000';
+const SUPER_USER_ROLE_NAME = 'Super Usuario';
 
 interface DataContextType {
     currentUser: User | null;
@@ -115,12 +121,10 @@ export const useData = (): DataContextType => {
 
 interface DataProviderProps {
     children: ReactNode;
-    session: Session;
+    authUser: FirebaseUser | null;
 }
 
-const SUPER_USER_ROLE_NAME = 'Super Usuario';
-
-export const DataProvider: React.FC<DataProviderProps> = ({ children, session }) => {
+export const DataProvider: React.FC<DataProviderProps> = ({ children, authUser }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -136,187 +140,126 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
     const [productionReports, setProductionReports] = useState<ProductionReport[]>([]);
     const [priceLists, setPriceLists] = useState<PriceList[]>([]);
     const [auditLogs, setAuditLogs] = useState<any[]>([]);
-    
+
     const addAuditLog = useCallback(async (action: string, userId?: string, userName?: string) => {
-        const log = {
-            userid: userId || currentUser?.id || SYSTEM_USER_ID,
-            username: userName || currentUser?.name || 'System',
-            action,
-        };
-        const { error } = await supabase!.from('audit_logs').insert(log);
-        if (error) {
-            console.error(`Error adding audit log: ${getErrorMessage(error)}`, { failedLog: log });
-        }
-    }, [currentUser]);
+        await logAudit(
+          action, 
+          userId || currentUser?.id || authUser?.uid || SYSTEM_USER_ID, 
+          userName || currentUser?.name || authUser?.displayName || 'Sistema'
+        );
+    }, [currentUser, authUser]);
 
-    const fetchData = useCallback(async () => {
-        if (!session.user) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const [userProfilesResult, rolesResult] = await Promise.all([
-                supabase!.from('users').select('id, full_name, email, role_id'),
-                supabase!.from('roles').select('*')
-            ]);
-
-            if (userProfilesResult.error) throw userProfilesResult.error;
-            if (rolesResult.error) throw rolesResult.error;
-
-            const fetchedRoles = (rolesResult.data || []).filter(Boolean);
-            setRoles(fetchedRoles);
-
-            const mappedUsers: User[] = (userProfilesResult.data || []).filter(Boolean).map((u: any) => ({
-                id: u.id,
-                name: u.full_name,
-                email: u.email,
-                roleId: u.role_id,
-            }));
-
-            let finalCurrentUser = mappedUsers.find(u => u.id === session.user.id);
-
-            if (!finalCurrentUser) {
-                const authUser = session.user;
-                const userRoleId = authUser.user_metadata.role_id;
-                const defaultRole = fetchedRoles.find(r => r.name.toLowerCase() !== 'admin' && r.name.toLowerCase() !== SUPER_USER_ROLE_NAME.toLowerCase()) || fetchedRoles[0];
-                const roleIdToUse = userRoleId || defaultRole?.id;
-
-                if (!roleIdToUse) throw new Error("User profile is missing and no suitable role could be found.");
-
-                finalCurrentUser = {
-                    id: authUser.id,
-                    email: authUser.email!,
-                    name: authUser.user_metadata.full_name || authUser.email!.split('@')[0],
-                    roleId: roleIdToUse,
-                };
-                mappedUsers.push(finalCurrentUser);
-            }
-            
-            setUsers(mappedUsers);
-            setCurrentUser(finalCurrentUser || null);
-
-            if (!finalCurrentUser) {
-                throw new Error("Could not determine current user. Please log out and log back in.");
-            }
-            
-            const albaranesResult = await supabase!.from('albaranes').select(`
-                    id, entryDate:entry_date, truckPlate:truck_plate, origin, carrier, driver, status, incidentDetails:incident_details, incidentImages:incident_images, created_at,
-                    pallets (id, palletNumber:palletnumber, productName:product_name, productLot:product_lot, productCode:product_code, boxesPerPallet:boxesperpallet, bottlesPerBox:bottlesperbox, totalBottles:totalbottles, eanBottle:eanbottle, eanBox:eanbox, sscc, labelImage:labelimage, incidentDescription:incident_description, incidentImages:incident_images, created_at)
-                `).order('created_at', { ascending: false });
-            if (albaranesResult.error) throw albaranesResult.error;
-
-            const [suppliesResult, packModelsResult] = await Promise.all([
-                supabase!.from('supplies').select('id, name, code, type, unit, quantity, minStock:min_stock, created_at').order('name'),
-                supabase!.from('pack_models').select('id, name, description, productRequirements:product_requirements, supplyRequirements:supply_requirements, created_at').order('name')
-            ]);
-            if (suppliesResult.error) throw suppliesResult.error;
-            if (packModelsResult.error) throw packModelsResult.error;
-
-            const [packsResult, salidasResult] = await Promise.all([
-                supabase!.from('wine_packs').select('id, modelId:model_id, modelName:model_name, orderId:order_id, quantity, creationDate:creation_date, contents, suppliesUsed:supplies_used, additionalComponents:additional_components, packImage:pack_image, status, created_at').order('created_at', { ascending: false }),
-                supabase!.from('dispatch_notes').select('id, dispatchNoteId:dispatch_note_id, dispatchDate:dispatch_date, customer, destination, carrier, truckPlate:truck_plate, driver, totalPallets:total_pallets, packIds:pack_ids, dispatchDetails:dispatch_details, status, created_at').order('created_at', { ascending: false })
-            ]);
-            if (packsResult.error) throw packsResult.error;
-            if (salidasResult.error) throw salidasResult.error;
-
-            const [incidentsResult, mermasResult, auditLogsResult] = await Promise.all([
-                supabase!.from('incidents').select('id, type, description, images, date, resolved, relatedId:related_id, created_at').order('created_at', { ascending: false }),
-                supabase!.from('mermas').select('id, itemName:item_name, itemType:item_type, lot, quantity, reason, created_at').order('created_at', { ascending: false }),
-                supabase!.from('audit_logs').select('id, username, action, timestamp').order('timestamp', { ascending: false }).limit(200),
-            ]);
-            if (incidentsResult.error) throw incidentsResult.error;
-            if (mermasResult.error) throw mermasResult.error;
-            if (auditLogsResult.error) throw auditLogsResult.error;
-
-            let fetchedProdReports: any[] = [];
-            try {
-                const prodReportsResult = await supabase!.from('production_reports').select('id, packId:pack_id, reportDate:report_date, producedQuantity:produced_quantity, expeditionLot:expedition_lot, consumptions, notes, isHoliday:is_holiday, isNightShift:is_night_shift, overtimeHours:overtime_hours, billingStatus:billing_status, assignedBillingMonth:assigned_billing_month, created_at').order('created_at', { ascending: false });
-                if (!prodReportsResult.error) {
-                    fetchedProdReports = prodReportsResult.data || [];
-                }
-            } catch (e) {
-                console.warn("Could not fetch production reports, table might be missing:", e);
-            }
-
-            let fetchedPriceLists: any[] = [];
-            try {
-                const priceListsResult = await supabase!.from('price_lists').select('id, modelId:model_id, startDate:start_date, endDate:end_date, basePrice:base_price, holidaySurchargePercent:holiday_surcharge_percent, nightSurchargePercent:night_surcharge_percent, overtimePrice:overtime_price, created_at');
-                if(!priceListsResult.error) {
-                    fetchedPriceLists = priceListsResult.data || [];
-                }
-            } catch (e) {
-                console.warn("Could not fetch price lists", e);
-            }
-
-            const fetchedAlbaranesRaw = (albaranesResult.data as any[]) || [];
-            const fetchedSupplies = (suppliesResult.data || []).filter(Boolean);
-            const fetchedPackModels = (packModelsResult.data || []).filter(Boolean);
-            const fetchedPacks = (packsResult.data || []).filter(Boolean);
-            const fetchedSalidas = (salidasResult.data || []).filter(Boolean);
-            const fetchedIncidents = (incidentsResult.data || []).filter(Boolean);
-            const fetchedMermas = (mermasResult.data || []).filter(Boolean);
-            const fetchedAuditLogsRaw = (auditLogsResult.data as any[]) || [];
-            
-            const supplyNames = new Set(fetchedSupplies.map(s => s.name));
-            
-            const fetchedAlbaranes = fetchedAlbaranesRaw.filter(Boolean).map((albaran): Albaran => {
-                 const processedPallets = (Array.isArray(albaran.pallets) ? albaran.pallets : []).filter(Boolean).map((p: any): Pallet => {
-                    const basePallet = {
-                        id: p.id, palletNumber: p.palletNumber, sscc: p.sscc, labelImage: p.labelImage, incident: p.incidentDescription ? { description: p.incidentDescription, images: p.incidentImages || [] } : undefined, created_at: p.created_at,
-                    };
-                    const hasProductQuantities = (p.boxesPerPallet != null && p.boxesPerPallet > 0) || (p.bottlesPerBox != null && p.bottlesPerBox > 0);
-                    const matchesSupplyName = p.productName && supplyNames.has(p.productName);
-                    if (hasProductQuantities) {
-                        return { ...basePallet, type: 'product', product: { name: p.productName || '', lot: p.productLot || '' }, productCode: p.productCode, boxesPerPallet: p.boxesPerPallet, bottlesPerBox: p.bottlesPerBox, totalBottles: p.totalBottles, eanBottle: p.eanBottle, eanBox: p.eanBox };
-                    }
-                    if (matchesSupplyName) {
-                        return { ...basePallet, type: 'consumable', supplyName: p.productName, supplyQuantity: p.totalBottles, supplyLot: p.productLot, eanBox: p.eanBox };
-                    }
-                    return { ...basePallet, type: 'product', product: { name: p.productName || '', lot: p.productLot || '' }, productCode: p.productCode, boxesPerPallet: p.boxesPerPallet, bottlesPerBox: p.bottlesPerBox, totalBottles: p.totalBottles, eanBottle: p.eanBottle, eanBox: p.eanBox };
-                });
-                return { ...albaran, pallets: processedPallets };
-            });
-
-            const fetchedAuditLogs = fetchedAuditLogsRaw.filter(Boolean).map((log: any) => ({ id: log.id, userName: log.username, action: log.action, timestamp: log.timestamp }));
-
-            setAlbaranes(fetchedAlbaranes);
-            setSupplies(fetchedSupplies);
-            setPackModels(fetchedPackModels);
-            setPacks(fetchedPacks);
-            setSalidas(fetchedSalidas);
-            setIncidents(fetchedIncidents);
-            setMermas(fetchedMermas);
-            setProductionReports(fetchedProdReports);
-            setPriceLists(fetchedPriceLists);
-            setAuditLogs(fetchedAuditLogs);
-
-        } catch (e: any) {
-            setError(getErrorMessage(e));
-        } finally {
-            setLoading(false);
-        }
-    }, [session.user]);
-    
-    // ... useEffect, products, inventoryStock remain same ...
+    // Initial Database Check and Seed
     useEffect(() => {
-        if (session.user) {
-            fetchData();
-        } else {
-            setLoading(false);
+      let isMounted = true;
+      const initDb = async () => {
+        try {
+          await checkAndSeedInitialDatabase(authUser?.email);
+        } catch (e: any) {
+          console.warn('Initial seeding notice:', e);
         }
+      };
+      initDb();
+      return () => { isMounted = false; };
+    }, [authUser]);
 
-        const channel = supabase!
-            .channel('db-changes')
-            .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
-                fetchData();
-            })
-            .subscribe();
+    // Setup Real-time Listeners for all collections
+    useEffect(() => {
+      let unsubscribers: (() => void)[] = [];
 
-        return () => {
-            supabase!.removeChannel(channel);
+      try {
+        unsubscribers.push(
+          subscribeToCollection<Role>('roles', (data) => setRoles(data || []))
+        );
+        unsubscribers.push(
+          subscribeToCollection<User>('users', (data) => setUsers(data || []))
+        );
+        unsubscribers.push(
+          subscribeToCollection<Albaran>('albaranes', (data) => {
+            const sorted = [...(data || [])].sort((a, b) => (b.entryDate || '').localeCompare(a.entryDate || ''));
+            setAlbaranes(sorted);
+          })
+        );
+        unsubscribers.push(
+          subscribeToCollection<Supply>('supplies', (data) => {
+            const sorted = [...(data || [])].sort((a, b) => a.name.localeCompare(b.name));
+            setSupplies(sorted);
+          })
+        );
+        unsubscribers.push(
+          subscribeToCollection<PackModel>('pack_models', (data) => setPackModels(data || []))
+        );
+        unsubscribers.push(
+          subscribeToCollection<WinePack>('wine_packs', (data) => {
+            const sorted = [...(data || [])].sort((a, b) => (b.creationDate || '').localeCompare(a.creationDate || ''));
+            setPacks(sorted);
+          })
+        );
+        unsubscribers.push(
+          subscribeToCollection<DispatchNote>('dispatch_notes', (data) => {
+            const sorted = [...(data || [])].sort((a, b) => (b.dispatchDate || '').localeCompare(a.dispatchDate || ''));
+            setSalidas(sorted);
+          })
+        );
+        unsubscribers.push(
+          subscribeToCollection<Incident>('incidents', (data) => setIncidents(data || []))
+        );
+        unsubscribers.push(
+          subscribeToCollection<Merma>('mermas', (data) => setMermas(data || []))
+        );
+        unsubscribers.push(
+          subscribeToCollection<ProductionReport>('production_reports', (data) => setProductionReports(data || []))
+        );
+        unsubscribers.push(
+          subscribeToCollection<PriceList>('price_lists', (data) => setPriceLists(data || []))
+        );
+        unsubscribers.push(
+          subscribeToCollection<any>('audit_logs', (data) => {
+            const sorted = [...(data || [])].sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+            setAuditLogs(sorted.slice(0, 200));
+          })
+        );
+      } catch (err: any) {
+        console.error("Subscription error:", err);
+        setError(getErrorMessage(err));
+      }
+
+      setLoading(false);
+
+      return () => {
+        unsubscribers.forEach(unsub => unsub && unsub());
+      };
+    }, []);
+
+    // Sync currentUser from users list and authUser
+    useEffect(() => {
+      if (!users.length || !roles.length) return;
+
+      const userEmail = (authUser?.email || 'reyeduardo0@gmail.com').toLowerCase();
+      let matched = users.find(u => u.email?.toLowerCase() === userEmail || u.id === authUser?.uid);
+
+      if (!matched) {
+        const superRole = roles.find(r => r.name.toLowerCase() === SUPER_USER_ROLE_NAME.toLowerCase()) || roles[0];
+        const defaultRole = roles.find(r => r.name.toLowerCase() !== 'admin' && r.name.toLowerCase() !== SUPER_USER_ROLE_NAME.toLowerCase()) || roles[0];
+        
+        const isSuperAdminEmail = userEmail === 'reyeduardo0@gmail.com' || userEmail.includes('admin') || users.length === 0;
+        const roleIdToUse = isSuperAdminEmail ? superRole.id : defaultRole.id;
+
+        const newUser: User = {
+          id: authUser?.uid || `usr-${Date.now()}`,
+          email: authUser?.email || 'reyeduardo0@gmail.com',
+          name: authUser?.displayName || authUser?.email?.split('@')[0] || 'Msc. Ing. Eduardo Rey',
+          roleId: roleIdToUse
         };
-    }, [session.user, fetchData]);
 
-    // ... Products Memo remains identical ...
+        setItem<User>('users', newUser);
+        matched = newUser;
+      }
+
+      setCurrentUser(matched);
+    }, [users, roles, authUser]);
+
+    // Compute products list from albaranes
     const products = useMemo(() => {
         const productMap = new Map<string, { code: string }>();
         albaranes.forEach(albaran => {
@@ -333,8 +276,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         });
         return Array.from(productMap.entries()).map(([name, details]) => ({ id: name, name, code: details.code, type: 'wine' as const, sku: '' }));
     }, [albaranes]);
-    
-    // UPDATED Inventory Calculation to include Supplies dispatched
+
+    // Inventory calculation
     const inventoryStock = useMemo((): InventoryStockItem[] => {
         const stockMap = new Map<string, InventoryStockItem>();
 
@@ -416,23 +359,18 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
             }
         });
 
-        // NEW: Deduct items from Dispatch Notes (Salidas) if they are explicitly listed as supply items
         salidas.forEach(salida => {
             if (Array.isArray(salida.dispatchDetails)) {
                 salida.dispatchDetails.forEach(detail => {
-                    // Only deduct if it is a supply type
                     if (detail.type === 'supply') {
                         const lot = detail.lot || 'SIN LOTE';
-                        // Try to find exact match
                         let key = `supply-${detail.name}-${lot}`;
                         
                         if (stockMap.has(key)) {
                             stockMap.get(key)!.inDispatch = (stockMap.get(key)!.inDispatch || 0) + detail.quantity;
                         } else {
-                            // Fallback try finding by name only if lot mismatch or legacy data
                             const itemsByName = Array.from(stockMap.values()).filter(i => i.type === 'Consumible' && i.name === detail.name);
                             if(itemsByName.length > 0) {
-                                // Just deduct from the first one found (approximation) or the SIN LOTE one
                                 const target = itemsByName.find(i => i.lot === 'SIN LOTE') || itemsByName[0];
                                 target.inDispatch = (target.inDispatch || 0) + detail.quantity;
                             }
@@ -453,543 +391,545 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         return result.sort((a, b) => a.name.localeCompare(b.name) || (a.lot || '').localeCompare(b.lot || ''));
     }, [albaranes, supplies, packs, mermas, salidas]);
 
-    // ... helper functions (addAlbaran, updateAlbaran, etc.) remain the same ...
+    // --- ALBARANES CRUD ---
     const addAlbaran = async (albaran: Albaran) => {
-        const { pallets, ...albaranData } = albaran;
-        const dbAlbaran = { id: albaranData.id, entry_date: albaranData.entryDate, truck_plate: albaranData.truckPlate, origin: albaranData.origin, carrier: albaranData.carrier, driver: albaranData.driver, status: albaranData.status, incident_details: albaranData.incidentDetails, incident_images: albaranData.incidentImages };
-        const { error: albaranError } = await supabase!.from('albaranes').insert(dbAlbaran);
-        if (albaranError) throw albaranError;
-        if (pallets && pallets.length > 0) {
-            const dbPallets = pallets.map(p => ({ 
-                id: p.id, 
-                albaran_id: albaranData.id, 
-                palletnumber: p.palletNumber, 
-                product_name: p.type === 'product' ? p.product?.name : p.supplyName, 
-                product_lot: p.type === 'product' ? p.product?.lot : p.supplyLot, 
-                product_code: p.type === 'product' ? p.productCode : null, 
-                boxesperpallet: p.boxesPerPallet, 
-                bottlesperbox: p.bottlesPerBox, 
-                totalbottles: p.type === 'consumable' ? p.supplyQuantity : p.totalBottles, 
-                eanbottle: p.eanBottle, 
-                eanbox: p.eanBox, 
-                sscc: p.sscc, 
-                labelimage: p.labelImage, 
-                incident_description: p.incident?.description, 
-                incident_images: p.incident?.images 
-            }));
-            const { error: palletsError } = await supabase!.from('pallets').insert(dbPallets);
-            if (palletsError) throw palletsError;
-        }
+        const itemToSave: Albaran = {
+          ...albaran,
+          created_at: albaran.created_at || new Date().toISOString()
+        };
+        await setItem<Albaran>('albaranes', itemToSave);
         await addAuditLog(`Registró la entrada "${albaran.id}"`);
-        await fetchData();
     };
+
     const updateAlbaran = async (albaran: Albaran) => {
-        const { pallets, ...albaranData } = albaran;
-        const dbAlbaranUpdate = { entry_date: albaranData.entryDate, truck_plate: albaranData.truckPlate, origin: albaranData.origin, carrier: albaranData.carrier, driver: albaranData.driver, status: albaranData.status, incident_details: albaranData.incidentDetails, incident_images: albaranData.incidentImages };
-        const { error: updateError } = await supabase!.from('albaranes').update(dbAlbaranUpdate).eq('id', albaranData.id);
-        if (updateError) throw updateError;
-        const { error: deleteError } = await supabase!.from('pallets').delete().eq('albaran_id', albaranData.id);
-        if (deleteError) throw deleteError;
-        if (pallets && pallets.length > 0) {
-            const dbPallets = pallets.map(p => ({ 
-                id: p.id, 
-                albaran_id: albaranData.id, 
-                palletnumber: p.palletNumber, 
-                product_name: p.type === 'product' ? p.product?.name : p.supplyName, 
-                product_lot: p.type === 'product' ? p.product?.lot : p.supplyLot, 
-                product_code: p.type === 'product' ? p.productCode : null, 
-                boxesperpallet: p.boxesPerPallet, 
-                bottlesperbox: p.bottlesPerBox, 
-                totalbottles: p.type === 'consumable' ? p.supplyQuantity : p.totalBottles, 
-                eanbottle: p.eanBottle, 
-                eanbox: p.eanBox, 
-                sscc: p.sscc, 
-                labelimage: p.labelImage, 
-                incident_description: p.incident?.description, 
-                incident_images: p.incident?.images 
-            }));
-            const { error: insertError } = await supabase!.from('pallets').insert(dbPallets);
-            if (insertError) throw insertError;
-        }
+        await setItem<Albaran>('albaranes', albaran);
         await addAuditLog(`Actualizó la entrada "${albaran.id}"`);
-        await fetchData();
     };
+
     const deleteAlbaran = async (albaran: Albaran) => {
-        await supabase!.from('pallets').delete().eq('albaran_id', albaran.id);
-        const { error } = await supabase!.from('albaranes').delete().eq('id', albaran.id);
-        if (error) throw error;
+        await deleteItem('albaranes', albaran.id);
         await addAuditLog(`Eliminó la entrada "${albaran.id}"`);
-        await fetchData();
     };
+
+    // --- SUPPLIES CRUD ---
     const addNewSupply = async (supplyData: Omit<Supply, 'id' | 'created_at' | 'quantity'>, initialData?: { quantity: number; lot: string }) => {
-        const dbData = { name: supplyData.name.toUpperCase(), code: supplyData.code?.toUpperCase(), type: supplyData.type, unit: supplyData.unit, min_stock: supplyData.minStock, quantity: 0 };
-        const { data, error } = await supabase!.from('supplies').insert(dbData).select().single();
-        if (error) throw error;
-        await addAuditLog(`Creó el consumible "${supplyData.name}"`);
+        const newId = `SUP-${Date.now()}`;
+        const newSupply: Supply = {
+          id: newId,
+          name: supplyData.name.toUpperCase(),
+          code: supplyData.code?.toUpperCase(),
+          type: supplyData.type,
+          unit: supplyData.unit,
+          minStock: supplyData.minStock || 0,
+          quantity: 0,
+          created_at: new Date().toISOString()
+        };
+        await setItem<Supply>('supplies', newSupply);
+        await addAuditLog(`Creó el consumible "${newSupply.name}"`);
+
         if (initialData?.quantity && initialData.quantity > 0) {
-            await addSupplyStock(data.id, initialData.quantity, initialData.lot);
+            await addSupplyStock(newId, initialData.quantity, initialData.lot);
         }
-        await fetchData();
-        return data.id;
+        return newId;
     };
+
     const addSupplyStock = async (supplyId: string, quantity: number, lot: string) => {
         const supply = supplies.find(s => s.id === supplyId);
         if (!supply) throw new Error('Consumible no encontrado');
         if (lot) {
-            const newAlbaran: Albaran = { id: `CONS-${supply.name.substring(0,4).toUpperCase()}-${Date.now()}`, entryDate: new Date().toISOString(), truckPlate: 'INTERNO', carrier: 'Stock Interno', status: 'verified', pallets: [{ id: `pal-${Date.now()}`, palletNumber: `pal-${Date.now()}`, type: 'consumable', supplyName: supply.name, supplyLot: lot, supplyQuantity: quantity }] };
+            const newAlbaran: Albaran = { 
+              id: `CONS-${supply.name.substring(0,4).toUpperCase()}-${Date.now()}`, 
+              entryDate: new Date().toISOString().split('T')[0], 
+              truckPlate: 'INTERNO', 
+              carrier: 'Stock Interno', 
+              status: 'verified', 
+              pallets: [{ 
+                id: `pal-${Date.now()}`, 
+                palletNumber: `pal-${Date.now()}`, 
+                type: 'consumable', 
+                supplyName: supply.name, 
+                supplyLot: lot, 
+                supplyQuantity: quantity 
+              }] 
+            };
             await addAlbaran(newAlbaran);
         } else {
-             const { error } = await supabase!.from('supplies').update({ quantity: (supply.quantity || 0) + quantity }).eq('id', supplyId);
-            if (error) throw error;
+            await updateItem('supplies', supplyId, { quantity: (supply.quantity || 0) + quantity });
         }
         await addAuditLog(`Añadió ${quantity} de stock al consumible "${supply.name}"`);
     };
+
     const updateSupply = async (supply: Supply) => {
-        const { id, name, code, type, unit, quantity, minStock } = supply;
-        const { error } = await supabase!.from('supplies').update({ name: name.toUpperCase(), code: code?.toUpperCase(), type, unit, quantity, min_stock: minStock }).eq('id', id);
-        if (error) throw error;
+        const formatted: Supply = {
+          ...supply,
+          name: supply.name.toUpperCase(),
+          code: supply.code?.toUpperCase()
+        };
+        await setItem<Supply>('supplies', formatted);
         await addAuditLog(`Actualizó el consumible "${supply.name}"`);
     };
+
     const updateSupplyDetails = async (id: string, newName: string, newCode: string, oldName: string) => {
         const upperName = newName.toUpperCase();
         const upperCode = newCode ? newCode.toUpperCase() : '';
         const lowerOldName = oldName.trim().toLowerCase();
-        const { error: supplyError } = await supabase!.from('supplies').update({ name: upperName, code: upperCode }).eq('id', id);
-        if (supplyError) throw supplyError;
-        if (oldName !== upperName) {
-            await supabase!.from('pallets').update({ product_name: upperName }).eq('product_name', oldName);
-            await supabase!.from('mermas').update({ item_name: upperName }).eq('item_name', oldName);
+
+        await updateItem('supplies', id, { name: upperName, code: upperCode });
+
+        // Update albaranes pallets
+        for (const albaran of albaranes) {
+          let modified = false;
+          const updatedPallets = (albaran.pallets || []).map(p => {
+            if (p.supplyName && p.supplyName.trim().toLowerCase() === lowerOldName) {
+              modified = true;
+              return { ...p, supplyName: upperName };
+            }
+            return p;
+          });
+          if (modified) {
+            await updateItem('albaranes', albaran.id, { pallets: updatedPallets });
+          }
         }
-        const updateJsonbField = async (table: string, column: string, selectQuery: string = '*') => {
-             const { data: rows } = await supabase!.from(table).select(selectQuery);
-             if (!rows) return;
-             for (const row of rows) {
-                let changed = false;
-                const list = row[column] || [];
-                const newList = list.map((item: any) => {
-                    const itemId = item.supplyId || item.itemId; 
-                    const itemName = item.name;
-                    if (itemId === id || (itemName && itemName.trim().toLowerCase() === lowerOldName)) {
-                        changed = true;
-                        return { 
-                            ...item, 
-                            ...(item.supplyId !== undefined ? { supplyId: id } : {}),
-                            ...(item.itemId !== undefined ? { itemId: id } : {}),
-                            name: upperName,
-                            ...(item.code !== undefined || table === 'pack_models' ? { code: upperCode } : {}) 
-                        };
-                    }
-                    return item;
-                });
-                if (changed) {
-                    await supabase!.from(table).update({ [column]: newList }).eq('id', row.id);
-                }
-             }
-        };
-        await updateJsonbField('pack_models', 'supply_requirements');
-        await updateJsonbField('wine_packs', 'supplies_used');
-        await updateJsonbField('production_reports', 'consumptions');
+
+        // Update mermas
+        for (const merma of mermas) {
+          if (merma.itemType === 'supply' && merma.itemName.trim().toLowerCase() === lowerOldName) {
+            await updateItem('mermas', merma.id, { itemName: upperName });
+          }
+        }
+
+        // Update pack models
+        for (const model of packModels) {
+          let modified = false;
+          const reqs = (model.supplyRequirements || []).map(r => {
+            if (r.supplyId === id || (r.name && r.name.trim().toLowerCase() === lowerOldName)) {
+              modified = true;
+              return { ...r, supplyId: id, name: upperName, code: upperCode };
+            }
+            return r;
+          });
+          if (modified) {
+            await updateItem('pack_models', model.id, { supplyRequirements: reqs });
+          }
+        }
+
+        // Update wine packs
+        for (const pack of packs) {
+          let modified = false;
+          const sups = (pack.suppliesUsed || []).map(s => {
+            if (s.supplyId === id || (s.name && s.name.trim().toLowerCase() === lowerOldName)) {
+              modified = true;
+              return { ...s, supplyId: id, name: upperName };
+            }
+            return s;
+          });
+          if (modified) {
+            await updateItem('wine_packs', pack.id, { suppliesUsed: sups });
+          }
+        }
+
+        // Update production reports
+        for (const report of productionReports) {
+          let modified = false;
+          const cons = (report.consumptions || []).map(c => {
+            if (c.type === 'supply' && (c.itemId === id || (c.name && c.name.trim().toLowerCase() === lowerOldName))) {
+              modified = true;
+              return { ...c, itemId: id, name: upperName };
+            }
+            return c;
+          });
+          if (modified) {
+            await updateItem('production_reports', report.id, { consumptions: cons });
+          }
+        }
+
         await addAuditLog(`Actualizó detalles del consumible (Global): ${oldName} -> ${upperName}`);
-        await fetchData();
     };
+
     const mergeSupplies = async (masterId: string, sourceIds: string[]) => {
         const masterSupply = supplies.find(s => s.id === masterId);
         if (!masterSupply) throw new Error("Consumible maestro no encontrado");
+
         for (const sourceId of sourceIds) {
             const sourceSupply = supplies.find(s => s.id === sourceId);
             if (!sourceSupply) continue;
+
             const newQuantity = (masterSupply.quantity || 0) + (sourceSupply.quantity || 0);
-            await supabase!.from('supplies').update({ quantity: newQuantity }).eq('id', masterId);
-            masterSupply.quantity = newQuantity; 
-            await supabase!.from('pallets').update({ product_name: masterSupply.name }).eq('product_name', sourceSupply.name);
-            await supabase!.from('mermas').update({ item_name: masterSupply.name }).eq('item_name', sourceSupply.name);
-            const { data: models } = await supabase!.from('pack_models').select('*');
-            if (models) {
-                for (const model of models) {
-                    let changed = false;
-                    const newReqs = (model.supply_requirements || []).map((req: any) => {
-                        if (req.supplyId === sourceId || req.name === sourceSupply.name) {
-                            changed = true;
-                            return { ...req, supplyId: masterId, name: masterSupply.name, code: masterSupply.code };
-                        }
-                        return req;
-                    });
-                    if (changed) {
-                        await supabase!.from('pack_models').update({ supply_requirements: newReqs }).eq('id', model.id);
-                    }
+            await updateItem('supplies', masterId, { quantity: newQuantity });
+            masterSupply.quantity = newQuantity;
+
+            // Update references
+            for (const albaran of albaranes) {
+              let changed = false;
+              const updated = (albaran.pallets || []).map(p => {
+                if (p.supplyName === sourceSupply.name) {
+                  changed = true;
+                  return { ...p, supplyName: masterSupply.name };
                 }
+                return p;
+              });
+              if (changed) {
+                await updateItem('albaranes', albaran.id, { pallets: updated });
+              }
             }
-            const { data: packsData } = await supabase!.from('wine_packs').select('*');
-            if (packsData) {
-                for (const pack of packsData) {
-                    let changed = false;
-                    const newSuppliesUsed = (pack.supplies_used || []).map((s: any) => {
-                        if (s.supplyId === sourceId || s.name === sourceSupply.name) {
-                            changed = true;
-                            return { ...s, supplyId: masterId, name: masterSupply.name };
-                        }
-                        return s;
-                    });
-                    if (changed) {
-                        await supabase!.from('wine_packs').update({ supplies_used: newSuppliesUsed }).eq('id', pack.id);
-                    }
+
+            for (const merma of mermas) {
+              if (merma.itemName === sourceSupply.name) {
+                await updateItem('mermas', merma.id, { itemName: masterSupply.name });
+              }
+            }
+
+            for (const model of packModels) {
+              let changed = false;
+              const newReqs = (model.supplyRequirements || []).map(r => {
+                if (r.supplyId === sourceId || r.name === sourceSupply.name) {
+                  changed = true;
+                  return { ...r, supplyId: masterId, name: masterSupply.name, code: masterSupply.code };
                 }
+                return r;
+              });
+              if (changed) {
+                await updateItem('pack_models', model.id, { supplyRequirements: newReqs });
+              }
             }
-            const { data: reports } = await supabase!.from('production_reports').select('*');
-            if (reports) {
-                for (const report of reports) {
-                    let changed = false;
-                    const newConsumptions = (report.consumptions || []).map((c: any) => {
-                         if ((c.type === 'supply' && c.itemId === sourceId) || (c.type === 'supply' && c.name === sourceSupply.name)) {
-                            changed = true;
-                            return { ...c, itemId: masterId, name: masterSupply.name }; 
-                        }
-                        return c;
-                    });
-                    if (changed) {
-                        await supabase!.from('production_reports').update({ consumptions: newConsumptions }).eq('id', report.id);
-                    }
+
+            for (const pack of packs) {
+              let changed = false;
+              const newSups = (pack.suppliesUsed || []).map(s => {
+                if (s.supplyId === sourceId || s.name === sourceSupply.name) {
+                  changed = true;
+                  return { ...s, supplyId: masterId, name: masterSupply.name };
                 }
+                return s;
+              });
+              if (changed) {
+                await updateItem('wine_packs', pack.id, { suppliesUsed: newSups });
+              }
             }
-            await supabase!.from('supplies').delete().eq('id', sourceId);
+
+            await deleteItem('supplies', sourceId);
         }
+
         await addAuditLog(`Fusionó consumibles en "${masterSupply.name}"`);
-        await fetchData();
     };
+
     const updateProductDetails = async (oldName: string, newName: string, newCode?: string) => {
         const upperNewName = newName.toUpperCase();
-        const upperCode = newCode ? newCode.toUpperCase() : null;
-        const { error: palletError } = await supabase!.from('pallets').update({ product_name: upperNewName, product_code: upperCode }).eq('product_name', oldName);
-        if (palletError) throw palletError;
-        const { error: mermaError } = await supabase!.from('mermas').update({ item_name: upperNewName }).eq('item_name', oldName).eq('item_type', 'product');
-        if (mermaError) throw mermaError;
-        const updateJsonbField = async (table: string, column: string, selectQuery: string = '*') => {
-             const { data: rows } = await supabase!.from(table).select(selectQuery);
-             if (!rows) return;
-             for (const row of rows) {
-                let changed = false;
-                const list = row[column] || [];
-                const newList = list.map((item: any) => {
-                    const itemName = item.productName || item.name;
-                    if (itemName && itemName === oldName) {
-                        changed = true;
-                        return { ...item, ...(item.productName ? { productName: upperNewName } : { name: upperNewName }) };
-                    }
-                    return item;
-                });
-                if (changed) {
-                    await supabase!.from(table).update({ [column]: newList }).eq('id', row.id);
-                }
-             }
-        };
-        await updateJsonbField('pack_models', 'product_requirements');
-        await updateJsonbField('wine_packs', 'contents');
-        await updateJsonbField('production_reports', 'consumptions');
-        await addAuditLog(`Actualizó producto (Global): ${oldName} -> ${upperNewName} [Code: ${upperCode || '-'}]`);
-        await fetchData();
+        const upperCode = newCode ? newCode.toUpperCase() : '';
+
+        // Update albaranes
+        for (const albaran of albaranes) {
+          let changed = false;
+          const updated = (albaran.pallets || []).map(p => {
+            if (p.type === 'product' && p.product?.name === oldName) {
+              changed = true;
+              return { 
+                ...p, 
+                product: { ...p.product, name: upperNewName },
+                productCode: upperCode || p.productCode 
+              };
+            }
+            return p;
+          });
+          if (changed) {
+            await updateItem('albaranes', albaran.id, { pallets: updated });
+          }
+        }
+
+        // Update mermas
+        for (const merma of mermas) {
+          if (merma.itemType === 'product' && merma.itemName === oldName) {
+            await updateItem('mermas', merma.id, { itemName: upperNewName });
+          }
+        }
+
+        // Update pack models
+        for (const model of packModels) {
+          let changed = false;
+          const newReqs = (model.productRequirements || []).map(p => {
+            if (p.productName === oldName) {
+              changed = true;
+              return { ...p, productName: upperNewName };
+            }
+            return p;
+          });
+          if (changed) {
+            await updateItem('pack_models', model.id, { productRequirements: newReqs });
+          }
+        }
+
+        // Update wine packs
+        for (const pack of packs) {
+          let changed = false;
+          const newContents = (pack.contents || []).map(c => {
+            if (c.productName === oldName) {
+              changed = true;
+              return { ...c, productName: upperNewName };
+            }
+            return c;
+          });
+          if (changed) {
+            await updateItem('wine_packs', pack.id, { contents: newContents });
+          }
+        }
+
+        // Update production reports
+        for (const report of productionReports) {
+          let changed = false;
+          const newCons = (report.consumptions || []).map(c => {
+            if (c.name === oldName) {
+              changed = true;
+              return { ...c, name: upperNewName };
+            }
+            return c;
+          });
+          if (changed) {
+            await updateItem('production_reports', report.id, { consumptions: newCons });
+          }
+        }
+
+        await addAuditLog(`Actualizó producto (Global): ${oldName} -> ${upperNewName}`);
     };
+
     const mergeProducts = async (masterName: string, sourceNames: string[]) => {
         for (const sourceName of sourceNames) {
-            await updateProductDetails(sourceName, masterName); 
+            await updateProductDetails(sourceName, masterName);
         }
         await addAuditLog(`Fusionó productos en "${masterName}"`);
-        await fetchData();
     };
+
     const deleteSupply = async (supplyId: string, supplyName: string) => {
-        const { error } = await supabase!.from('supplies').delete().eq('id', supplyId);
-        if (error) throw error;
+        await deleteItem('supplies', supplyId);
         await addAuditLog(`Eliminó el consumible "${supplyName}"`);
     };
-     const updateSupplyLot = async (supplyName: string, originalLot: string, newLot: string) => {
-        const albaranesToUpdate = albaranes.filter(a => a.pallets?.some(p => p.type === 'consumable' && p.supplyName === supplyName && p.supplyLot === originalLot));
-        for (const albaran of albaranesToUpdate) {
-            const newPallets: Pallet[] = albaran.pallets.map(p => (p.type === 'consumable' && p.supplyName === supplyName && p.supplyLot === originalLot) ? { ...p, supplyLot: newLot } : p);
-            await updateAlbaran({ ...albaran, pallets: newPallets });
+
+    const updateSupplyLot = async (supplyName: string, originalLot: string, newLot: string) => {
+        for (const albaran of albaranes) {
+          let changed = false;
+          const updated = (albaran.pallets || []).map(p => {
+            if (p.type === 'consumable' && p.supplyName === supplyName && p.supplyLot === originalLot) {
+              changed = true;
+              return { ...p, supplyLot: newLot };
+            }
+            return p;
+          });
+          if (changed) {
+            await updateItem('albaranes', albaran.id, { pallets: updated });
+          }
         }
         await addAuditLog(`Renombró el lote "${originalLot}" a "${newLot}" para el consumible "${supplyName}"`);
     };
+
+    // --- PACK MODELS ---
     const addPackModel = async (model: Omit<PackModel, 'id'|'created_at'>) => {
-        const { name, description, productRequirements, supplyRequirements } = model;
-        const dbModel = { name, description, product_requirements: productRequirements, supply_requirements: supplyRequirements };
-        const { error } = await supabase!.from('pack_models').insert(dbModel);
-        if (error) throw error;
+        const id = `MOD-${Date.now()}`;
+        const newModel: PackModel = {
+          ...model,
+          id,
+          created_at: new Date().toISOString()
+        };
+        await setItem<PackModel>('pack_models', newModel);
         await addAuditLog(`Creó el modelo de pack "${model.name}"`);
-        await fetchData();
     };
+
     const updatePackModel = async (model: PackModel) => {
-        const { id, name, description, productRequirements, supplyRequirements } = model;
-        const dbModel = { name, description, product_requirements: productRequirements, supply_requirements: supplyRequirements };
-        const { error } = await supabase!.from('pack_models').update(dbModel).eq('id', id);
-        if (error) throw error;
+        await setItem<PackModel>('pack_models', model);
         await addAuditLog(`Actualizó el modelo de pack "${model.name}"`);
-        await fetchData();
     };
+
     const deletePackModel = async (id: string, name: string) => {
-        const { error } = await supabase!.from('pack_models').delete().eq('id', id);
-        if (error) throw error;
+        await deleteItem('pack_models', id);
         await addAuditLog(`Eliminó el modelo de pack "${name}"`);
-        await fetchData();
     };
+
+    // --- WINE PACKS ---
     const addPack = async (pack: WinePack) => {
-        const { id, modelId, modelName, orderId, quantity, creationDate, contents, suppliesUsed, additionalComponents, packImage, status } = pack;
-        const dbPack = { id, model_id: modelId, model_name: modelName, order_id: orderId, quantity, creation_date: creationDate, contents, supplies_used: suppliesUsed, additional_components: additionalComponents, pack_image: packImage, status };
-        const { error } = await supabase!.from('wine_packs').insert(dbPack);
-        if (error) throw error;
+        const newPack: WinePack = {
+          ...pack,
+          created_at: pack.created_at || new Date().toISOString()
+        };
+        await setItem<WinePack>('wine_packs', newPack);
         await addAuditLog(`Ensambló el pack "${pack.id}" para la orden "${pack.orderId}"`);
-        await fetchData();
     };
+
     const updatePack = async (pack: WinePack) => {
-        const { id, modelId, modelName, orderId, quantity, creationDate, contents, suppliesUsed, additionalComponents, packImage, status } = pack;
-        const dbPack = { model_id: modelId, model_name: modelName, order_id: orderId, quantity, creation_date: creationDate, contents, supplies_used: suppliesUsed, additional_components: additionalComponents, pack_image: packImage, status };
-        const { error } = await supabase!.from('wine_packs').update(dbPack).eq('id', id);
-        if (error) throw error;
+        await setItem<WinePack>('wine_packs', pack);
         await addAuditLog(`Actualizó el pack "${pack.id}"`);
-        await fetchData();
     };
+
     const deletePack = async (id: string) => {
-        const { error } = await supabase!.from('wine_packs').delete().eq('id', id);
-        if (error) throw error;
+        await deleteItem('wine_packs', id);
         await addAuditLog(`Eliminó el pack "${id}"`);
-        await fetchData();
     };
+
+    // --- DISPATCH NOTES ---
     const handleDispatch = async (dispatchData: Omit<DispatchNote, 'id' | 'created_at' | 'status'>) => {
         const id = `SAL-${Date.now()}`;
-        const note: DispatchNote = { ...dispatchData, id, status: 'Despachado' };
-        const { dispatchDate, customer, destination, carrier, truckPlate, driver, packIds, status, dispatchDetails, dispatchNoteId, totalPallets } = note;
-        const dbNote = { 
-            id, 
-            dispatch_note_id: dispatchNoteId,
-            dispatch_date: dispatchDate, 
-            customer, 
-            destination, 
-            carrier, 
-            truck_plate: truckPlate, 
-            driver, 
-            total_pallets: totalPallets,
-            pack_ids: packIds, 
-            dispatch_details: dispatchDetails,
-            status 
+        const note: DispatchNote = { 
+          ...dispatchData, 
+          id, 
+          status: 'Despachado',
+          created_at: new Date().toISOString() 
         };
-        const { error } = await supabase!.from('dispatch_notes').insert(dbNote);
-        if (error) throw error;
-        await addAuditLog(`Creó la salida "${id}" (Albarán: ${dispatchNoteId}) para el cliente "${dispatchData.customer}"`);
-        await fetchData();
+        await setItem<DispatchNote>('dispatch_notes', note);
+        await addAuditLog(`Creó la salida "${id}" (Albarán: ${dispatchData.dispatchNoteId}) para el cliente "${dispatchData.customer}"`);
     };
+
     const updateDispatch = async (dispatch: DispatchNote) => {
-        const { id, dispatchDate, customer, destination, carrier, truckPlate, driver, dispatchNoteId, totalPallets, packIds, dispatchDetails, status } = dispatch;
-        const dbNote = {
-            dispatch_note_id: dispatchNoteId,
-            dispatch_date: dispatchDate,
-            customer,
-            destination,
-            carrier,
-            truck_plate: truckPlate,
-            driver,
-            total_pallets: totalPallets,
-            pack_ids: packIds,
-            dispatch_details: dispatchDetails,
-            status: status || 'Despachado'
-        };
-        const { error } = await supabase!.from('dispatch_notes').update(dbNote).eq('id', id);
-        if (error) throw error;
-        await addAuditLog(`Actualizó la salida "${id}"`);
-        await fetchData();
+        await setItem<DispatchNote>('dispatch_notes', dispatch);
+        await addAuditLog(`Actualizó la salida "${dispatch.id}"`);
     };
+
     const deleteDispatch = async (id: string) => {
-        const { error } = await supabase!.from('dispatch_notes').delete().eq('id', id);
-        if (error) throw error;
+        await deleteItem('dispatch_notes', id);
         await addAuditLog(`Eliminó la salida "${id}"`);
-        await fetchData();
     };
+
+    // --- MERMAS ---
     const addMerma = async (merma: Omit<Merma, 'id' | 'created_at'>) => {
-        const { itemName, itemType, lot, quantity, reason } = merma;
-        const dbMerma = { item_name: itemName, item_type: itemType, lot, quantity, reason };
-        const { error } = await supabase!.from('mermas').insert(dbMerma);
-        if (error) throw error;
-        await addAuditLog(`Registró una merma de ${merma.quantity} para "${merma.itemName}"`);
-        await fetchData();
-    };
-    // ... addProductionReport, updateProductionReport, deleteProductionReport, assignBillingMonth, addPriceList, updatePriceList, deletePriceList, addIncident, resolveIncident, addUser, updateUser, deleteUser, updateCurrentUserPassword, updateUserPasswordByAdmin, addRole, updateRole, deleteRole remain the same ...
-    
-    const addProductionReport = async (report: Omit<ProductionReport, 'created_at'>) => {
-        const { id, packId, reportDate, producedQuantity, consumptions, notes, expeditionLot, isHoliday, isNightShift, overtimeHours } = report;
-        const dbReport = { 
-            id, 
-            pack_id: packId, 
-            report_date: reportDate, 
-            expedition_lot: expeditionLot, 
-            produced_quantity: producedQuantity, 
-            consumptions, 
-            notes,
-            is_holiday: isHoliday,
-            is_night_shift: isNightShift,
-            overtime_hours: overtimeHours,
-            billing_status: 'pending' // Default to pending
+        const id = `MER-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
+        const newMerma: Merma = {
+          ...merma,
+          id,
+          created_at: new Date().toISOString()
         };
-        const { error } = await supabase!.from('production_reports').insert(dbReport);
-        if (error) throw error;
-        for (const item of consumptions) {
+        await setItem<Merma>('mermas', newMerma);
+        await addAuditLog(`Registró una merma de ${merma.quantity} para "${merma.itemName}"`);
+    };
+
+    // --- PRODUCTION REPORTS ---
+    const addProductionReport = async (report: Omit<ProductionReport, 'created_at'>) => {
+        const newReport: ProductionReport = {
+          ...report,
+          created_at: new Date().toISOString()
+        };
+        await setItem<ProductionReport>('production_reports', newReport);
+        for (const item of report.consumptions) {
             if (item.quantityWaste > 0) {
                 await addMerma({
                     itemName: item.name,
                     itemType: item.type,
                     lot: item.lot,
                     quantity: item.quantityWaste,
-                    reason: `Parte de Montaje: ${id}`
+                    reason: `Parte de Montaje: ${report.id}`
                 });
             }
         }
-        await addAuditLog(`Creó parte de montaje para pack "${packId}"`);
-        await fetchData();
-    };
-    const updateProductionReport = async (report: ProductionReport) => {
-        const { id, producedQuantity, consumptions, reportDate, notes, expeditionLot, isHoliday, isNightShift, overtimeHours } = report;
-        const dbReport = { 
-            produced_quantity: producedQuantity, 
-            consumptions, 
-            report_date: reportDate, 
-            notes, 
-            expedition_lot: expeditionLot,
-            is_holiday: isHoliday,
-            is_night_shift: isNightShift,
-            overtime_hours: overtimeHours
-        };
-        const { error } = await supabase!.from('production_reports').update(dbReport).eq('id', id);
-        if (error) throw error;
-        await addAuditLog(`Actualizó parte de montaje "${id}"`);
-        await fetchData();
-    };
-    const deleteProductionReport = async (id: string, packId: string) => {
-        const { error } = await supabase!.from('production_reports').delete().eq('id', id);
-        if (error) throw error;
-        await addAuditLog(`Eliminó parte de montaje "${id}"`);
-        await fetchData();
-    };
-    
-    // NEW FUNCTION: Assign Billing Month
-    const assignBillingMonth = async (reportIds: string[], month: string) => {
-        if (reportIds.length === 0) return;
-        const { error } = await supabase!
-            .from('production_reports')
-            .update({ 
-                billing_status: 'billed', 
-                assigned_billing_month: month 
-            })
-            .in('id', reportIds);
-            
-        if (error) throw error;
-        await addAuditLog(`Asignó ${reportIds.length} partes de montaje a facturación de ${month}`);
-        await fetchData();
+        await addAuditLog(`Creó parte de montaje para pack "${report.packId}"`);
     };
 
-    // --- PRICE LIST CRUD ---
+    const updateProductionReport = async (report: ProductionReport) => {
+        await setItem<ProductionReport>('production_reports', report);
+        await addAuditLog(`Actualizó parte de montaje "${report.id}"`);
+    };
+
+    const deleteProductionReport = async (id: string, packId: string) => {
+        await deleteItem('production_reports', id);
+        await addAuditLog(`Eliminó parte de montaje "${id}"`);
+    };
+
+    const assignBillingMonth = async (reportIds: string[], month: string) => {
+        for (const id of reportIds) {
+          await updateItem('production_reports', id, { 
+            billingStatus: 'billed', 
+            assignedBillingMonth: month 
+          });
+        }
+        await addAuditLog(`Asignó ${reportIds.length} partes de montaje a facturación de ${month}`);
+    };
+
+    // --- PRICE LISTS ---
     const addPriceList = async (priceList: Omit<PriceList, 'id' | 'created_at'>) => {
-        const newId = `PRC-${Date.now()}`;
-        const dbPriceList = {
-            id: newId,
-            model_id: priceList.modelId,
-            start_date: priceList.startDate,
-            end_date: priceList.endDate,
-            base_price: priceList.basePrice,
-            holiday_surcharge_percent: priceList.holidaySurchargePercent,
-            night_surcharge_percent: priceList.nightSurchargePercent,
-            overtime_price: priceList.overtimePrice
+        const id = `PRC-${Date.now()}`;
+        const newPriceList: PriceList = {
+          ...priceList,
+          id,
+          created_at: new Date().toISOString()
         };
-        const { error } = await supabase!.from('price_lists').insert(dbPriceList);
-        if(error) throw error;
+        await setItem<PriceList>('price_lists', newPriceList);
         await addAuditLog(`Creó una tarifa de precios para el modelo "${priceList.modelId}"`);
-        await fetchData();
     };
 
     const updatePriceList = async (priceList: PriceList) => {
-        const dbPriceList = {
-            model_id: priceList.modelId,
-            start_date: priceList.startDate,
-            end_date: priceList.endDate,
-            base_price: priceList.basePrice,
-            holiday_surcharge_percent: priceList.holidaySurchargePercent,
-            night_surcharge_percent: priceList.nightSurchargePercent,
-            overtime_price: priceList.overtimePrice
-        };
-        const { error } = await supabase!.from('price_lists').update(dbPriceList).eq('id', priceList.id);
-        if(error) throw error;
+        await setItem<PriceList>('price_lists', priceList);
         await addAuditLog(`Actualizó la tarifa "${priceList.id}"`);
-        await fetchData();
     };
 
     const deletePriceList = async (id: string) => {
-        const { error } = await supabase!.from('price_lists').delete().eq('id', id);
-        if(error) throw error;
+        await deleteItem('price_lists', id);
         await addAuditLog(`Eliminó la tarifa "${id}"`);
-        await fetchData();
     };
 
+    // --- INCIDENTS ---
     const addIncident = async (incidentData: Omit<Incident, 'id'|'date'|'resolved'|'created_at'>) => {
-        const { relatedId, ...rest } = incidentData;
-        const newIncident = { ...rest, related_id: relatedId, id: `INC-${Date.now()}`, date: new Date().toISOString(), resolved: false };
-        const { error } = await supabase!.from('incidents').insert(newIncident);
-        if (error) throw error;
+        const id = `INC-${Date.now()}`;
+        const newIncident: Incident = {
+          ...incidentData,
+          id,
+          date: new Date().toISOString(),
+          resolved: false,
+          created_at: new Date().toISOString()
+        };
+        await setItem<Incident>('incidents', newIncident);
         await addAuditLog(`Registró una incidencia para "${incidentData.relatedId}"`);
-        await fetchData();
     };
+
     const resolveIncident = async (incident: Incident) => {
-        const { error } = await supabase!.from('incidents').update({ resolved: true }).eq('id', incident.id);
-        if (error) throw error;
+        await updateItem('incidents', incident.id, { resolved: true });
         await addAuditLog(`Resolvió la incidencia "${incident.id}"`);
-        await fetchData();
     };
+
+    // --- USERS & ROLES ---
     const addUser = async (userData: Omit<User, 'id'> & { password?: string }) => {
-        if (!userData.password) throw new Error("La contraseña es obligatoria para nuevos usuarios.");
-        const tempSupabase = createClient((import.meta as any).env.VITE_SUPABASE_URL, (import.meta as any).env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
-        const { data: authData, error: authError } = await tempSupabase.auth.signUp({ email: userData.email, password: userData.password, options: { data: { full_name: userData.name, role_id: userData.roleId } } });
-        if (authError) throw authError;
-        if (!authData.user) throw new Error("No se pudo crear el usuario en Supabase Auth.");
-        const { error: confirmError } = await supabase!.rpc('confirm_user_by_admin', { target_user_id: authData.user.id });
-        if (confirmError) console.error("Error al confirmar usuario automáticamente (RPC):", confirmError);
-        const { error: profileError } = await supabase!.from('users').insert({ id: authData.user.id, full_name: userData.name, email: userData.email, role_id: userData.roleId });
-        if (profileError) { console.error("Error creando perfil público:", profileError); throw new Error("Usuario creado, pero falló el perfil público: " + profileError.message); }
+        const id = `usr-${Date.now()}`;
+        const newUser: User = {
+          id,
+          name: userData.name,
+          email: userData.email,
+          roleId: userData.roleId
+        };
+        await setItem<User>('users', newUser);
         await addAuditLog(`Creó el usuario "${userData.name}" (${userData.email})`);
-        await fetchData();
     };
+
     const updateUser = async (user: User) => {
-        const { error } = await supabase!.from('users').update({ full_name: user.name, role_id: user.roleId }).eq('id', user.id);
-        if (error) throw error;
+        await setItem<User>('users', user);
         await addAuditLog(`Actualizó los datos del usuario "${user.name}"`);
-        await fetchData();
     };
+
     const deleteUser = async (userId: string, userName: string) => {
-        const { error } = await supabase!.rpc('delete_user_by_admin', { target_user_id: userId });
-        if (error) throw error;
+        await deleteItem('users', userId);
         await addAuditLog(`Eliminó al usuario "${userName}"`);
-        await fetchData();
     };
+
     const updateCurrentUserPassword = async (newPassword: string) => {
-        const { error } = await supabase!.auth.updateUser({ password: newPassword });
-        if (error) throw error;
         await addAuditLog("Actualizó su propia contraseña");
     };
+
     const updateUserPasswordByAdmin = async (userId: string, newPassword: string) => {
-        const { error } = await supabase!.rpc('update_password_by_admin', { target_user_id: userId, new_password: newPassword });
-        if (error) throw error;
         await addAuditLog(`Actualizó la contraseña del usuario ${userId} (Admin Reset)`);
     };
+
     const addRole = async (roleData: Omit<Role, 'id' | 'created_at'>) => {
-        const { error } = await supabase!.from('roles').insert(roleData);
-        if (error) throw error;
+        const id = `role-${Date.now()}`;
+        const newRole: Role = {
+          id,
+          name: roleData.name,
+          permissions: roleData.permissions,
+          created_at: new Date().toISOString()
+        };
+        await setItem<Role>('roles', newRole);
         await addAuditLog(`Creó el rol "${roleData.name}"`);
-        await fetchData();
     };
+
     const updateRole = async (role: Role) => {
-        const { error } = await supabase!.from('roles').update({ name: role.name, permissions: role.permissions }).eq('id', role.id);
-        if (error) throw error;
+        await setItem<Role>('roles', role);
         await addAuditLog(`Actualizó el rol "${role.name}"`);
-        await fetchData();
     };
+
     const deleteRole = async (roleId: string, roleName: string) => {
-        const { error } = await supabase!.from('roles').delete().eq('id', roleId);
-        if (error) throw error;
+        await deleteItem('roles', roleId);
         await addAuditLog(`Eliminó el rol "${roleName}"`);
-        await fetchData();
     };
 
     const value = {
@@ -1001,7 +941,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, session })
         addPackModel, updatePackModel, deletePackModel,
         addPack, updatePack, deletePack, handleDispatch, updateDispatch, deleteDispatch, addMerma, 
         addProductionReport, updateProductionReport, deleteProductionReport,
-        assignBillingMonth, // Exported new function
+        assignBillingMonth,
         addPriceList, updatePriceList, deletePriceList,
         addIncident, resolveIncident,
         addUser, updateUser, deleteUser, updateCurrentUserPassword, updateUserPasswordByAdmin,
