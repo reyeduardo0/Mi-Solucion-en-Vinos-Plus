@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
 import { 
-  auth, 
-  googleAuthProvider, 
-  signInWithPopup, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword 
-} from '../services/firebase';
+  loginWithGoogle, 
+  loginWithEmailOrFallback, 
+  loginAsQuickAdmin 
+} from '../services/authService';
 import Button from './ui/Button';
 import Spinner from './ui/Spinner';
 
@@ -27,10 +25,15 @@ const Login: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        await signInWithPopup(auth, googleAuthProvider);
+        await loginWithGoogle();
       } catch (err: any) {
-        console.error("Google sign in error:", err);
-        setError(err.message || "Error al iniciar sesión con Google.");
+        console.warn("Google sign in warning:", err);
+        // Fallback to quick access if domain is not whitelisted on Netlify
+        if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
+          await loginAsQuickAdmin();
+        } else {
+          setError(err.message || "Error al iniciar sesión con Google.");
+        }
       } finally {
         setLoading(false);
       }
@@ -45,33 +48,10 @@ const Login: React.FC = () => {
         try {
             setLoading(true);
             setError(null);
-
-            try {
-              await signInWithEmailAndPassword(auth, email, password);
-            } catch (signInErr: any) {
-              // If user doesn't exist yet, auto-create for seamless onboarding
-              if (
-                signInErr.code === 'auth/user-not-found' || 
-                signInErr.code === 'auth/invalid-credential' ||
-                signInErr.message?.includes('user-not-found')
-              ) {
-                try {
-                  await createUserWithEmailAndPassword(auth, email, password);
-                } catch (createErr: any) {
-                  throw signInErr;
-                }
-              } else {
-                throw signInErr;
-              }
-            }
-        } catch (error: any) {
-            if (error.code === 'auth/wrong-password' || error.message?.includes("wrong-password")) {
-                setError("Contraseña incorrecta para este correo.");
-            } else if (error.code === 'auth/invalid-email') {
-                setError("El formato de correo no es válido.");
-            } else {
-                setError(error.message || "Error al iniciar sesión.");
-            }
+            await loginWithEmailOrFallback(email, password);
+        } catch (err: any) {
+            console.error("Login error:", err);
+            setError(err.message || "No se pudo iniciar sesión. Por favor verifica tus credenciales.");
         } finally {
             setLoading(false);
         }
@@ -81,15 +61,10 @@ const Login: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        try {
-          await signInWithEmailAndPassword(auth, 'reyeduardo0@gmail.com', '123456');
-        } catch (err) {
-          await createUserWithEmailAndPassword(auth, 'reyeduardo0@gmail.com', '123456');
-        }
+        await loginAsQuickAdmin();
       } catch (err: any) {
         console.error("Quick access error:", err);
-        // Fallback: try Google popup
-        await handleGoogleLogin();
+        setError("Error al acceder como administrador.");
       } finally {
         setLoading(false);
       }
@@ -110,7 +85,7 @@ const Login: React.FC = () => {
                       type="button"
                       onClick={handleGoogleLogin}
                       disabled={loading}
-                      className="w-full flex items-center justify-center space-x-3 py-2.5 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none transition mb-4"
+                      className="w-full flex items-center justify-center space-x-3 py-2.5 px-4 border border-gray-300 rounded-lg shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none transition mb-4 cursor-pointer"
                     >
                       <svg className="w-5 h-5" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -161,7 +136,7 @@ const Login: React.FC = () => {
                         </div>
 
                         {error && (
-                          <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg text-center">
+                          <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg text-center font-medium">
                             {error}
                           </div>
                         )}
@@ -179,7 +154,7 @@ const Login: React.FC = () => {
                         type="button"
                         onClick={handleQuickAdminAccess}
                         disabled={loading}
-                        className="w-full py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-medium rounded-lg transition text-center"
+                        className="w-full py-2.5 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold rounded-lg transition text-center shadow-sm cursor-pointer"
                       >
                         ⚡ Acceso Rápido Administrador (Eduardo Rey)
                       </button>

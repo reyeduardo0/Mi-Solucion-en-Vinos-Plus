@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, useNavigate, Navigate } from 'react-router-dom';
-import { auth, onAuthStateChanged, fbSignOut, FirebaseUser } from './services/firebase';
+import { subscribeToSession, logoutSession, AppAuthUser } from './services/authService';
 
 // --- Components ---
 import Sidebar from './components/layout/Sidebar';
@@ -42,11 +42,11 @@ const App: React.FC = () => {
 };
 
 const AppRoutes: React.FC = () => {
-    const [user, setUser] = useState<FirebaseUser | null>(null);
+    const [user, setUser] = useState<AppAuthUser | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        const unsubscribe = subscribeToSession((currentUser) => {
             setUser(currentUser);
             setLoading(false);
         });
@@ -98,7 +98,7 @@ const AppLayout: React.FC = () => {
 
     const handleLogout = async () => {
         try {
-            await fbSignOut(auth);
+            await logoutSession();
         } catch (error) {
             console.error("Error signing out:", error);
         }

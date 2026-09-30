@@ -121,7 +121,7 @@ export const useData = (): DataContextType => {
 
 interface DataProviderProps {
     children: ReactNode;
-    authUser: FirebaseUser | null;
+    authUser: { uid: string; email?: string | null; displayName?: string | null } | null;
 }
 
 export const DataProvider: React.FC<DataProviderProps> = ({ children, authUser }) => {
