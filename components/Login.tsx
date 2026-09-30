@@ -162,7 +162,7 @@ const Login: React.FC = () => {
 
                     <div className="mt-4 pt-3 text-center">
                       <span className="inline-flex items-center text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 font-medium">
-                        ✓ Base de datos en la nube activa & Neon Ready
+                        ✓ Base de datos Firebase Firestore conectada en tiempo real
                       </span>
                     </div>
                 </div>

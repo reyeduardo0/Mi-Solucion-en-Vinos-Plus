@@ -27,7 +27,6 @@ import ProductionReports from './components/ProductionReports';
 import CreateProductionReport from './components/CreateProductionReport';
 import InventoryAdjustments from './components/InventoryAdjustments';
 import Billing from './components/Billing';
-import NeonMigrationModal from './components/NeonMigrationModal';
 
 // --- Hooks and Context ---
 import { PermissionsProvider } from './hooks/usePermissions';
@@ -90,7 +89,6 @@ const AppRoutes: React.FC = () => {
 const AppLayout: React.FC = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isProfileModalOpen, setProfileModalOpen] = useState(false);
-    const [isNeonModalOpen, setIsNeonModalOpen] = useState(false);
     const navigate = useNavigate();
     
     // Centralized data and user context
@@ -144,7 +142,6 @@ const AppLayout: React.FC = () => {
                         onLogout={handleLogout} 
                         toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} 
                         onOpenProfile={() => setProfileModalOpen(true)}
-                        onOpenNeonModal={() => setIsNeonModalOpen(true)}
                     />
                     {error && (
                         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mx-4 mt-4" role="alert">
@@ -180,7 +177,6 @@ const AppLayout: React.FC = () => {
                     </main>
                 </div>
                 {isProfileModalOpen && <ProfileModal onClose={() => setProfileModalOpen(false)} />}
-                {isNeonModalOpen && <NeonMigrationModal isOpen={isNeonModalOpen} onClose={() => setIsNeonModalOpen(false)} />}
             </div>
         </PermissionsProvider>
     );
